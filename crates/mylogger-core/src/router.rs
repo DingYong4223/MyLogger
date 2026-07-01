@@ -1,10 +1,7 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Intent {
     Capture { time_named: bool },
-    Analyze { path: Option<String> },
-    FilterError,
-    Report,
-    Device,
+    Analyze { path: Option<String>, open: bool },
     CommandPalette,
     Help,
     Quit,
@@ -26,9 +23,6 @@ pub fn route_intent(input: &str) -> Intent {
     if lower == "/help" || lower == "help" || text == "帮助" {
         return Intent::Help;
     }
-    if lower.starts_with("/device") || text.contains("设备") {
-        return Intent::Device;
-    }
     if lower.starts_with("capture -t")
         || lower.starts_with("/capture -t")
         || text.contains("时间命名")
@@ -42,22 +36,23 @@ pub fn route_intent(input: &str) -> Intent {
     {
         return Intent::Capture { time_named: false };
     }
-    if lower.starts_with("/report") || text.contains("报告") || text.contains("导出") {
-        return Intent::Report;
-    }
-    if text.contains("只看 Error")
-        || lower.contains("only error")
-        || lower.contains("filter error")
-        || lower == "/filter error"
-    {
-        return Intent::FilterError;
-    }
     if lower.starts_with("/analyze") {
-        let path = text.split_whitespace().nth(1).map(ToString::to_string);
-        return Intent::Analyze { path };
+        let mut open = false;
+        let mut path = None;
+        for token in text.split_whitespace().skip(1) {
+            if token == "--open" {
+                open = true;
+            } else if path.is_none() {
+                path = Some(token.to_string());
+            }
+        }
+        return Intent::Analyze { path, open };
     }
     if text.contains("分析") || text.contains("崩溃") || lower.contains("crash") {
-        return Intent::Analyze { path: None };
+        return Intent::Analyze {
+            path: None,
+            open: false,
+        };
     }
     Intent::Unknown
 }
@@ -85,5 +80,23 @@ mod tests {
     #[test]
     fn routes_command_palette() {
         assert_eq!(route_intent("/"), Intent::CommandPalette);
+    }
+
+    #[test]
+    fn routes_analyze_open() {
+        assert_eq!(
+            route_intent("/analyze --open"),
+            Intent::Analyze {
+                path: None,
+                open: true
+            }
+        );
+        assert_eq!(
+            route_intent("/analyze app.log --open"),
+            Intent::Analyze {
+                path: Some("app.log".to_string()),
+                open: true
+            }
+        );
     }
 }

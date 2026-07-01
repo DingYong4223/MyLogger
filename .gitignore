@@ -1,5 +1,6 @@
 /target/
+/asplugin/.gradle/
+/asplugin/.intellijPlatform/
+/asplugin/build/
 *.log
 *.txt
-
-

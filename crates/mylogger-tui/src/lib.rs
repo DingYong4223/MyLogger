@@ -5,7 +5,7 @@ use crossterm::{
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use mylogger_core::{
-    AnalysisOptions, Intent, LogLevel, analyze_file, generate_markdown_report, route_intent,
+    AnalysisOptions, AnalysisSummary, Intent, analyze_file, generate_markdown_report, route_intent,
 };
 use mylogger_tools::{AdbDevice, CaptureOptions, capture_logcat, list_adb_devices};
 use ratatui::{
@@ -325,16 +325,8 @@ const MENU_ITEMS: &[MenuItem] = &[
         description: "打开 yazi 选择日志文件并分析",
     },
     MenuItem {
-        command: "/filter error",
-        description: "只看 Error 及以上级别",
-    },
-    MenuItem {
-        command: "/report",
-        description: "基于当前日志生成 mylogger-report.md",
-    },
-    MenuItem {
-        command: "/device",
-        description: "查看 adb devices",
+        command: "/analyze --open",
+        description: "分析日志并用 Neovim 打开结果",
     },
     MenuItem {
         command: "/quit",
@@ -567,8 +559,13 @@ fn execute_tui_command(
         Intent::Capture { time_named } => {
             return prepare_tui_capture(terminal, time_named, session, ui);
         }
-        Intent::Analyze { path: None } => {
-            return execute_tui_analyze_with_yazi(terminal, session);
+        Intent::Analyze { path, open } => {
+            if open {
+                return execute_tui_analyze_open(terminal, path, session);
+            }
+            if path.is_none() {
+                return execute_tui_analyze_with_yazi(terminal, session);
+            }
         }
         _ => {}
     }
@@ -587,6 +584,26 @@ fn execute_tui_analyze_with_yazi(
     let summary = analyze_file(&path, &AnalysisOptions::default())?;
     session.current_log_file = Some(path.clone());
     Ok(format_summary(&path, &summary))
+}
+
+fn execute_tui_analyze_open(
+    terminal: &mut TerminalSession,
+    path: Option<String>,
+    session: &mut SessionState,
+) -> Result<String> {
+    let path = match path {
+        Some(path) => PathBuf::from(path),
+        None => select_log_file_with_yazi(Some(terminal))?,
+    };
+    let summary = analyze_file(&path, &AnalysisOptions::default())?;
+    session.current_log_file = Some(path.clone());
+    let report_path = write_analysis_markdown(&path, &summary)?;
+    open_file_with_nvim(Some(terminal), &report_path)?;
+    Ok(format!(
+        "{}\n\n分析结果已用 Neovim 打开：{}",
+        format_summary(&path, &summary),
+        report_path.display()
+    ))
 }
 
 fn prepare_tui_capture(
@@ -670,51 +687,18 @@ fn execute_tui_command_inner(command: &str, session: &mut SessionState) -> Resul
         Intent::Capture { time_named: _ } => {
             unreachable!("capture is handled before inner command execution")
         }
-        Intent::Analyze { path } => {
+        Intent::Analyze { path, open: _ } => {
             let path = resolve_tui_log_path(path, session)?;
             let summary = analyze_file(&path, &AnalysisOptions::default())?;
             session.current_log_file = Some(path.clone());
             Ok(format_summary(&path, &summary))
         }
-        Intent::FilterError => {
-            let path = resolve_tui_log_path(None, session)?;
-            let summary = analyze_file(
-                &path,
-                &AnalysisOptions {
-                    min_level: Some(LogLevel::Error),
-                    ..Default::default()
-                },
-            )?;
-            Ok(format_summary(&path, &summary))
-        }
-        Intent::Report => {
-            let path = resolve_tui_log_path(None, session)?;
-            let summary = analyze_file(&path, &AnalysisOptions::default())?;
-            let report = generate_markdown_report(&summary);
-            let output = PathBuf::from("mylogger-report.md");
-            std::fs::write(&output, report)
-                .with_context(|| format!("failed to write {}", output.display()))?;
-            Ok(format!("报告已生成：{}", output.display()))
-        }
-        Intent::Device => {
-            let devices = list_adb_devices()?;
-            if devices.is_empty() {
-                Ok("未检测到 Android 设备。".to_string())
-            } else {
-                Ok(devices
-                    .into_iter()
-                    .map(|device| format!("{}\t{}", device.serial, device.state))
-                    .collect::<Vec<_>>()
-                    .join("\n"))
-            }
-        }
         Intent::CommandPalette => Ok(command_palette_text()),
         Intent::Help => Ok(help_text()),
         Intent::Quit => Ok("bye".to_string()),
-        Intent::Unknown => Ok(
-            "暂未识别该请求。可尝试：抓取日志、/analyze <file>、只看 Error、/report、/help。"
-                .to_string(),
-        ),
+        Intent::Unknown => {
+            Ok("暂未识别该请求。可尝试：抓取日志、/analyze <file>、/help。".to_string())
+        }
     }
 }
 
@@ -723,9 +707,6 @@ fn normalize_command(command: &str) -> &str {
         "1" => "capture",
         "2" => "/analyze",
         "3" => "分析崩溃",
-        "4" => "只看 Error",
-        "5" => "/report",
-        "6" => "/device",
         other => other,
     }
 }
@@ -777,10 +758,8 @@ fn help_text() -> String {
         "  /capture          抓取日志，默认写入 ./123.txt，Ctrl+C 结束",
         "  /capture -t       抓取日志，写入 mylogger-YYYYMMDD-HHMMSS.log",
         "  /analyze          打开 yazi 选择日志文件并分析",
+        "  /analyze --open   分析日志并用 Neovim 打开结果",
         "  /analyze <file>   直接分析指定日志文件",
-        "  /filter error     对当前日志执行 Error 过滤分析",
-        "  /report           对当前日志生成 mylogger-report.md",
-        "  /device           查看 adb devices",
         "  /quit             退出",
     ]
     .join("\n")
@@ -807,10 +786,7 @@ fn welcome_messages() -> Vec<String> {
         "常用操作：\n\
          [1] 抓取 Android 日志\n\
          [2] 分析本地日志文件\n\
-         [3] 提取崩溃\n\
-         [4] 只看 Error\n\
-         [5] 生成报告\n\
-         [6] 查看设备\n\n\
+         [3] 提取崩溃\n\n\
          输入 / 打开命令菜单，使用上下键选择，Enter 填入命令。\n\
          Ctrl+C 退出。",
     )]
@@ -823,9 +799,6 @@ fn print_welcome_for_line_mode() {
     println!("[1] 抓取 Android 日志");
     println!("[2] 分析本地日志文件");
     println!("[3] 提取崩溃");
-    println!("[4] 只看 Error");
-    println!("[5] 生成报告");
-    println!("[6] 查看设备");
     println!();
     println!("请输入编号、命令或自然语言。输入 / 查看命令，/quit 退出。");
 }
@@ -835,9 +808,6 @@ fn handle_input(input: &str, session: &mut SessionState) -> Result<()> {
         "1" => "capture",
         "2" => "/analyze",
         "3" => "分析崩溃",
-        "4" => "只看 Error",
-        "5" => "/report",
-        "6" => "/device",
         other => other,
     };
 
@@ -851,40 +821,14 @@ fn handle_input(input: &str, session: &mut SessionState) -> Result<()> {
             session.last_capture_file = Some(output.clone());
             session.current_log_file = Some(output);
         }
-        Intent::Analyze { path } => {
+        Intent::Analyze { path, open } => {
             let path = resolve_log_path(path, session)?;
             let summary = analyze_file(&path, &AnalysisOptions::default())?;
             session.current_log_file = Some(path.clone());
             print_summary(&path, &summary);
-        }
-        Intent::FilterError => {
-            let path = resolve_log_path(None, session)?;
-            let summary = analyze_file(
-                &path,
-                &AnalysisOptions {
-                    min_level: Some(LogLevel::Error),
-                    ..Default::default()
-                },
-            )?;
-            print_summary(&path, &summary);
-        }
-        Intent::Report => {
-            let path = resolve_log_path(None, session)?;
-            let summary = analyze_file(&path, &AnalysisOptions::default())?;
-            let report = generate_markdown_report(&summary);
-            let output = PathBuf::from("mylogger-report.md");
-            std::fs::write(&output, report)
-                .with_context(|| format!("failed to write {}", output.display()))?;
-            println!("报告已生成：{}", output.display());
-        }
-        Intent::Device => {
-            let devices = list_adb_devices()?;
-            if devices.is_empty() {
-                println!("未检测到 Android 设备。");
-            } else {
-                for device in devices {
-                    println!("{}\t{}", device.serial, device.state);
-                }
+            if open {
+                let report_path = write_analysis_markdown(&path, &summary)?;
+                open_file_with_nvim(None, &report_path)?;
             }
         }
         Intent::CommandPalette => print_command_palette(),
@@ -894,9 +838,7 @@ fn handle_input(input: &str, session: &mut SessionState) -> Result<()> {
             std::process::exit(0);
         }
         Intent::Unknown => {
-            println!(
-                "暂未识别该请求。可尝试：抓取日志、分析 app.log、只看 Error、生成报告、/help。"
-            );
+            println!("暂未识别该请求。可尝试：抓取日志、分析 app.log、/help。");
         }
     }
     Ok(())
@@ -960,6 +902,36 @@ fn select_log_file_with_yazi(mut terminal: Option<&mut TerminalSession>) -> Resu
     Ok(PathBuf::from(selected))
 }
 
+fn write_analysis_markdown(path: &PathBuf, summary: &AnalysisSummary) -> Result<PathBuf> {
+    let output = std::env::current_dir()?.join("mylogger-analysis.md");
+    let mut report = String::new();
+    report.push_str(&format!("> 分析文件：{}\n\n", path.display()));
+    report.push_str(&generate_markdown_report(summary));
+    std::fs::write(&output, report)
+        .with_context(|| format!("failed to write {}", output.display()))?;
+    Ok(output)
+}
+
+fn open_file_with_nvim(mut terminal: Option<&mut TerminalSession>, path: &PathBuf) -> Result<()> {
+    if let Some(terminal) = terminal.as_deref_mut() {
+        terminal.suspend()?;
+    }
+
+    let status = Command::new("nvim").arg(path).status();
+
+    if let Some(terminal) = terminal.as_deref_mut() {
+        terminal.resume()?;
+        drain_pending_terminal_events(Duration::from_millis(300));
+    }
+
+    let status =
+        status.context("failed to start nvim; please install Neovim and ensure it is in PATH")?;
+    if !status.success() {
+        anyhow::bail!("nvim exited with status {status}");
+    }
+    Ok(())
+}
+
 fn print_summary(path: &PathBuf, summary: &mylogger_core::AnalysisSummary) {
     println!("分析文件：{}", path.display());
     println!("总行数：{}", summary.total_lines);
@@ -991,10 +963,8 @@ fn print_help() {
     println!("  /capture          抓取日志，默认写入 ./123.txt，Ctrl+C 结束");
     println!("  /capture -t       抓取日志，写入 mylogger-YYYYMMDD-HHMMSS.log");
     println!("  /analyze          打开 yazi 选择日志文件并分析");
+    println!("  /analyze --open   分析日志并用 Neovim 打开结果");
     println!("  /analyze <file>   直接分析指定日志文件");
-    println!("  /filter error     对当前日志执行 Error 过滤分析");
-    println!("  /report           对当前日志生成 mylogger-report.md");
-    println!("  /device           查看 adb devices");
     println!("  /quit             退出");
 }
 

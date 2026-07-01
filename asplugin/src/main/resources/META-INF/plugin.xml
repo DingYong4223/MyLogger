@@ -1,0 +1,21 @@
+<idea-plugin>
+    <id>com.dingyong.mylogger.asplugin</id>
+    <name>MyLogger Android Studio Plugin</name>
+    <vendor email="DingYong4223@users.noreply.github.com">DingYong4223</vendor>
+    <description><![CDATA[
+        Exports Android Studio breakpoint metadata for MyLogger.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <actions>
+        <group id="MyLogger.Menu" text="MyLogger" popup="true">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+            <action
+                id="MyLogger.ExportBreakpoints"
+                class="com.dingyong.mylogger.asplugin.ExportBreakpointsAction"
+                text="Export Breakpoints"
+                description="Export current project breakpoints as JSON"/>
+        </group>
+    </actions>
+</idea-plugin>

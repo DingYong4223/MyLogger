@@ -49,6 +49,27 @@ cargo test --workspace
 cargo fmt --all
 ```
 
+## Android Studio 插件
+
+`asplugin/` 下提供了 MyLogger Android Studio 插件，用于从 IDE 内部读取当前项目真实断点并导出 JSON。
+
+构建插件：
+
+```bash
+cd asplugin
+gradle buildPlugin
+```
+
+插件产物：
+
+```bash
+asplugin/build/distributions/mylogger-as-plugin-0.1.0.zip
+```
+
+安装方式：Android Studio 打开 `Settings | Plugins`，选择 `Install Plugin from Disk...`，安装上面的 zip 后重启。
+
+使用方式：打开目标 Android 工程后，执行 `Tools > MyLogger > Export Breakpoints`，选择保存位置即可导出 `mylogger-breakpoints.json`。
+
 ## 运行
 
 无参数启动交互式入口：
@@ -59,7 +80,7 @@ cargo run -p mylogger
 
 进入交互式入口后，输入 `/` 会立即打开命令菜单，可以用上下键移动，按 Enter 将选中的命令填入输入框，再按 Enter 执行。命令结果会显示在上方消息区，输入框始终固定在底部。
 
-在交互式入口中执行 `/analyze` 时，程序会临时退出 TUI 并打开 `yazi` 文件选择器。用户在 `yazi` 中选择日志文件后，会自动回到 TUI 并继续执行分析。也可以执行 `/analyze <file>` 直接分析指定文件。
+在交互式入口中执行 `/analyze` 时，程序会临时退出 TUI 并打开 `yazi` 文件选择器。用户在 `yazi` 中选择日志文件后，会自动回到 TUI 并继续执行分析。也可以执行 `/analyze <file>` 直接分析指定文件。执行 `/analyze --open` 或 `/analyze <file> --open` 会在分析后生成 `mylogger-analysis.md`，并用 Neovim 打开结果。
 
 在交互式入口中执行 `/capture` 或 `/capture -t` 时，会先执行 `adb devices` 检测设备。如果只有一个可用设备，会直接临时退出 TUI，切换到普通终端环境执行日志抓取；如果存在多个可用设备，会先在 TUI 中弹出设备列表，使用上下键切换设备并按 Enter 确认后，再切换到终端环境抓取。按 `Ctrl+C` 结束抓取后，会自动回到 TUI，并在消息区显示日志文件路径或错误信息。
 
@@ -77,22 +98,10 @@ cargo run -p mylogger -- --help
 cargo run -p mylogger -- analyze app.log
 ```
 
-只看 Error 及以上级别：
-
-```bash
-cargo run -p mylogger -- analyze app.log --level error
-```
-
 按关键字过滤：
 
 ```bash
 cargo run -p mylogger -- analyze app.log --keyword Exception
-```
-
-生成 Markdown 报告：
-
-```bash
-cargo run -p mylogger -- analyze app.log --report report.md
 ```
 
 输出 JSON：
