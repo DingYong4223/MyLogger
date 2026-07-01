@@ -1,0 +1,18 @@
+[package]
+name = "mylogger"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "MyLogger"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+mylogger-core = { path = "../mylogger-core" }
+mylogger-tools = { path = "../mylogger-tools" }
+mylogger-tui = { path = "../mylogger-tui" }
+serde_json.workspace = true
+

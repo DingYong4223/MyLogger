@@ -1,0 +1,14 @@
+[package]
+name = "mylogger-tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+ctrlc.workspace = true
+mylogger-core = { path = "../mylogger-core" }
+serde.workspace = true
+tokio.workspace = true
+
