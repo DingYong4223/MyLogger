@@ -18,7 +18,8 @@ use ratatui::{
 };
 use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::process::Command;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use unicode_width::UnicodeWidthStr;
 
 #[derive(Debug, Default)]
@@ -321,7 +322,7 @@ const MENU_ITEMS: &[MenuItem] = &[
     },
     MenuItem {
         command: "/analyze",
-        description: "分析日志文件",
+        description: "打开 yazi 选择日志文件并分析",
     },
     MenuItem {
         command: "/filter error",
@@ -562,14 +563,30 @@ fn execute_tui_command(
     session: &mut SessionState,
     ui: &mut UiState,
 ) -> Result<String> {
-    if let Intent::Capture { time_named } = route_intent(normalize_command(command)) {
-        return prepare_tui_capture(terminal, time_named, session, ui);
+    match route_intent(normalize_command(command)) {
+        Intent::Capture { time_named } => {
+            return prepare_tui_capture(terminal, time_named, session, ui);
+        }
+        Intent::Analyze { path: None } => {
+            return execute_tui_analyze_with_yazi(terminal, session);
+        }
+        _ => {}
     }
 
     Ok(match execute_tui_command_inner(command, session) {
         Ok(output) => output,
         Err(err) => format!("执行失败：{err:#}"),
     })
+}
+
+fn execute_tui_analyze_with_yazi(
+    terminal: &mut TerminalSession,
+    session: &mut SessionState,
+) -> Result<String> {
+    let path = select_log_file_with_yazi(Some(terminal))?;
+    let summary = analyze_file(&path, &AnalysisOptions::default())?;
+    session.current_log_file = Some(path.clone());
+    Ok(format_summary(&path, &summary))
 }
 
 fn prepare_tui_capture(
@@ -759,7 +776,8 @@ fn help_text() -> String {
         "  /                 打开命令菜单",
         "  /capture          抓取日志，默认写入 ./123.txt，Ctrl+C 结束",
         "  /capture -t       抓取日志，写入 mylogger-YYYYMMDD-HHMMSS.log",
-        "  /analyze <file>   分析日志文件",
+        "  /analyze          打开 yazi 选择日志文件并分析",
+        "  /analyze <file>   直接分析指定日志文件",
         "  /filter error     对当前日志执行 Error 过滤分析",
         "  /report           对当前日志生成 mylogger-report.md",
         "  /device           查看 adb devices",
@@ -888,24 +906,58 @@ fn resolve_log_path(path: Option<String>, session: &SessionState) -> Result<Path
     if let Some(path) = path {
         return Ok(PathBuf::from(path));
     }
-    if let Some(path) = session.current_log_file.as_ref() {
-        return Ok(path.clone());
+    select_log_file_with_yazi(None).or_else(|_| {
+        if let Some(path) = session.current_log_file.as_ref() {
+            return Ok(path.clone());
+        }
+        if let Some(path) = session.last_capture_file.as_ref() {
+            return Ok(path.clone());
+        }
+        anyhow::bail!("请安装 yazi，或指定日志文件路径，例如：/analyze app.log")
+    })
+}
+
+fn select_log_file_with_yazi(mut terminal: Option<&mut TerminalSession>) -> Result<PathBuf> {
+    let chooser_file = std::env::temp_dir().join(format!(
+        "mylogger-yazi-choice-{}-{}.txt",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    ));
+    let _ = std::fs::remove_file(&chooser_file);
+
+    if let Some(terminal) = terminal.as_deref_mut() {
+        terminal.suspend()?;
     }
-    if let Some(path) = session.last_capture_file.as_ref() {
-        return Ok(path.clone());
+    println!("MyLogger 已打开 yazi，请选择日志文件。");
+
+    let status = Command::new("yazi")
+        .arg("--chooser-file")
+        .arg(&chooser_file)
+        .status();
+
+    if let Some(terminal) = terminal.as_deref_mut() {
+        terminal.resume()?;
+        drain_pending_terminal_events(Duration::from_millis(300));
     }
 
-    print!("请输入日志文件路径：");
-    io::stdout().flush().ok();
-    let mut input = String::new();
-    io::stdin()
-        .read_line(&mut input)
-        .context("failed to read log path")?;
-    let input = input.trim();
-    if input.is_empty() {
-        anyhow::bail!("log file path is required");
+    let status =
+        status.context("failed to start yazi; please install yazi and ensure it is in PATH")?;
+    if !status.success() {
+        anyhow::bail!("yazi exited with status {status}");
     }
-    Ok(PathBuf::from(input))
+
+    let selected = std::fs::read_to_string(&chooser_file).unwrap_or_default();
+    let _ = std::fs::remove_file(&chooser_file);
+    let selected = selected
+        .lines()
+        .next()
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .context("未选择日志文件")?;
+    Ok(PathBuf::from(selected))
 }
 
 fn print_summary(path: &PathBuf, summary: &mylogger_core::AnalysisSummary) {
@@ -938,7 +990,8 @@ fn print_help() {
     println!("  /                 打开命令菜单");
     println!("  /capture          抓取日志，默认写入 ./123.txt，Ctrl+C 结束");
     println!("  /capture -t       抓取日志，写入 mylogger-YYYYMMDD-HHMMSS.log");
-    println!("  /analyze <file>   分析日志文件");
+    println!("  /analyze          打开 yazi 选择日志文件并分析");
+    println!("  /analyze <file>   直接分析指定日志文件");
     println!("  /filter error     对当前日志执行 Error 过滤分析");
     println!("  /report           对当前日志生成 mylogger-report.md");
     println!("  /device           查看 adb devices");

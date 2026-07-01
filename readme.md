@@ -7,6 +7,7 @@ MyLogger 是一个面向开发者的日志分析工具。当前版本是 Rust MV
 - Rust 1.95+
 - Cargo
 - Android 抓取能力需要本机已安装 `adb`，并且 `adb` 在 `PATH` 中
+- 交互式文件选择需要本机已安装 `yazi`，并且 `yazi` 在 `PATH` 中
 
 检查环境：
 
@@ -14,6 +15,7 @@ MyLogger 是一个面向开发者的日志分析工具。当前版本是 Rust MV
 rustc --version
 cargo --version
 adb version
+yazi --version
 ```
 
 ## 编译
@@ -56,6 +58,8 @@ cargo run -p mylogger
 ```
 
 进入交互式入口后，输入 `/` 会立即打开命令菜单，可以用上下键移动，按 Enter 将选中的命令填入输入框，再按 Enter 执行。命令结果会显示在上方消息区，输入框始终固定在底部。
+
+在交互式入口中执行 `/analyze` 时，程序会临时退出 TUI 并打开 `yazi` 文件选择器。用户在 `yazi` 中选择日志文件后，会自动回到 TUI 并继续执行分析。也可以执行 `/analyze <file>` 直接分析指定文件。
 
 在交互式入口中执行 `/capture` 或 `/capture -t` 时，会先执行 `adb devices` 检测设备。如果只有一个可用设备，会直接临时退出 TUI，切换到普通终端环境执行日志抓取；如果存在多个可用设备，会先在 TUI 中弹出设备列表，使用上下键切换设备并按 Enter 确认后，再切换到终端环境抓取。按 `Ctrl+C` 结束抓取后，会自动回到 TUI，并在消息区显示日志文件路径或错误信息。
 
