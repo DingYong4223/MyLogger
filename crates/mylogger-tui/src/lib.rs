@@ -7,14 +7,14 @@ use crossterm::{
 use mylogger_core::{
     AnalysisOptions, Intent, LogLevel, analyze_file, generate_markdown_report, route_intent,
 };
-use mylogger_tools::{CaptureOptions, capture_logcat, list_adb_devices};
+use mylogger_tools::{AdbDevice, CaptureOptions, capture_logcat, list_adb_devices};
 use ratatui::{
     Terminal,
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
 };
 use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
@@ -35,6 +35,14 @@ struct UiState {
     messages: Vec<String>,
     menu_visible: bool,
     menu_selected: usize,
+    device_picker: Option<DevicePicker>,
+}
+
+#[derive(Debug, Clone)]
+struct DevicePicker {
+    devices: Vec<AdbDevice>,
+    selected: usize,
+    time_named: bool,
 }
 
 pub fn run_repl() -> Result<()> {
@@ -61,6 +69,37 @@ pub fn run_repl() -> Result<()> {
 
         match key.code {
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => break,
+            KeyCode::Esc if ui.device_picker.is_some() => {
+                ui.device_picker = None;
+                ui.messages.push("已取消设备选择。".to_string());
+            }
+            KeyCode::Up if ui.device_picker.is_some() => {
+                if let Some(picker) = ui.device_picker.as_mut() {
+                    picker.selected = previous_index(picker.selected, picker.devices.len());
+                }
+            }
+            KeyCode::Down if ui.device_picker.is_some() => {
+                if let Some(picker) = ui.device_picker.as_mut() {
+                    picker.selected = next_index(picker.selected, picker.devices.len());
+                }
+            }
+            KeyCode::Enter if ui.device_picker.is_some() => {
+                let Some(picker) = ui.device_picker.take() else {
+                    continue;
+                };
+                if let Some(device) = picker.devices.get(picker.selected) {
+                    let time_named = picker.time_named;
+                    let command_label = capture_command_label(time_named);
+                    let output = execute_capture_with_terminal_restore(
+                        &mut terminal,
+                        time_named,
+                        device.serial.clone(),
+                        &mut session,
+                    )?;
+                    ui.messages.push(format!("> {command_label}\n{output}"));
+                }
+            }
+            _ if ui.device_picker.is_some() => {}
             KeyCode::Esc if ui.menu_visible => {
                 ui.menu_visible = false;
             }
@@ -80,7 +119,8 @@ pub fn run_repl() -> Result<()> {
                         if matches!(route_intent(&command), Intent::Quit) {
                             break;
                         }
-                        let output = execute_tui_command(&mut terminal, &command, &mut session)?;
+                        let output =
+                            execute_tui_command(&mut terminal, &command, &mut session, &mut ui)?;
                         ui.messages.push(format!("> {command}\n{output}"));
                     } else {
                         ui.input = item.command.to_string();
@@ -101,7 +141,7 @@ pub fn run_repl() -> Result<()> {
                 if matches!(route_intent(&command), Intent::Quit) {
                     break;
                 }
-                let output = execute_tui_command(&mut terminal, &command, &mut session)?;
+                let output = execute_tui_command(&mut terminal, &command, &mut session, &mut ui)?;
                 ui.messages.push(format!("> {command}\n{output}"));
             }
             KeyCode::Backspace => {
@@ -351,6 +391,65 @@ fn render(frame: &mut ratatui::Frame<'_>, ui: &UiState) {
     .block(Block::default().borders(Borders::ALL).title("Input"));
     frame.render_widget(input, chunks[2]);
     set_input_cursor(frame, chunks[2], ui);
+
+    if let Some(picker) = ui.device_picker.as_ref() {
+        let area = centered_rect(frame.area(), 72, picker_height(picker));
+        render_device_picker(frame, area, picker);
+    }
+}
+
+fn render_device_picker(frame: &mut ratatui::Frame<'_>, area: Rect, picker: &DevicePicker) {
+    let items = picker
+        .devices
+        .iter()
+        .enumerate()
+        .map(|(index, device)| {
+            let style = if index == picker.selected {
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            };
+            ListItem::new(Line::from(vec![
+                Span::styled(format!("{:>2}.  {:<24}", index + 1, device.serial), style),
+                Span::styled(device.state.to_string(), style),
+            ]))
+            .style(style)
+        })
+        .collect::<Vec<_>>();
+    let list = List::new(items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title("Devices  ↑/↓ 选择  Enter 开始抓取  Esc 取消"),
+    );
+    frame.render_widget(Clear, area);
+    frame.render_widget(list, area);
+}
+
+fn picker_height(picker: &DevicePicker) -> u16 {
+    (picker.devices.len() as u16 + 2).clamp(4, 12)
+}
+
+fn centered_rect(area: Rect, percent_x: u16, height: u16) -> Rect {
+    let preferred_width = area.width.saturating_mul(percent_x).saturating_div(100);
+    let width = if area.width >= 48 {
+        preferred_width.clamp(48, area.width)
+    } else {
+        area.width
+    };
+    let height = if area.height >= 5 {
+        height.clamp(3, area.height.saturating_sub(2))
+    } else {
+        area.height
+    };
+    Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    }
 }
 
 fn render_menu(
@@ -461,9 +560,10 @@ fn execute_tui_command(
     terminal: &mut TerminalSession,
     command: &str,
     session: &mut SessionState,
+    ui: &mut UiState,
 ) -> Result<String> {
     if let Intent::Capture { time_named } = route_intent(normalize_command(command)) {
-        return execute_capture_with_terminal_restore(terminal, time_named, session);
+        return prepare_tui_capture(terminal, time_named, session, ui);
     }
 
     Ok(match execute_tui_command_inner(command, session) {
@@ -472,9 +572,41 @@ fn execute_tui_command(
     })
 }
 
+fn prepare_tui_capture(
+    terminal: &mut TerminalSession,
+    time_named: bool,
+    session: &mut SessionState,
+    ui: &mut UiState,
+) -> Result<String> {
+    let devices = list_adb_devices()?;
+    let available = devices
+        .into_iter()
+        .filter(|device| device.state.is_available())
+        .collect::<Vec<_>>();
+
+    match available.len() {
+        0 => Ok("未检测到可用 Android 设备，请连接设备或启动模拟器。".to_string()),
+        1 => execute_capture_with_terminal_restore(
+            terminal,
+            time_named,
+            available[0].serial.clone(),
+            session,
+        ),
+        _ => {
+            ui.device_picker = Some(DevicePicker {
+                devices: available,
+                selected: 0,
+                time_named,
+            });
+            Ok("检测到多个 Android 设备，请使用上下键选择设备后开始抓取。".to_string())
+        }
+    }
+}
+
 fn execute_capture_with_terminal_restore(
     terminal: &mut TerminalSession,
     time_named: bool,
+    device: String,
     session: &mut SessionState,
 ) -> Result<String> {
     terminal.suspend()?;
@@ -483,7 +615,7 @@ fn execute_capture_with_terminal_restore(
     println!();
 
     let result = capture_logcat(&CaptureOptions {
-        device: session.selected_device.clone(),
+        device: Some(device),
         time_named,
         ..Default::default()
     });
@@ -642,6 +774,14 @@ fn command_palette_text() -> String {
         out.push_str(&format!("  {:<16} {}\n", item.command, item.description));
     }
     out.trim_end().to_string()
+}
+
+fn capture_command_label(time_named: bool) -> &'static str {
+    if time_named {
+        "/capture -t"
+    } else {
+        "/capture"
+    }
 }
 
 fn welcome_messages() -> Vec<String> {
