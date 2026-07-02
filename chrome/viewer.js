@@ -37,6 +37,8 @@ const els = {
   analysisResult: document.getElementById("analysisResult"),
   dropZone: document.getElementById("dropZone"),
   tableWrap: document.getElementById("tableWrap"),
+  scrollToTop: document.getElementById("scrollToTop"),
+  scrollToBottom: document.getElementById("scrollToBottom"),
   logBody: document.getElementById("logBody"),
   searchModal: document.getElementById("searchModal"),
   searchModalTitle: document.getElementById("searchModalTitle"),
@@ -493,6 +495,11 @@ function formatBytes(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function scrollMainLogTo(position) {
+  const top = position === "bottom" ? els.tableWrap.scrollHeight : 0;
+  els.tableWrap.scrollTo({ top, behavior: "smooth" });
+}
+
 els.fileInput.addEventListener("change", (event) => {
   const file = event.target.files && event.target.files[0];
   if (file) openFile(file);
@@ -512,6 +519,8 @@ els.modalPrevMatch.addEventListener("click", () => goModalMatch(-1));
 els.modalNextMatch.addEventListener("click", () => goModalMatch(1));
 els.prevMatch.addEventListener("click", () => goMatch(-1));
 els.nextMatch.addEventListener("click", () => goMatch(1));
+els.scrollToTop.addEventListener("click", () => scrollMainLogTo("top"));
+els.scrollToBottom.addEventListener("click", () => scrollMainLogTo("bottom"));
 els.saveFiltered.addEventListener("click", saveFiltered);
 els.analyzeButton.addEventListener("click", analyzeVisible);
 
