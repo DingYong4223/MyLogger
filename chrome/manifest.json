@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "MyLogger Viewer",
+  "description": "Open, filter, search, highlight, copy, and analyze local log files.",
+  "version": "0.1.0",
+  "action": {
+    "default_title": "MyLogger Viewer",
+    "default_popup": "popup.html"
+  },
+  "permissions": ["clipboardWrite", "downloads", "storage"],
+  "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"]
+}

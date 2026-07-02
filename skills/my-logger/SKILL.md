@@ -1,6 +1,6 @@
 ---
 name: my-logger
-description: Analyze, view, or filter Android, app, server, or CLI logs to find root causes, timelines, recurring error patterns, severity, and next debugging steps. Use when the user provides log files, logcat output, stack traces, crash/ANR snippets, startup failures, network failures, performance logs, asks to summarize/filter/explain logs, or asks to open/view a log file.
+description: Analyze, view, browse, inspect, open, or filter Android, app, server, or CLI logs to find root causes, timelines, recurring error patterns, severity, and next debugging steps. Use when the user provides log files, logcat output, stack traces, crash/ANR snippets, startup failures, network failures, performance logs, asks to summarize/filter/explain logs, or asks to open/view/browse/inspect/read a log file, including Chinese intents like "查看日志", "打开日志", "浏览日志", or "查阅日志".
 ---
 
 # My Logger
@@ -56,7 +56,7 @@ Read [references/android-log-patterns.md](references/android-log-patterns.md) wh
 
 ## View Logs
 
-Read [references/view-log.md](references/view-log.md) when the user asks to view, open, inspect, or browse a log file.
+Read [references/view-log.md](references/view-log.md) when the user asks to view, open, inspect, browse, read, or check a log file. Chinese intents such as "查看日志", "打开日志", "浏览日志", and "查阅日志" must route here.
 
 ## Filter Logs
 

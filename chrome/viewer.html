@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MyLogger Viewer</title>
+    <link rel="stylesheet" href="viewer.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <h1>MyLogger Viewer</h1>
+        <p id="fileMeta">Open a local log file or drop it into this window.</p>
+      </div>
+      <div class="header-actions">
+        <label class="button primary">
+          Open Log
+          <input id="fileInput" type="file" accept=".log,.txt,text/plain,*/*" hidden />
+        </label>
+        <button id="saveFiltered" class="button" type="button" disabled>Save Filtered</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="toolbar" aria-label="Log controls">
+        <label>
+          Filter
+          <input id="filterInput" type="search" placeholder="Keyword or regex" />
+        </label>
+        <label class="checkbox">
+          <input id="filterRegex" type="checkbox" />
+          Regex
+        </label>
+        <label class="checkbox">
+          <input id="filterCase" type="checkbox" />
+          Case
+        </label>
+        <label>
+          Search
+          <input id="searchInput" type="search" placeholder="Find in visible rows" />
+        </label>
+        <button id="openSearchResults" class="button compact" type="button">Search</button>
+        <button id="prevMatch" class="button compact" type="button">Prev</button>
+        <button id="nextMatch" class="button compact" type="button">Next</button>
+        <span id="matchStatus" class="status">0 matches</span>
+      </section>
+
+      <section class="content">
+        <aside class="analysis-panel">
+          <h2>Backend Analysis</h2>
+          <label>
+            Endpoint
+            <input id="analysisEndpoint" type="url" value="http://127.0.0.1:7878/analyze" />
+          </label>
+          <button id="analyzeButton" class="button primary" type="button" disabled>Analyze Visible Logs</button>
+          <pre id="analysisResult">Analysis output will appear here.</pre>
+        </aside>
+
+        <section class="log-panel" aria-label="Log table">
+          <div id="dropZone" class="drop-zone">
+            <strong>Drop a log file here</strong>
+            <span>or use Open Log.</span>
+          </div>
+          <div id="tableWrap" class="table-wrap hidden">
+            <table class="log-table">
+              <thead>
+                <tr>
+                  <th class="line-col">Line</th>
+                  <th class="time-col">Time</th>
+                  <th class="level-col">Level</th>
+                  <th class="tag-col">Tag</th>
+                  <th class="message-col">Message</th>
+                </tr>
+              </thead>
+              <tbody id="logBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="viewer.js"></script>
+  </body>
+</html>
