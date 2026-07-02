@@ -1,0 +1,4 @@
+interface:
+  display_name: "My Logger"
+  short_description: "Analyze Android and app logs with structured triage workflows."
+  default_prompt: "Analyze this log and identify likely root causes, evidence, and next steps."
