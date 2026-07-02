@@ -15,8 +15,13 @@
       </div>
       <div class="header-actions">
         <label class="button primary">
-          打开日志
-          <input id="fileInput" type="file" accept=".log,.txt,text/plain,*/*" hidden />
+          打开文本/日志
+          <input
+            id="fileInput"
+            type="file"
+            accept=".log,.txt,.json,.jsonl,.md,.markdown,.csv,.tsv,.xml,.yaml,.yml,.properties,.conf,.config,.ini,.gradle,.kt,.java,.js,.ts,.html,.css,text/plain,text/markdown,application/json,application/x-ndjson,text/csv,text/tab-separated-values,application/xml,text/xml,application/yaml,*/*"
+            hidden
+          />
         </label>
         <button id="saveFiltered" class="button" type="button" disabled>保存过滤结果</button>
       </div>
@@ -43,6 +48,8 @@
         <button id="openSearchResults" class="button compact" type="button">搜索</button>
         <button id="prevMatch" class="button compact" type="button">上一个</button>
         <button id="nextMatch" class="button compact" type="button">下一个</button>
+        <button id="prevMarkedLine" class="button compact mark-jump" type="button" disabled title="跳转到上一个标记">↑</button>
+        <button id="nextMarkedLine" class="button compact mark-jump" type="button" disabled title="跳转到下一个标记">↓</button>
         <span id="matchStatus" class="status">0 个匹配</span>
         <span class="toolbar-spacer"></span>
         <button id="openMarkedRows" class="button compact" type="button">全部标记</button>
@@ -82,7 +89,7 @@
           </div>
           <div id="dropZone" class="drop-zone">
             <strong>拖拽日志文件到这里</strong>
-            <span>或点击“打开日志”。</span>
+            <span>或点击“打开文本/日志”。</span>
           </div>
           <div id="tableWrap" class="table-wrap hidden">
             <table class="log-table">

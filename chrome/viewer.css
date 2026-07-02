@@ -149,6 +149,12 @@ input[type="url"] {
   margin-top: 18px;
 }
 
+.button.mark-jump.available {
+  border-color: #f59e0b;
+  background: #fef3c7;
+  color: #92400e;
+}
+
 .button:disabled {
   opacity: 0.5;
   cursor: not-allowed;

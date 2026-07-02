@@ -17,6 +17,7 @@ const state = {
   matches: [],
   searchResultRows: [],
   markedLines: new Set(),
+  activeMarkedLine: null,
   activeMatch: -1,
   activeSearch: "",
   searchDirty: false,
@@ -57,6 +58,8 @@ const els = {
   openMarkedRows: document.getElementById("openMarkedRows"),
   prevMatch: document.getElementById("prevMatch"),
   nextMatch: document.getElementById("nextMatch"),
+  prevMarkedLine: document.getElementById("prevMarkedLine"),
+  nextMarkedLine: document.getElementById("nextMarkedLine"),
   matchStatus: document.getElementById("matchStatus"),
   analyzeButton: document.getElementById("analyzeButton"),
   analysisStatusButton: document.getElementById("analysisStatusButton"),
@@ -141,6 +144,7 @@ async function openFile(file) {
   state.rawText = text;
   state.rows = text.split(/\r?\n/).map(parseLine);
   state.markedLines.clear();
+  state.activeMarkedLine = null;
   els.analysisLogPath.textContent = state.filePath;
   els.fileMeta.textContent = `${file.name} · ${state.rows.length.toLocaleString()} 行 · ${formatBytes(file.size)}`;
   els.dropZone.classList.add("hidden");
@@ -196,10 +200,14 @@ function applyFilter() {
   });
 
   state.visibleRows = matcher ? state.rows.filter((row) => matcher(row.searchable)) : state.rows.slice();
+  if (state.activeMarkedLine != null && !state.visibleRows.some((row) => row.sourceLine === state.activeMarkedLine)) {
+    state.activeMarkedLine = null;
+  }
   updateLogTableWidth(state.visibleRows);
   els.tableWrap.scrollTop = 0;
   clearSearchState();
   renderRows();
+  updateMarkedLineJumpButtons();
 }
 
 function scheduleFilter() {
@@ -278,6 +286,9 @@ function createLogRow(row, activeSearch, visibleIndex, context) {
   if (state.markedLines.has(row.sourceLine)) {
     tr.classList.add("marked-row");
   }
+  if (state.activeMarkedLine === row.sourceLine) {
+    tr.classList.add("active-match");
+  }
   if (context === "main" && state.activeMatch >= 0 && state.matches[state.activeMatch] === visibleIndex) {
     tr.classList.add("active-match");
   }
@@ -324,6 +335,12 @@ function scheduleLogRowClick(row) {
   }, 500);
 }
 
+function scheduleAnalysisLogRowClick(lineNumber) {
+  const row = findRowBySourceLine(Number(lineNumber));
+  if (!row) return;
+  scheduleLogRowClick(row);
+}
+
 function cancelPendingLogRowClick() {
   if (!pendingLogRowClickTimer) return;
   window.clearTimeout(pendingLogRowClickTimer);
@@ -340,6 +357,11 @@ function clearSelectedText() {
 function hasSelectedText() {
   const selection = window.getSelection();
   return Boolean(selection && !selection.isCollapsed && selection.toString());
+}
+
+function findRowBySourceLine(sourceLine) {
+  if (!Number.isFinite(sourceLine)) return null;
+  return state.rows.find((row) => row.sourceLine === sourceLine) || state.rows[sourceLine - 1] || null;
 }
 
 function updateLogTableWidth(rows) {
@@ -441,9 +463,14 @@ function renderRowsInto(target, rows, activeSearch) {
 function toggleMarkedLine(sourceLine) {
   if (state.markedLines.has(sourceLine)) {
     state.markedLines.delete(sourceLine);
+    if (state.activeMarkedLine === sourceLine) {
+      state.activeMarkedLine = null;
+    }
   } else {
     state.markedLines.add(sourceLine);
+    state.activeMarkedLine = sourceLine;
   }
+  updateMarkedLineJumpButtons();
   if (state.activeSearch) {
     runSearch();
   } else {
@@ -463,6 +490,39 @@ function toggleMarkedLine(sourceLine) {
     state.modalActiveMatch = -1;
     state.modalSearchDirty = Boolean(state.modalActiveSearch);
     updateModalMatchStatus();
+  }
+}
+
+function getVisibleMarkedRows() {
+  return state.visibleRows.filter((row) => state.markedLines.has(row.sourceLine));
+}
+
+function goMarkedLine(direction) {
+  const markedRows = getVisibleMarkedRows();
+  if (!markedRows.length) return;
+
+  const currentIndex = state.activeMarkedLine == null
+    ? -1
+    : markedRows.findIndex((row) => row.sourceLine === state.activeMarkedLine);
+  const nextIndex = currentIndex < 0
+    ? (direction > 0 ? 0 : markedRows.length - 1)
+    : (currentIndex + direction + markedRows.length) % markedRows.length;
+  const targetRow = markedRows[nextIndex];
+  const visibleIndex = state.visibleRows.indexOf(targetRow);
+  if (visibleIndex < 0) return;
+
+  state.activeMarkedLine = targetRow.sourceLine;
+  scrollMainRowIndexIntoView(visibleIndex);
+  renderRows();
+  updateMarkedLineJumpButtons();
+}
+
+function updateMarkedLineJumpButtons() {
+  const hasMarkedRows = getVisibleMarkedRows().length > 0;
+  for (const button of [els.prevMarkedLine, els.nextMarkedLine]) {
+    if (!button) continue;
+    button.disabled = !hasMarkedRows;
+    button.classList.toggle("available", hasMarkedRows);
   }
 }
 
@@ -624,9 +684,11 @@ function clearMarkedRows() {
   if (!window.confirm("确认清除所有标记行吗？")) return;
 
   state.markedLines.clear();
+  state.activeMarkedLine = null;
   state.searchResultRows = [];
   closeSearchModal();
   renderRows();
+  updateMarkedLineJumpButtons();
   showToast("已清除标记行。");
 }
 
@@ -864,8 +926,12 @@ function renderBreakpointAnalysis(breakpoints, query) {
         line.className = "analysis-log-line";
         appendHighlightedText(line, lineText, trimmedQuery, matches);
         row.append(lineNumber, line);
-        row.title = "双击复制当前行";
-        row.addEventListener("dblclick", () => copyLine(lineText));
+        row.title = "单击查看上下文，双击复制当前行";
+        row.addEventListener("click", () => scheduleAnalysisLogRowClick(item && item.lineNumber));
+        row.addEventListener("dblclick", () => {
+          cancelPendingLogRowClick();
+          copyLine(lineText);
+        });
         groupEl.append(row);
         renderedRightRows += 1;
       }
@@ -1133,6 +1199,8 @@ els.modalPrevMatch.addEventListener("click", () => goModalMatch(-1));
 els.modalNextMatch.addEventListener("click", () => goModalMatch(1));
 els.prevMatch.addEventListener("click", () => goMatch(-1));
 els.nextMatch.addEventListener("click", () => goMatch(1));
+els.prevMarkedLine.addEventListener("click", () => goMarkedLine(-1));
+els.nextMarkedLine.addEventListener("click", () => goMarkedLine(1));
 els.tableWrap.addEventListener("scroll", scheduleVirtualRowsRender);
 els.contextTableWrap.addEventListener("scroll", scheduleContextRowsRender);
 els.scrollToTop.addEventListener("click", () => scrollMainLogTo("top"));

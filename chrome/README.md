@@ -14,7 +14,7 @@ This Chrome extension provides a local log viewer UI.
 
 ## Features
 
-- Open a local log file with file picker or drag and drop.
+- Open common text files such as `.log`, `.txt`, `.json`, `.md`, `.csv`, `.xml`, and `.yaml` with file picker or drag and drop.
 - Display logs in columns: line, time, level, tag, message.
 - Filter visible logs by keyword or regex.
 - Search visible logs and jump between matches.
