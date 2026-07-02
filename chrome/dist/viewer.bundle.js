@@ -3332,6 +3332,8 @@
   var analysisStatusTimer = 0;
   var virtualScrollFrame = 0;
   var contextVirtualScrollFrame = 0;
+  var pendingLogRowClickTimer = 0;
+  var suppressNextLogRowClick = false;
   var els = {
     fileInput: document.getElementById("fileInput"),
     breakpointsInput: document.getElementById("breakpointsInput"),
@@ -3561,11 +3563,46 @@
       cell(highlight(row.tag, activeSearch), "tag-col"),
       cell(highlight(row.message, activeSearch), "message-col")
     );
-    if (context !== "context") {
-      tr.addEventListener("click", () => openLogContext(row));
+    if (shouldOpenContextOnClick(context)) {
+      tr.addEventListener("mousedown", () => {
+        suppressNextLogRowClick = hasSelectedText();
+      });
+      tr.addEventListener("click", () => scheduleLogRowClick(row));
     }
-    tr.addEventListener("dblclick", () => copyLine(row.raw));
+    tr.addEventListener("dblclick", () => {
+      cancelPendingLogRowClick();
+      copyLine(row.raw);
+    });
     return tr;
+  }
+  function shouldOpenContextOnClick(context) {
+    return context === "main" && els.filterInput.value.trim();
+  }
+  function scheduleLogRowClick(row) {
+    cancelPendingLogRowClick();
+    if (suppressNextLogRowClick || clearSelectedText()) {
+      suppressNextLogRowClick = false;
+      return;
+    }
+    pendingLogRowClickTimer = window.setTimeout(() => {
+      pendingLogRowClickTimer = 0;
+      openLogContext(row);
+    }, 500);
+  }
+  function cancelPendingLogRowClick() {
+    if (!pendingLogRowClickTimer) return;
+    window.clearTimeout(pendingLogRowClickTimer);
+    pendingLogRowClickTimer = 0;
+  }
+  function clearSelectedText() {
+    if (!hasSelectedText()) return false;
+    const selection = window.getSelection();
+    if (selection) selection.removeAllRanges();
+    return true;
+  }
+  function hasSelectedText() {
+    const selection = window.getSelection();
+    return Boolean(selection && !selection.isCollapsed && selection.toString());
   }
   function updateLogTableWidth(rows) {
     let longestMessage = "";
@@ -3704,18 +3741,25 @@
     const index = state.rows.indexOf(row);
     state.contextActiveIndex = index >= 0 ? index : Math.max(0, Math.min(state.rows.length - 1, row.sourceLine - 1));
     els.contextModalMeta.textContent = `${state.fileName || "\u65E5\u5FD7"} \xB7 \u7B2C ${row.sourceLine} \u884C \xB7 \u524D\u540E 30 \u884C`;
+    els.contextLogBody.textContent = "";
     els.contextModal.classList.remove("hidden");
-    window.requestAnimationFrame(() => {
-      const viewportHeight = els.contextTableWrap.clientHeight || 0;
-      const targetTop = state.contextActiveIndex * LOG_ROW_HEIGHT;
-      const centeredTop = targetTop - Math.max(0, viewportHeight - LOG_ROW_HEIGHT) / 2;
-      const maxTop = Math.max(0, state.rows.length * LOG_ROW_HEIGHT - viewportHeight);
-      els.contextTableWrap.scrollTop = Math.max(0, Math.min(centeredTop, maxTop));
-      renderContextRows();
-    });
+    window.requestAnimationFrame(() => window.requestAnimationFrame(centerContextTargetRow));
   }
   function closeContextModal() {
+    cancelPendingLogRowClick();
     els.contextModal.classList.add("hidden");
+  }
+  function centerContextTargetRow() {
+    const viewportHeight = els.contextTableWrap.clientHeight || els.contextTableWrap.getBoundingClientRect().height || 0;
+    if (!viewportHeight) {
+      window.requestAnimationFrame(centerContextTargetRow);
+      return;
+    }
+    const targetTop = state.contextActiveIndex * LOG_ROW_HEIGHT;
+    const centeredTop = targetTop - Math.max(0, viewportHeight - LOG_ROW_HEIGHT) / 2;
+    const maxTop = Math.max(0, state.rows.length * LOG_ROW_HEIGHT - viewportHeight);
+    els.contextTableWrap.scrollTop = Math.max(0, Math.min(centeredTop, maxTop));
+    renderContextRows();
   }
   function renderContextRows() {
     const rows = state.rows;

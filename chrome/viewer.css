@@ -553,6 +553,10 @@ mark {
   overflow: auto;
 }
 
+.context-table-wrap {
+  height: 100%;
+}
+
 .analysis-modal-body {
   min-width: 0;
   min-height: 0;
