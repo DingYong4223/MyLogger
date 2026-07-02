@@ -14,10 +14,6 @@
         <p id="breakpointsMeta">No breakpoint file selected.</p>
       </div>
       <div class="header-actions">
-        <label class="button">
-          Open BreakPoints
-          <input id="breakpointsInput" type="file" accept=".json,application/json" hidden />
-        </label>
         <label class="button primary">
           Open Log
           <input id="fileInput" type="file" accept=".log,.txt,text/plain,*/*" hidden />
@@ -61,7 +57,10 @@
           </label>
           <div class="analysis-path-field">
             <span>BreakPoints</span>
-            <button id="analysisBreakpointsPath" class="path-display path-display-button" type="button">No breakpoint file selected.</button>
+            <label class="path-display path-display-button" for="breakpointsInput">
+              <span id="analysisBreakpointsPath">No breakpoint file selected.</span>
+            </label>
+            <input id="breakpointsInput" type="file" accept=".json,application/json" hidden />
           </div>
           <div class="analysis-path-field">
             Log Path
@@ -69,9 +68,8 @@
           </div>
           <div class="analysis-actions">
             <button id="analysisStatusButton" class="service-status unavailable" type="button" title="Backend service unavailable" aria-label="Backend service unavailable"></button>
-            <button id="analyzeButton" class="button primary" type="button" disabled>Analyze Visible Logs</button>
+            <button id="analyzeButton" class="button primary" type="button" disabled>断点筛查</button>
           </div>
-          <pre id="analysisResult">Analysis output will appear here.</pre>
         </aside>
 
         <section class="log-panel" aria-label="Log table">
@@ -161,7 +159,7 @@
             <button id="closeAnalysisModal" class="button" type="button">Close</button>
           </div>
         </header>
-        <pre id="analysisModalBody" class="analysis-modal-body"></pre>
+        <div id="analysisModalBody" class="analysis-modal-body"></div>
       </section>
     </div>
 

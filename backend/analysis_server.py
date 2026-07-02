@@ -5,13 +5,40 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import argparse
 import json
-import re
 
 from extract_breakpoint_sources import (
     analyze_breakpoints_content,
     analyze_breakpoints_file,
     resolve_local_path,
 )
+
+
+def attach_log_matches(breakpoint_analysis, log_lines):
+    if not isinstance(breakpoint_analysis, dict):
+        return breakpoint_analysis
+
+    log_strings = [
+        value
+        for value in breakpoint_analysis.get("logStrings", [])
+        if isinstance(value, str) and value
+    ]
+    matched_logs = []
+
+    for log_string in log_strings:
+        matches = []
+        for index, line in enumerate(log_lines, start=1):
+            if log_string in line:
+                matches.append({
+                    "lineNumber": index,
+                    "line": line,
+                })
+        matched_logs.append({
+            "logString": log_string,
+            "matches": matches,
+        })
+
+    breakpoint_analysis["matchedLogs"] = matched_logs
+    return breakpoint_analysis
 
 
 class AnalysisHandler(BaseHTTPRequestHandler):
@@ -54,19 +81,16 @@ class AnalysisHandler(BaseHTTPRequestHandler):
                 )
             else:
                 breakpoint_analysis = analyze_breakpoints_file(breakpoints_file_path) if breakpoints_file_path else None
+            breakpoint_analysis = attach_log_matches(breakpoint_analysis, lines)
             result = {
                 "fileName": payload.get("fileName") or path.name,
                 "path": str(path),
                 "lineCount": len(lines),
-                "wordCount": len(re.findall(r"\S+", text)),
-                "charCount": len(text),
                 "visibleLineCountFromPlugin": payload.get("visibleLineCount"),
                 "filterFromPlugin": payload.get("filter") or "",
                 "breakpointsFileNameFromPlugin": payload.get("breakpointsFileName") or "",
-                "breakpointsFilePathFromPlugin": payload.get("breakpointsFilePath") or "",
                 "breakpointsContentFromPlugin": bool(breakpoints_content),
                 "breakpoints": breakpoint_analysis,
-                "demo": True,
             }
             self._send_json(200, result)
         except json.JSONDecodeError:

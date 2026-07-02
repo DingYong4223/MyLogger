@@ -20,6 +20,7 @@ const state = {
   modalActiveSearch: "",
   modalSearchDirty: false,
   analysisModalText: "",
+  analysisModalData: null,
   analysisModalMatches: [],
   analysisModalActiveMatch: -1,
   analysisModalSearch: "",
@@ -48,7 +49,6 @@ const els = {
   analysisEndpoint: document.getElementById("analysisEndpoint"),
   analysisBreakpointsPath: document.getElementById("analysisBreakpointsPath"),
   analysisLogPath: document.getElementById("analysisLogPath"),
-  analysisResult: document.getElementById("analysisResult"),
   dropZone: document.getElementById("dropZone"),
   tableWrap: document.getElementById("tableWrap"),
   scrollToTop: document.getElementById("scrollToTop"),
@@ -413,7 +413,7 @@ function saveSearchResults() {
   if (!state.searchResultRows.length) return;
   const content = state.searchResultRows.map((row) => row.raw).join("\n");
   const suffix = els.searchModalTitle.textContent === "Marked Lines" ? "marked" : "search";
-  downloadText(content, `${state.fileName || "log"}.${suffix}.log`);
+  downloadText(content, `${state.fileName || "log"}.${suffix}.txt`);
 }
 
 function clearMarkedRows() {
@@ -493,7 +493,7 @@ async function copyLine(line) {
 function saveFiltered() {
   const content = state.visibleRows.map((row) => row.raw).join("\n");
   const base = state.fileName ? state.fileName.replace(/\.[^.]+$/, "") : "mylogger";
-  downloadText(content, `${base}.filtered.log`);
+  downloadText(content, `${base}.filtered.txt`);
 }
 
 function downloadText(content, filename) {
@@ -509,6 +509,11 @@ function downloadText(content, filename) {
 function openAnalysisModal(resultText, metaText) {
   els.analysisModalMeta.textContent = metaText;
   state.analysisModalText = resultText;
+  try {
+    state.analysisModalData = JSON.parse(resultText);
+  } catch {
+    state.analysisModalData = null;
+  }
   state.analysisModalMatches = [];
   state.analysisModalActiveMatch = -1;
   state.analysisModalSearch = "";
@@ -538,6 +543,17 @@ function closeBreakpointsModal() {
 
 function renderAnalysisModalText(query) {
   els.analysisModalBody.textContent = "";
+  const data = state.analysisModalData;
+  const breakpoints = data && typeof data === "object" ? data.breakpoints : null;
+  if (breakpoints && typeof breakpoints === "object") {
+    renderBreakpointAnalysis(breakpoints, query);
+    return;
+  }
+
+  renderPlainAnalysisText(query);
+}
+
+function renderPlainAnalysisText(query) {
   const text = state.analysisModalText || "";
   const trimmedQuery = query.trim();
   if (!trimmedQuery) {
@@ -571,6 +587,143 @@ function renderAnalysisModalText(query) {
   state.analysisModalMatches = matches;
   state.analysisModalActiveMatch = -1;
   state.analysisModalSearch = trimmedQuery;
+}
+
+function renderBreakpointAnalysis(breakpoints, query) {
+  const trimmedQuery = query.trim();
+  const matches = [];
+  const logStrings = Array.isArray(breakpoints.logStrings)
+    ? breakpoints.logStrings.filter((value) => typeof value === "string" && value)
+    : [];
+  const matchedLogs = Array.isArray(breakpoints.matchedLogs) ? breakpoints.matchedLogs : [];
+  const matchedByLogString = new Map();
+  for (const group of matchedLogs) {
+    if (!group || typeof group.logString !== "string") continue;
+    matchedByLogString.set(group.logString, Array.isArray(group.matches) ? group.matches : []);
+  }
+  const totalMatches = matchedLogs.reduce((sum, group) => {
+    return sum + (Array.isArray(group.matches) ? group.matches.length : 0);
+  }, 0);
+
+  const split = document.createElement("div");
+  split.className = "analysis-split";
+  const left = createAnalysisPane("断点日志", `${logStrings.length.toLocaleString()} 条`);
+  const right = createAnalysisPane("相关日志", `${totalMatches.toLocaleString()} 行`);
+
+  const leftBody = left.querySelector(".analysis-pane-body");
+  const rightBody = right.querySelector(".analysis-pane-body");
+
+  if (!logStrings.length) {
+    const empty = document.createElement("div");
+    empty.className = "analysis-empty";
+    empty.textContent = breakpoints.error ? `${breakpoints.error}: ${breakpoints.message || ""}` : "没有提取到断点日志字符串。";
+    leftBody.append(empty);
+  } else {
+    logStrings.forEach((logString, index) => {
+      const row = document.createElement("div");
+      row.className = "analysis-log-string";
+      const indexEl = document.createElement("span");
+      indexEl.className = "analysis-index";
+      indexEl.textContent = String(index + 1);
+      const code = document.createElement("code");
+      appendHighlightedText(code, logString, trimmedQuery, matches);
+      row.append(indexEl, code);
+      row.title = "Double-click to copy this line";
+      row.addEventListener("dblclick", () => copyLine(logString));
+      leftBody.append(row);
+    });
+  }
+
+  const rightGroups = logStrings.length
+    ? logStrings.map((logString) => ({ logString, matches: matchedByLogString.get(logString) || [] }))
+    : matchedLogs;
+
+  let renderedRightRows = 0;
+  if (!rightGroups.length) {
+    const empty = document.createElement("div");
+    empty.className = "analysis-empty";
+    empty.textContent = "没有可展示的相关日志。";
+    rightBody.append(empty);
+  } else {
+    for (const group of rightGroups) {
+      const groupMatches = Array.isArray(group.matches) ? group.matches : [];
+      const groupEl = document.createElement("section");
+      groupEl.className = "analysis-match-group";
+
+      for (const item of groupMatches) {
+        const lineText = item && item.line ? String(item.line) : "";
+        const row = document.createElement("div");
+        row.className = "analysis-log-match-row";
+        const lineNumber = document.createElement("span");
+        lineNumber.className = "analysis-line-number";
+        lineNumber.textContent = item && item.lineNumber ? String(item.lineNumber) : "-";
+        const line = document.createElement("pre");
+        line.className = "analysis-log-line";
+        appendHighlightedText(line, lineText, trimmedQuery, matches);
+        row.append(lineNumber, line);
+        row.title = "Double-click to copy this line";
+        row.addEventListener("dblclick", () => copyLine(lineText));
+        groupEl.append(row);
+        renderedRightRows += 1;
+      }
+
+      if (groupMatches.length) {
+        rightBody.append(groupEl);
+      }
+    }
+
+    if (!renderedRightRows) {
+      const empty = document.createElement("div");
+      empty.className = "analysis-empty";
+      empty.textContent = "未在日志文件中找到相关日志。";
+      rightBody.append(empty);
+    }
+  }
+
+  split.append(left, right);
+  els.analysisModalBody.append(split);
+  state.analysisModalMatches = matches;
+  state.analysisModalActiveMatch = -1;
+  state.analysisModalSearch = trimmedQuery;
+}
+
+function createAnalysisPane(title, meta) {
+  const pane = document.createElement("section");
+  pane.className = "analysis-pane";
+  const header = document.createElement("div");
+  header.className = "analysis-pane-header";
+  const titleEl = document.createElement("h3");
+  titleEl.textContent = title;
+  const metaEl = document.createElement("span");
+  metaEl.textContent = meta;
+  header.append(titleEl, metaEl);
+  const body = document.createElement("div");
+  body.className = "analysis-pane-body";
+  pane.append(header, body);
+  return pane;
+}
+
+function appendHighlightedText(target, text, query, matches) {
+  if (!query) {
+    target.textContent = text;
+    return;
+  }
+
+  const lowerText = text.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  let cursor = 0;
+  while (true) {
+    const index = lowerText.indexOf(lowerQuery, cursor);
+    if (index < 0) break;
+    target.append(document.createTextNode(text.slice(cursor, index)));
+    const mark = document.createElement("mark");
+    mark.className = "analysis-modal-match";
+    mark.textContent = text.slice(index, index + query.length);
+    matches.push(mark);
+    target.append(mark);
+    cursor = index + query.length;
+  }
+  target.append(document.createTextNode(text.slice(cursor)));
 }
 
 function runAnalysisModalSearch() {
@@ -665,6 +818,11 @@ async function analyzeVisible() {
     showToast("Log path is required for backend analysis.");
     return;
   }
+  if (!state.breakpointsContent) {
+    showToast("请先选择 BreakPoints JSON 文件。");
+    els.breakpointsInput.click();
+    return;
+  }
 
   const payload = {
     fileName: state.fileName,
@@ -676,7 +834,7 @@ async function analyzeVisible() {
     filter: els.filterInput.value,
   };
 
-  els.analysisResult.textContent = "Analyzing...";
+  showToast("筛查中...");
   try {
     const response = await fetch(endpoint, {
       method: "POST",
@@ -685,10 +843,9 @@ async function analyzeVisible() {
     });
     const text = await response.text();
     const resultText = text || `HTTP ${response.status}`;
-    els.analysisResult.textContent = resultText;
     openAnalysisModal(resultText, `${state.fileName || filePath} · HTTP ${response.status}`);
   } catch (error) {
-    els.analysisResult.textContent = `Analysis failed: ${error.message}`;
+    showToast(`Analysis failed: ${error.message}`);
   }
 }
 
@@ -745,7 +902,6 @@ els.openMarkedRows.addEventListener("click", openMarkedRows);
 els.closeSearchModal.addEventListener("click", closeSearchModal);
 els.closeAnalysisModal.addEventListener("click", closeAnalysisModal);
 els.closeBreakpointsModal.addEventListener("click", closeBreakpointsModal);
-els.analysisBreakpointsPath.addEventListener("click", openBreakpointsModal);
 els.saveAnalysisModal.addEventListener("click", saveAnalysisModal);
 els.analysisModalSearchInput.addEventListener("input", runAnalysisModalSearch);
 els.analysisModalPrevMatch.addEventListener("click", () => goAnalysisModalMatch(-1));
