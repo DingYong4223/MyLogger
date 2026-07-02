@@ -21,7 +21,7 @@ This Chrome extension provides a local log viewer UI.
 - Use native horizontal and vertical scrollbars.
 - Click any row to copy the original line.
 - Save filtered results as a `.filtered.log` file.
-- POST visible logs to a backend analysis endpoint.
+- POST the selected log path to a backend analysis endpoint and show the returned result in an in-page dialog.
 
 ## Backend Analysis API
 
@@ -31,13 +31,21 @@ The default endpoint is:
 http://127.0.0.1:7878/analyze
 ```
 
+Start the demo backend from the repository root:
+
+```bash
+python3 backend/analysis_server.py
+```
+
 The extension sends JSON:
 
 ```json
 {
   "fileName": "123.txt",
+  "filePath": "123.txt",
   "visibleLineCount": 100,
-  "filter": "error",
-  "content": "..."
+  "filter": "error"
 }
 ```
+
+Chrome does not reliably expose the absolute path of a file selected with the file picker. Set the `Log Path` field to a path the backend can read. Relative paths are resolved from the directory where the backend service was started.

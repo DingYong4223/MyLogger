@@ -2,6 +2,10 @@
 
 const state = {
   fileName: "",
+  filePath: "",
+  breakpointsFileName: "",
+  breakpointsFilePath: "",
+  breakpointsContent: "",
   rawText: "",
   rows: [],
   visibleRows: [],
@@ -15,13 +19,20 @@ const state = {
   modalActiveMatch: -1,
   modalActiveSearch: "",
   modalSearchDirty: false,
+  analysisModalText: "",
+  analysisModalMatches: [],
+  analysisModalActiveMatch: -1,
+  analysisModalSearch: "",
 };
 
 let filterTimer = 0;
+let analysisStatusTimer = 0;
 
 const els = {
   fileInput: document.getElementById("fileInput"),
+  breakpointsInput: document.getElementById("breakpointsInput"),
   fileMeta: document.getElementById("fileMeta"),
+  breakpointsMeta: document.getElementById("breakpointsMeta"),
   saveFiltered: document.getElementById("saveFiltered"),
   filterInput: document.getElementById("filterInput"),
   filterRegex: document.getElementById("filterRegex"),
@@ -33,7 +44,10 @@ const els = {
   nextMatch: document.getElementById("nextMatch"),
   matchStatus: document.getElementById("matchStatus"),
   analyzeButton: document.getElementById("analyzeButton"),
+  analysisStatusButton: document.getElementById("analysisStatusButton"),
   analysisEndpoint: document.getElementById("analysisEndpoint"),
+  analysisBreakpointsPath: document.getElementById("analysisBreakpointsPath"),
+  analysisLogPath: document.getElementById("analysisLogPath"),
   analysisResult: document.getElementById("analysisResult"),
   dropZone: document.getElementById("dropZone"),
   tableWrap: document.getElementById("tableWrap"),
@@ -51,6 +65,19 @@ const els = {
   clearMarkedRows: document.getElementById("clearMarkedRows"),
   saveSearchResults: document.getElementById("saveSearchResults"),
   closeSearchModal: document.getElementById("closeSearchModal"),
+  analysisModal: document.getElementById("analysisModal"),
+  analysisModalMeta: document.getElementById("analysisModalMeta"),
+  analysisModalBody: document.getElementById("analysisModalBody"),
+  analysisModalSearchInput: document.getElementById("analysisModalSearchInput"),
+  analysisModalPrevMatch: document.getElementById("analysisModalPrevMatch"),
+  analysisModalNextMatch: document.getElementById("analysisModalNextMatch"),
+  analysisModalMatchStatus: document.getElementById("analysisModalMatchStatus"),
+  saveAnalysisModal: document.getElementById("saveAnalysisModal"),
+  closeAnalysisModal: document.getElementById("closeAnalysisModal"),
+  breakpointsModal: document.getElementById("breakpointsModal"),
+  breakpointsModalMeta: document.getElementById("breakpointsModalMeta"),
+  breakpointsModalBody: document.getElementById("breakpointsModalBody"),
+  closeBreakpointsModal: document.getElementById("closeBreakpointsModal"),
   toast: document.getElementById("toast"),
 };
 
@@ -89,15 +116,54 @@ function parseLine(text, index) {
 async function openFile(file) {
   const text = await file.text();
   state.fileName = file.name;
+  state.filePath = file.path || file.name;
   state.rawText = text;
   state.rows = text.split(/\r?\n/).map(parseLine);
   state.markedLines.clear();
   applyFilter();
+  els.analysisLogPath.textContent = state.filePath;
   els.fileMeta.textContent = `${file.name} · ${state.rows.length.toLocaleString()} lines · ${formatBytes(file.size)}`;
   els.dropZone.classList.add("hidden");
   els.tableWrap.classList.remove("hidden");
   els.saveFiltered.disabled = false;
   els.analyzeButton.disabled = false;
+}
+
+async function openBreakpointsFile(file) {
+  if (!file.name.toLowerCase().endsWith(".json")) {
+    clearBreakpointsFile();
+    showToast("BreakPoints file must be a JSON file.");
+    els.breakpointsInput.value = "";
+    return;
+  }
+
+  const text = await file.text();
+  try {
+    JSON.parse(text);
+  } catch (error) {
+    clearBreakpointsFile();
+    showToast(`Invalid BreakPoints JSON: ${error.message}`);
+    els.breakpointsInput.value = "";
+    return;
+  }
+
+  state.breakpointsFileName = file.name;
+  state.breakpointsFilePath = file.path || file.name;
+  state.breakpointsContent = text;
+  els.breakpointsMeta.textContent = `BreakPoints: ${state.breakpointsFilePath}`;
+  els.analysisBreakpointsPath.textContent = state.breakpointsFilePath;
+  openBreakpointsModal();
+  showToast(`Loaded BreakPoints: ${file.name}`);
+}
+
+function clearBreakpointsFile() {
+  state.breakpointsFileName = "";
+  state.breakpointsFilePath = "";
+  state.breakpointsContent = "";
+  els.breakpointsMeta.textContent = "No breakpoint file selected.";
+  els.analysisBreakpointsPath.textContent = "No breakpoint file selected.";
+  els.breakpointsModalMeta.textContent = "No breakpoint file selected.";
+  els.breakpointsModalBody.textContent = "";
 }
 
 function applyFilter() {
@@ -440,18 +506,174 @@ function downloadText(content, filename) {
   }, () => URL.revokeObjectURL(url));
 }
 
+function openAnalysisModal(resultText, metaText) {
+  els.analysisModalMeta.textContent = metaText;
+  state.analysisModalText = resultText;
+  state.analysisModalMatches = [];
+  state.analysisModalActiveMatch = -1;
+  state.analysisModalSearch = "";
+  els.analysisModalSearchInput.value = "";
+  renderAnalysisModalText("");
+  updateAnalysisModalMatchStatus();
+  els.analysisModal.classList.remove("hidden");
+}
+
+function closeAnalysisModal() {
+  els.analysisModal.classList.add("hidden");
+}
+
+function openBreakpointsModal() {
+  if (!state.breakpointsContent) {
+    showToast("No breakpoint file selected.");
+    return;
+  }
+  els.breakpointsModalMeta.textContent = `${state.breakpointsFileName || "BreakPoints"} · ${state.breakpointsContent.length.toLocaleString()} chars`;
+  els.breakpointsModalBody.textContent = state.breakpointsContent;
+  els.breakpointsModal.classList.remove("hidden");
+}
+
+function closeBreakpointsModal() {
+  els.breakpointsModal.classList.add("hidden");
+}
+
+function renderAnalysisModalText(query) {
+  els.analysisModalBody.textContent = "";
+  const text = state.analysisModalText || "";
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) {
+    els.analysisModalBody.textContent = text;
+    state.analysisModalMatches = [];
+    state.analysisModalActiveMatch = -1;
+    state.analysisModalSearch = "";
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  const lowerText = text.toLowerCase();
+  const lowerQuery = trimmedQuery.toLowerCase();
+  const matches = [];
+  let cursor = 0;
+
+  while (true) {
+    const index = lowerText.indexOf(lowerQuery, cursor);
+    if (index < 0) break;
+    fragment.append(document.createTextNode(text.slice(cursor, index)));
+    const mark = document.createElement("mark");
+    mark.className = "analysis-modal-match";
+    mark.textContent = text.slice(index, index + trimmedQuery.length);
+    matches.push(mark);
+    fragment.append(mark);
+    cursor = index + trimmedQuery.length;
+  }
+
+  fragment.append(document.createTextNode(text.slice(cursor)));
+  els.analysisModalBody.appendChild(fragment);
+  state.analysisModalMatches = matches;
+  state.analysisModalActiveMatch = -1;
+  state.analysisModalSearch = trimmedQuery;
+}
+
+function runAnalysisModalSearch() {
+  renderAnalysisModalText(els.analysisModalSearchInput.value);
+  updateAnalysisModalMatchStatus();
+}
+
+function goAnalysisModalMatch(direction) {
+  const query = els.analysisModalSearchInput.value.trim();
+  if (query !== state.analysisModalSearch) {
+    runAnalysisModalSearch();
+  }
+  if (!state.analysisModalMatches.length) return;
+  if (state.analysisModalActiveMatch >= 0) {
+    state.analysisModalMatches[state.analysisModalActiveMatch].classList.remove("active-analysis-match");
+  }
+  state.analysisModalActiveMatch =
+    (state.analysisModalActiveMatch + direction + state.analysisModalMatches.length) % state.analysisModalMatches.length;
+  const match = state.analysisModalMatches[state.analysisModalActiveMatch];
+  match.classList.add("active-analysis-match");
+  match.scrollIntoView({ block: "center", inline: "nearest" });
+  updateAnalysisModalMatchStatus();
+}
+
+function updateAnalysisModalMatchStatus() {
+  if (!state.analysisModalMatches.length) {
+    els.analysisModalMatchStatus.textContent = "0 matches";
+    return;
+  }
+  const current = state.analysisModalActiveMatch < 0 ? 0 : state.analysisModalActiveMatch + 1;
+  els.analysisModalMatchStatus.textContent = `${current}/${state.analysisModalMatches.length} matches`;
+}
+
+function saveAnalysisModal() {
+  const content = state.analysisModalText || els.analysisModalBody.textContent || "";
+  if (!content) {
+    showToast("No analysis result to save.");
+    return;
+  }
+  const base = state.fileName ? state.fileName.replace(/\.[^.]+$/, "") : "mylogger";
+  downloadText(content, `${sanitizeFilename(base)}.analysis.txt`);
+}
+
+function sanitizeFilename(value) {
+  return value.replace(/[\\/:*?"<>|]+/g, "_").trim() || "mylogger";
+}
+
+function setAnalysisServiceStatus(available) {
+  els.analysisStatusButton.classList.toggle("available", available);
+  els.analysisStatusButton.classList.toggle("unavailable", !available);
+  const label = available ? "Backend service available" : "Backend service unavailable";
+  els.analysisStatusButton.title = label;
+  els.analysisStatusButton.setAttribute("aria-label", label);
+}
+
+async function checkAnalysisService() {
+  const endpoint = els.analysisEndpoint.value.trim();
+  if (!endpoint) {
+    setAnalysisServiceStatus(false);
+    return;
+  }
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 1500);
+  try {
+    const response = await fetch(endpoint, {
+      method: "OPTIONS",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    setAnalysisServiceStatus(response.ok);
+  } catch {
+    setAnalysisServiceStatus(false);
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+function scheduleAnalysisServiceCheck() {
+  window.clearTimeout(analysisStatusTimer);
+  analysisStatusTimer = window.setTimeout(checkAnalysisService, 500);
+}
+
 async function analyzeVisible() {
   const endpoint = els.analysisEndpoint.value.trim();
   if (!endpoint) {
     showToast("Analysis endpoint is required.");
     return;
   }
+  const filePath = state.filePath.trim();
+  if (!filePath) {
+    showToast("Log path is required for backend analysis.");
+    return;
+  }
 
   const payload = {
     fileName: state.fileName,
+    filePath,
+    breakpointsFileName: state.breakpointsFileName,
+    breakpointsFilePath: state.breakpointsFilePath,
+    breakpointsContent: state.breakpointsContent,
     visibleLineCount: state.visibleRows.length,
     filter: els.filterInput.value,
-    content: state.visibleRows.map((row) => row.raw).join("\n"),
   };
 
   els.analysisResult.textContent = "Analyzing...";
@@ -462,7 +684,9 @@ async function analyzeVisible() {
       body: JSON.stringify(payload),
     });
     const text = await response.text();
-    els.analysisResult.textContent = text || `HTTP ${response.status}`;
+    const resultText = text || `HTTP ${response.status}`;
+    els.analysisResult.textContent = resultText;
+    openAnalysisModal(resultText, `${state.fileName || filePath} · HTTP ${response.status}`);
   } catch (error) {
     els.analysisResult.textContent = `Analysis failed: ${error.message}`;
   }
@@ -505,13 +729,27 @@ els.fileInput.addEventListener("change", (event) => {
   if (file) openFile(file);
 });
 
+els.breakpointsInput.addEventListener("change", (event) => {
+  const file = event.target.files && event.target.files[0];
+  if (file) openBreakpointsFile(file);
+});
+
 els.filterInput.addEventListener("input", scheduleFilter);
 els.filterRegex.addEventListener("change", applyFilter);
 els.filterCase.addEventListener("change", applyFilter);
 els.searchInput.addEventListener("input", markSearchDirty);
+els.analysisEndpoint.addEventListener("input", scheduleAnalysisServiceCheck);
+els.analysisStatusButton.addEventListener("click", checkAnalysisService);
 els.openSearchResults.addEventListener("click", openSearchResults);
 els.openMarkedRows.addEventListener("click", openMarkedRows);
 els.closeSearchModal.addEventListener("click", closeSearchModal);
+els.closeAnalysisModal.addEventListener("click", closeAnalysisModal);
+els.closeBreakpointsModal.addEventListener("click", closeBreakpointsModal);
+els.analysisBreakpointsPath.addEventListener("click", openBreakpointsModal);
+els.saveAnalysisModal.addEventListener("click", saveAnalysisModal);
+els.analysisModalSearchInput.addEventListener("input", runAnalysisModalSearch);
+els.analysisModalPrevMatch.addEventListener("click", () => goAnalysisModalMatch(-1));
+els.analysisModalNextMatch.addEventListener("click", () => goAnalysisModalMatch(1));
 els.saveSearchResults.addEventListener("click", saveSearchResults);
 els.clearMarkedRows.addEventListener("click", clearMarkedRows);
 els.modalSearchInput.addEventListener("input", markModalSearchDirty);
@@ -523,6 +761,9 @@ els.scrollToTop.addEventListener("click", () => scrollMainLogTo("top"));
 els.scrollToBottom.addEventListener("click", () => scrollMainLogTo("bottom"));
 els.saveFiltered.addEventListener("click", saveFiltered);
 els.analyzeButton.addEventListener("click", analyzeVisible);
+
+checkAnalysisService();
+window.setInterval(checkAnalysisService, 5000);
 
 for (const target of [document.body, els.dropZone]) {
   target.addEventListener("dragover", (event) => {
@@ -541,5 +782,11 @@ for (const target of [document.body, els.dropZone]) {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !els.searchModal.classList.contains("hidden")) {
     closeSearchModal();
+  }
+  if (event.key === "Escape" && !els.analysisModal.classList.contains("hidden")) {
+    closeAnalysisModal();
+  }
+  if (event.key === "Escape" && !els.breakpointsModal.classList.contains("hidden")) {
+    closeBreakpointsModal();
   }
 });

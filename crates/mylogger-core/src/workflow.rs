@@ -13,6 +13,17 @@ pub fn builtin_workflows() -> Vec<Workflow> {
             aliases: &["capture", "抓取", "抓日志", "logcat"],
         },
         Workflow {
+            id: "start-service",
+            title: "启动本地日志后台服务",
+            aliases: &[
+                "StartService",
+                "start-service",
+                "service",
+                "启动服务",
+                "日志服务",
+            ],
+        },
+        Workflow {
             id: "crash",
             title: "崩溃分析",
             aliases: &["crash", "崩溃", "闪退", "fatal", "FATAL EXCEPTION"],

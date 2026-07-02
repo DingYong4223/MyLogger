@@ -2,6 +2,7 @@
 pub enum Intent {
     Capture { time_named: bool },
     Analyze { path: Option<String>, open: bool },
+    StartService,
     CommandPalette,
     Help,
     Quit,
@@ -22,6 +23,14 @@ pub fn route_intent(input: &str) -> Intent {
     }
     if lower == "/help" || lower == "help" || text == "帮助" {
         return Intent::Help;
+    }
+    if matches!(
+        lower.as_str(),
+        "/startservice" | "startservice" | "/start-service" | "start-service" | "service"
+    ) || text.contains("启动服务")
+        || text.contains("日志服务")
+    {
+        return Intent::StartService;
     }
     if lower.starts_with("capture -t")
         || lower.starts_with("/capture -t")
@@ -98,5 +107,12 @@ mod tests {
                 open: true
             }
         );
+    }
+
+    #[test]
+    fn routes_start_service() {
+        assert_eq!(route_intent("StartService"), Intent::StartService);
+        assert_eq!(route_intent("/start-service"), Intent::StartService);
+        assert_eq!(route_intent("启动日志服务"), Intent::StartService);
     }
 }

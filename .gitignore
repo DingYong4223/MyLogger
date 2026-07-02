@@ -4,3 +4,4 @@
 /asplugin/build/
 *.log
 *.txt
+*.json

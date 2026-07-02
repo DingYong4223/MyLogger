@@ -62,6 +62,10 @@ Read [references/view-log.md](references/view-log.md) when the user asks to view
 
 Read [references/filter-log.md](references/filter-log.md) when the user asks to filter a log file by keyword and view only matching lines.
 
+## Backend Analysis Service
+
+Read [references/start-backend-service.md](references/start-backend-service.md) when the user asks to start or test the local backend analysis service used by the Chrome extension.
+
 ## Neovim Highlighting
 
 Read [references/neovim-log-highlighting.md](references/neovim-log-highlighting.md) whenever MyLogger opens logs or filtered logs in Neovim.

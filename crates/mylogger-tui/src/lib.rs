@@ -7,7 +7,10 @@ use crossterm::{
 use mylogger_core::{
     AnalysisOptions, AnalysisSummary, Intent, analyze_file, generate_markdown_report, route_intent,
 };
-use mylogger_tools::{AdbDevice, CaptureOptions, capture_logcat, list_adb_devices};
+use mylogger_tools::{
+    AdbDevice, CaptureOptions, StartServiceOptions, capture_logcat, list_adb_devices,
+    start_backend_service,
+};
 use ratatui::{
     Terminal,
     backend::CrosstermBackend,
@@ -327,6 +330,10 @@ const MENU_ITEMS: &[MenuItem] = &[
     MenuItem {
         command: "/analyze --open",
         description: "分析日志并用 Neovim 打开结果",
+    },
+    MenuItem {
+        command: "/StartService",
+        description: "启动本地日志后台服务",
     },
     MenuItem {
         command: "/quit",
@@ -693,6 +700,7 @@ fn execute_tui_command_inner(command: &str, session: &mut SessionState) -> Resul
             session.current_log_file = Some(path.clone());
             Ok(format_summary(&path, &summary))
         }
+        Intent::StartService => start_service_text(),
         Intent::CommandPalette => Ok(command_palette_text()),
         Intent::Help => Ok(help_text()),
         Intent::Quit => Ok("bye".to_string()),
@@ -702,11 +710,28 @@ fn execute_tui_command_inner(command: &str, session: &mut SessionState) -> Resul
     }
 }
 
+fn start_service_text() -> Result<String> {
+    let result = start_backend_service(&StartServiceOptions::default())?;
+    let status = if result.already_running {
+        "服务已在运行".to_string()
+    } else if let Some(pid) = result.pid {
+        format!("服务已启动，pid {pid}")
+    } else {
+        "服务已启动".to_string()
+    };
+    Ok(format!(
+        "{status}\n接口：{}\n工作目录：{}",
+        result.endpoint,
+        result.repo_root.display()
+    ))
+}
+
 fn normalize_command(command: &str) -> &str {
     match command {
         "1" => "capture",
         "2" => "/analyze",
         "3" => "分析崩溃",
+        "4" => "/StartService",
         other => other,
     }
 }
@@ -760,6 +785,7 @@ fn help_text() -> String {
         "  /analyze          打开 yazi 选择日志文件并分析",
         "  /analyze --open   分析日志并用 Neovim 打开结果",
         "  /analyze <file>   直接分析指定日志文件",
+        "  /StartService     启动本地日志后台服务",
         "  /quit             退出",
     ]
     .join("\n")
@@ -786,7 +812,8 @@ fn welcome_messages() -> Vec<String> {
         "常用操作：\n\
          [1] 抓取 Android 日志\n\
          [2] 分析本地日志文件\n\
-         [3] 提取崩溃\n\n\
+         [3] 提取崩溃\n\
+         [4] 启动本地日志后台服务\n\n\
          输入 / 打开命令菜单，使用上下键选择，Enter 填入命令。\n\
          Ctrl+C 退出。",
     )]
@@ -799,6 +826,7 @@ fn print_welcome_for_line_mode() {
     println!("[1] 抓取 Android 日志");
     println!("[2] 分析本地日志文件");
     println!("[3] 提取崩溃");
+    println!("[4] 启动本地日志后台服务");
     println!();
     println!("请输入编号、命令或自然语言。输入 / 查看命令，/quit 退出。");
 }
@@ -808,6 +836,7 @@ fn handle_input(input: &str, session: &mut SessionState) -> Result<()> {
         "1" => "capture",
         "2" => "/analyze",
         "3" => "分析崩溃",
+        "4" => "/StartService",
         other => other,
     };
 
@@ -830,6 +859,9 @@ fn handle_input(input: &str, session: &mut SessionState) -> Result<()> {
                 let report_path = write_analysis_markdown(&path, &summary)?;
                 open_file_with_nvim(None, &report_path)?;
             }
+        }
+        Intent::StartService => {
+            println!("{}", start_service_text()?);
         }
         Intent::CommandPalette => print_command_palette(),
         Intent::Help => print_help(),
@@ -965,6 +997,7 @@ fn print_help() {
     println!("  /analyze          打开 yazi 选择日志文件并分析");
     println!("  /analyze --open   分析日志并用 Neovim 打开结果");
     println!("  /analyze <file>   直接分析指定日志文件");
+    println!("  /StartService     启动本地日志后台服务");
     println!("  /quit             退出");
 }
 

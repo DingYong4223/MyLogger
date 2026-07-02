@@ -11,8 +11,13 @@
       <div>
         <h1>MyLogger Viewer</h1>
         <p id="fileMeta">Open a local log file or drop it into this window.</p>
+        <p id="breakpointsMeta">No breakpoint file selected.</p>
       </div>
       <div class="header-actions">
+        <label class="button">
+          Open BreakPoints
+          <input id="breakpointsInput" type="file" accept=".json,application/json" hidden />
+        </label>
         <label class="button primary">
           Open Log
           <input id="fileInput" type="file" accept=".log,.txt,text/plain,*/*" hidden />
@@ -54,7 +59,18 @@
             Endpoint
             <input id="analysisEndpoint" type="url" value="http://127.0.0.1:7878/analyze" />
           </label>
-          <button id="analyzeButton" class="button primary" type="button" disabled>Analyze Visible Logs</button>
+          <div class="analysis-path-field">
+            <span>BreakPoints</span>
+            <button id="analysisBreakpointsPath" class="path-display path-display-button" type="button">No breakpoint file selected.</button>
+          </div>
+          <div class="analysis-path-field">
+            Log Path
+            <div id="analysisLogPath" class="path-display">No log file selected.</div>
+          </div>
+          <div class="analysis-actions">
+            <button id="analysisStatusButton" class="service-status unavailable" type="button" title="Backend service unavailable" aria-label="Backend service unavailable"></button>
+            <button id="analyzeButton" class="button primary" type="button" disabled>Analyze Visible Logs</button>
+          </div>
           <pre id="analysisResult">Analysis output will appear here.</pre>
         </aside>
 
@@ -121,6 +137,46 @@
             <tbody id="searchResultBody"></tbody>
           </table>
         </div>
+      </section>
+    </div>
+
+    <div id="analysisModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="analysisModalTitle">
+      <section class="modal-panel analysis-modal-panel">
+        <header class="modal-header">
+          <div>
+            <h2 id="analysisModalTitle">Backend Analysis Result</h2>
+            <p id="analysisModalMeta">No result.</p>
+          </div>
+          <div class="analysis-modal-search">
+            <label>
+              Search
+              <input id="analysisModalSearchInput" type="search" placeholder="Find in result" />
+            </label>
+            <button id="analysisModalPrevMatch" class="button compact" type="button">Prev</button>
+            <button id="analysisModalNextMatch" class="button compact" type="button">Next</button>
+            <span id="analysisModalMatchStatus" class="status">0 matches</span>
+          </div>
+          <div class="header-actions">
+            <button id="saveAnalysisModal" class="button" type="button">保存</button>
+            <button id="closeAnalysisModal" class="button" type="button">Close</button>
+          </div>
+        </header>
+        <pre id="analysisModalBody" class="analysis-modal-body"></pre>
+      </section>
+    </div>
+
+    <div id="breakpointsModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="breakpointsModalTitle">
+      <section class="modal-panel breakpoints-modal-panel">
+        <header class="modal-header">
+          <div>
+            <h2 id="breakpointsModalTitle">BreakPoints File</h2>
+            <p id="breakpointsModalMeta">No breakpoint file selected.</p>
+          </div>
+          <div class="header-actions">
+            <button id="closeBreakpointsModal" class="button" type="button">Close</button>
+          </div>
+        </header>
+        <pre id="breakpointsModalBody" class="breakpoints-modal-body"></pre>
       </section>
     </div>
 

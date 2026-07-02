@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use mylogger_core::{AnalysisOptions, LogLevel, analyze_file, generate_markdown_report};
-use mylogger_tools::{CaptureOptions, capture_logcat};
+use mylogger_tools::{CaptureOptions, StartServiceOptions, capture_logcat, start_backend_service};
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
@@ -43,6 +43,16 @@ enum Command {
         package: Option<String>,
         #[arg(short, long)]
         output: Option<PathBuf>,
+    },
+    /// Start the local backend analysis service.
+    #[command(name = "StartService", alias = "start-service", alias = "service")]
+    StartService {
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+        #[arg(long, default_value_t = 7878)]
+        port: u16,
+        #[arg(long = "repo-root")]
+        repo_root: Option<PathBuf>,
     },
 }
 
@@ -91,6 +101,25 @@ fn main() -> Result<()> {
                 time_named,
             })?;
             println!("{}", path.display());
+        }
+        Some(Command::StartService {
+            host,
+            port,
+            repo_root,
+        }) => {
+            let result = start_backend_service(&StartServiceOptions {
+                host,
+                port,
+                repo_root,
+            })?;
+            if result.already_running {
+                println!("服务已在运行：{}", result.endpoint);
+            } else if let Some(pid) = result.pid {
+                println!("服务已启动：{} (pid {})", result.endpoint, pid);
+            } else {
+                println!("服务已启动：{}", result.endpoint);
+            }
+            println!("工作目录：{}", result.repo_root.display());
         }
         None => {
             mylogger_tui::run_repl()?;
