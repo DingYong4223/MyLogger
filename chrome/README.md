@@ -4,11 +4,13 @@ This Chrome extension provides a local log viewer UI.
 
 ## Load
 
-1. Open `chrome://extensions`.
-2. Enable `Developer mode`.
-3. Click `Load unpacked`.
-4. Select this repository's `chrome/` directory.
-5. Click the MyLogger extension icon and choose `Open Viewer`.
+1. Run `npm install` from this `chrome/` directory if dependencies are not installed.
+2. Run `npm run build` to generate `dist/viewer.bundle.js`.
+3. Open `chrome://extensions`.
+4. Enable `Developer mode`.
+5. Click `Load unpacked`.
+6. Select this repository's `chrome/` directory.
+7. Click the MyLogger extension icon and choose `Open Viewer`.
 
 ## Features
 
@@ -19,9 +21,9 @@ This Chrome extension provides a local log viewer UI.
 - Open search matches in an in-page results dialog with the `Search` button.
 - Highlight log time, level, tag, and search terms.
 - Use native horizontal and vertical scrollbars.
-- Click any row to copy the original line.
-- Save filtered results as a `.filtered.log` file.
-- POST the selected log path to a backend analysis endpoint and show the returned result in an in-page dialog.
+- Double-click any row to copy the original line.
+- Save filtered results as a `.filtered.txt` file.
+- POST the selected log path and breakpoint JSON content to a backend analysis endpoint and show the returned result in an in-page dialog.
 
 ## Backend Analysis API
 
@@ -43,9 +45,11 @@ The extension sends JSON:
 {
   "fileName": "123.txt",
   "filePath": "123.txt",
+  "breakpointsFileName": "mylogger-breakpoints.json",
+  "breakpointsContent": "{...}",
   "visibleLineCount": 100,
   "filter": "error"
 }
 ```
 
-Chrome does not reliably expose the absolute path of a file selected with the file picker. Set the `Log Path` field to a path the backend can read. Relative paths are resolved from the directory where the backend service was started.
+Log paths are resolved by the backend. Relative paths are resolved from the directory where the backend service was started.

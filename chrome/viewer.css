@@ -218,6 +218,15 @@ input[type="url"] {
   color: var(--blue);
 }
 
+.analysis-service-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .analysis-actions {
   display: flex;
   align-items: center;
@@ -312,6 +321,7 @@ input[type="url"] {
   table-layout: auto;
   width: max-content;
   min-width: 100%;
+  --message-col-width: 720px;
   font: 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
@@ -328,9 +338,17 @@ input[type="url"] {
 .log-table th,
 .log-table td {
   height: 24px;
+  box-sizing: border-box;
   padding: 3px 8px;
   white-space: pre;
   vertical-align: top;
+}
+
+.log-table .virtual-spacer-row,
+.log-table .virtual-spacer-row td {
+  padding: 0;
+  border: 0;
+  pointer-events: none;
 }
 
 .log-table tr {
@@ -353,6 +371,11 @@ input[type="url"] {
 
 .log-table tr.marked-row:hover {
   background: #ffefad;
+}
+
+.log-table tr.context-target-row,
+.log-table tr.context-target-row:hover {
+  background: #fef08a;
 }
 
 .line-col {
@@ -387,7 +410,7 @@ input[type="url"] {
 }
 
 .message-col {
-  min-width: 720px;
+  min-width: var(--message-col-width);
 }
 
 .level-V,
@@ -479,6 +502,12 @@ mark {
   width: min(940px, calc(100vw - 56px));
   height: min(680px, calc(100vh - 56px));
   min-width: 700px;
+}
+
+.modal-panel.context-modal-panel {
+  width: min(1180px, calc(100vw - 56px));
+  height: min(720px, calc(100vh - 56px));
+  min-width: 760px;
 }
 
 .modal-header {

@@ -1,4 +1,9 @@
-"use strict";
+import { measureNaturalWidth, prepare } from "@chenglou/pretext";
+
+const LOG_ROW_HEIGHT = 24;
+const LOG_OVERSCAN_ROWS = 30;
+const LOG_TEXT_FONT = '12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace';
+const LOG_FIXED_COLUMNS_WIDTH = 48 + 136 + 58 + 150;
 
 const state = {
   fileName: "",
@@ -24,10 +29,17 @@ const state = {
   analysisModalMatches: [],
   analysisModalActiveMatch: -1,
   analysisModalSearch: "",
+  virtualStart: 0,
+  virtualEnd: 0,
+  contextActiveIndex: -1,
+  contextVirtualStart: 0,
+  contextVirtualEnd: 0,
 };
 
 let filterTimer = 0;
 let analysisStatusTimer = 0;
+let virtualScrollFrame = 0;
+let contextVirtualScrollFrame = 0;
 
 const els = {
   fileInput: document.getElementById("fileInput"),
@@ -51,6 +63,7 @@ const els = {
   analysisLogPath: document.getElementById("analysisLogPath"),
   dropZone: document.getElementById("dropZone"),
   tableWrap: document.getElementById("tableWrap"),
+  logTable: document.querySelector("#tableWrap .log-table"),
   scrollToTop: document.getElementById("scrollToTop"),
   scrollToBottom: document.getElementById("scrollToBottom"),
   logBody: document.getElementById("logBody"),
@@ -58,6 +71,12 @@ const els = {
   searchModalTitle: document.getElementById("searchModalTitle"),
   searchModalMeta: document.getElementById("searchModalMeta"),
   searchResultBody: document.getElementById("searchResultBody"),
+  contextModal: document.getElementById("contextModal"),
+  contextModalMeta: document.getElementById("contextModalMeta"),
+  contextTableWrap: document.getElementById("contextTableWrap"),
+  contextLogTable: document.querySelector("#contextTableWrap .log-table"),
+  contextLogBody: document.getElementById("contextLogBody"),
+  closeContextModal: document.getElementById("closeContextModal"),
   modalSearchInput: document.getElementById("modalSearchInput"),
   modalPrevMatch: document.getElementById("modalPrevMatch"),
   modalNextMatch: document.getElementById("modalNextMatch"),
@@ -120,11 +139,11 @@ async function openFile(file) {
   state.rawText = text;
   state.rows = text.split(/\r?\n/).map(parseLine);
   state.markedLines.clear();
-  applyFilter();
   els.analysisLogPath.textContent = state.filePath;
-  els.fileMeta.textContent = `${file.name} · ${state.rows.length.toLocaleString()} lines · ${formatBytes(file.size)}`;
+  els.fileMeta.textContent = `${file.name} · ${state.rows.length.toLocaleString()} 行 · ${formatBytes(file.size)}`;
   els.dropZone.classList.add("hidden");
   els.tableWrap.classList.remove("hidden");
+  applyFilter();
   els.saveFiltered.disabled = false;
   els.analyzeButton.disabled = false;
 }
@@ -132,7 +151,7 @@ async function openFile(file) {
 async function openBreakpointsFile(file) {
   if (!file.name.toLowerCase().endsWith(".json")) {
     clearBreakpointsFile();
-    showToast("BreakPoints file must be a JSON file.");
+    showToast("断点文件必须是 JSON 文件。");
     els.breakpointsInput.value = "";
     return;
   }
@@ -142,7 +161,7 @@ async function openBreakpointsFile(file) {
     JSON.parse(text);
   } catch (error) {
     clearBreakpointsFile();
-    showToast(`Invalid BreakPoints JSON: ${error.message}`);
+    showToast(`断点 JSON 无效：${error.message}`);
     els.breakpointsInput.value = "";
     return;
   }
@@ -150,19 +169,19 @@ async function openBreakpointsFile(file) {
   state.breakpointsFileName = file.name;
   state.breakpointsFilePath = file.path || file.name;
   state.breakpointsContent = text;
-  els.breakpointsMeta.textContent = `BreakPoints: ${state.breakpointsFilePath}`;
+  els.breakpointsMeta.textContent = `断点文件：${state.breakpointsFilePath}`;
   els.analysisBreakpointsPath.textContent = state.breakpointsFilePath;
   openBreakpointsModal();
-  showToast(`Loaded BreakPoints: ${file.name}`);
+  showToast(`已加载断点文件：${file.name}`);
 }
 
 function clearBreakpointsFile() {
   state.breakpointsFileName = "";
   state.breakpointsFilePath = "";
   state.breakpointsContent = "";
-  els.breakpointsMeta.textContent = "No breakpoint file selected.";
-  els.analysisBreakpointsPath.textContent = "No breakpoint file selected.";
-  els.breakpointsModalMeta.textContent = "No breakpoint file selected.";
+  els.breakpointsMeta.textContent = "未选择断点文件。";
+  els.analysisBreakpointsPath.textContent = "未选择断点文件。";
+  els.breakpointsModalMeta.textContent = "未选择断点文件。";
   els.breakpointsModalBody.textContent = "";
 }
 
@@ -175,6 +194,8 @@ function applyFilter() {
   });
 
   state.visibleRows = matcher ? state.rows.filter((row) => matcher(row.searchable)) : state.rows.slice();
+  updateLogTableWidth(state.visibleRows);
+  els.tableWrap.scrollTop = 0;
   clearSearchState();
   renderRows();
 }
@@ -192,7 +213,7 @@ function createMatcher(input, options) {
       const regex = new RegExp(input, flags);
       return (value) => regex.test(value);
     } catch (error) {
-      showToast(`Invalid regex: ${error.message}`);
+      showToast(`正则表达式无效：${error.message}`);
       return null;
     }
   }
@@ -205,8 +226,103 @@ function createMatcher(input, options) {
 }
 
 function renderRows() {
-  renderRowsInto(els.logBody, state.visibleRows, state.activeSearch);
+  renderVirtualRows();
   updateMatchStatus();
+}
+
+function renderVirtualRows() {
+  const rows = state.visibleRows;
+  const viewportHeight = els.tableWrap.clientHeight || 1;
+  const scrollTop = els.tableWrap.scrollTop;
+  const start = Math.max(0, Math.floor(scrollTop / LOG_ROW_HEIGHT) - LOG_OVERSCAN_ROWS);
+  const end = Math.min(rows.length, Math.ceil((scrollTop + viewportHeight) / LOG_ROW_HEIGHT) + LOG_OVERSCAN_ROWS);
+  state.virtualStart = start;
+  state.virtualEnd = end;
+
+  const fragment = document.createDocumentFragment();
+  els.logBody.textContent = "";
+
+  if (start > 0) {
+    fragment.appendChild(spacerRow(start * LOG_ROW_HEIGHT));
+  }
+
+  for (let index = start; index < end; index += 1) {
+    fragment.appendChild(createLogRow(rows[index], state.activeSearch, index, "main"));
+  }
+
+  const bottomRows = rows.length - end;
+  if (bottomRows > 0) {
+    fragment.appendChild(spacerRow(bottomRows * LOG_ROW_HEIGHT));
+  }
+
+  els.logBody.appendChild(fragment);
+}
+
+function spacerRow(height) {
+  const tr = document.createElement("tr");
+  tr.className = "virtual-spacer-row";
+  tr.setAttribute("aria-hidden", "true");
+  const td = document.createElement("td");
+  td.colSpan = 5;
+  td.style.height = `${height}px`;
+  tr.append(td);
+  return tr;
+}
+
+function createLogRow(row, activeSearch, visibleIndex, context) {
+  const tr = document.createElement("tr");
+  tr.dataset.line = String(row.sourceLine);
+  tr.title = "双击复制当前行";
+  if (state.markedLines.has(row.sourceLine)) {
+    tr.classList.add("marked-row");
+  }
+  if (context === "main" && state.activeMatch >= 0 && state.matches[state.activeMatch] === visibleIndex) {
+    tr.classList.add("active-match");
+  }
+
+  const lineCell = cell(row.sourceLine, "line-col");
+  lineCell.title = "点击标记或取消标记当前行";
+  lineCell.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleMarkedLine(row.sourceLine);
+  });
+  tr.append(
+    lineCell,
+    cell(highlight(row.time, activeSearch), "time-col"),
+    cell(row.level, `level-col level-${row.level || "none"}`),
+    cell(highlight(row.tag, activeSearch), "tag-col"),
+    cell(highlight(row.message, activeSearch), "message-col")
+  );
+  if (context !== "context") {
+    tr.addEventListener("click", () => openLogContext(row));
+  }
+  tr.addEventListener("dblclick", () => copyLine(row.raw));
+  return tr;
+}
+
+function updateLogTableWidth(rows) {
+  let longestMessage = "";
+  for (const row of rows) {
+    if ((row.message || "").length > longestMessage.length) {
+      longestMessage = row.message || "";
+    }
+  }
+
+  const messageWidth = Math.max(720, Math.ceil(measureLogTextWidth(longestMessage)) + 32);
+  for (const table of [els.logTable, els.contextLogTable]) {
+    if (!table) continue;
+    table.style.setProperty("--message-col-width", `${messageWidth}px`);
+    table.style.minWidth = `${LOG_FIXED_COLUMNS_WIDTH + messageWidth + 96}px`;
+  }
+}
+
+function measureLogTextWidth(text) {
+  if (!text) return 0;
+  try {
+    return measureNaturalWidth(prepare(text, LOG_TEXT_FONT));
+  } catch {
+    return text.length * 7.2;
+  }
 }
 
 function cell(value, className) {
@@ -274,27 +390,7 @@ function renderRowsInto(target, rows, activeSearch) {
   target.textContent = "";
 
   for (const row of rows) {
-    const tr = document.createElement("tr");
-    tr.dataset.line = String(row.sourceLine);
-    tr.title = "Double-click to copy this line";
-    if (state.markedLines.has(row.sourceLine)) {
-      tr.classList.add("marked-row");
-    }
-    const lineCell = cell(row.sourceLine, "line-col");
-    lineCell.title = "Click to mark or unmark this line";
-    lineCell.addEventListener("click", (event) => {
-      event.stopPropagation();
-      toggleMarkedLine(row.sourceLine);
-    });
-    tr.append(
-      lineCell,
-      cell(highlight(row.time, activeSearch), "time-col"),
-      cell(row.level, `level-col level-${row.level || "none"}`),
-      cell(highlight(row.tag, activeSearch), "tag-col"),
-      cell(highlight(row.message, activeSearch), "message-col")
-    );
-    tr.addEventListener("dblclick", () => copyLine(row.raw));
-    fragment.appendChild(tr);
+    fragment.appendChild(createLogRow(row, activeSearch, -1, "modal"));
   }
 
   target.appendChild(fragment);
@@ -312,9 +408,9 @@ function toggleMarkedLine(sourceLine) {
     renderRows();
   }
   if (!els.searchModal.classList.contains("hidden")) {
-    if (els.searchModalTitle.textContent === "Marked Lines") {
+    if (els.searchModalTitle.textContent === "已标记行") {
       state.searchResultRows = state.rows.filter((row) => state.markedLines.has(row.sourceLine));
-      els.searchModalMeta.textContent = `${state.fileName || "log"} · ${state.searchResultRows.length.toLocaleString()} marked lines`;
+      els.searchModalMeta.textContent = `${state.fileName || "log"} · ${state.searchResultRows.length.toLocaleString()} 行已标记`;
       if (!state.searchResultRows.length) {
         closeSearchModal();
         return;
@@ -334,10 +430,8 @@ function runSearch() {
   state.activeMatch = -1;
   state.activeSearch = query;
   state.searchDirty = false;
+  state.matches = findMatchingRows(query).map(({ index }) => index);
   renderRows();
-
-  const renderedRows = Array.from(els.logBody.querySelectorAll("tr"));
-  state.matches = findMatchingRows(query).map(({ index }) => renderedRows[index]);
   updateMatchStatus();
 }
 
@@ -346,38 +440,97 @@ function goMatch(direction) {
     runSearch();
   }
   if (!state.matches.length) return;
-  if (state.activeMatch >= 0) {
-    state.matches[state.activeMatch].classList.remove("active-match");
-  }
   state.activeMatch = (state.activeMatch + direction + state.matches.length) % state.matches.length;
-  const row = state.matches[state.activeMatch];
-  row.classList.add("active-match");
-  row.scrollIntoView({ block: "center", inline: "nearest" });
+  scrollMainRowIndexIntoView(state.matches[state.activeMatch]);
+  renderRows();
   updateMatchStatus();
+}
+
+function scrollMainRowIndexIntoView(index) {
+  const viewportHeight = els.tableWrap.clientHeight || 0;
+  const targetTop = Math.max(0, index * LOG_ROW_HEIGHT - Math.max(0, viewportHeight - LOG_ROW_HEIGHT) / 2);
+  els.tableWrap.scrollTop = targetTop;
+}
+
+function openLogContext(row) {
+  if (!state.rows.length) return;
+  const index = state.rows.indexOf(row);
+  state.contextActiveIndex = index >= 0 ? index : Math.max(0, Math.min(state.rows.length - 1, row.sourceLine - 1));
+  els.contextModalMeta.textContent = `${state.fileName || "日志"} · 第 ${row.sourceLine} 行 · 前后 30 行`;
+  els.contextModal.classList.remove("hidden");
+
+  window.requestAnimationFrame(() => {
+    const viewportHeight = els.contextTableWrap.clientHeight || 0;
+    const targetTop = state.contextActiveIndex * LOG_ROW_HEIGHT;
+    const centeredTop = targetTop - Math.max(0, viewportHeight - LOG_ROW_HEIGHT) / 2;
+    const maxTop = Math.max(0, state.rows.length * LOG_ROW_HEIGHT - viewportHeight);
+    els.contextTableWrap.scrollTop = Math.max(0, Math.min(centeredTop, maxTop));
+    renderContextRows();
+  });
+}
+
+function closeContextModal() {
+  els.contextModal.classList.add("hidden");
+}
+
+function renderContextRows() {
+  const rows = state.rows;
+  const viewportHeight = els.contextTableWrap.clientHeight || 1;
+  const scrollTop = els.contextTableWrap.scrollTop;
+  const start = Math.max(0, Math.floor(scrollTop / LOG_ROW_HEIGHT) - LOG_OVERSCAN_ROWS);
+  const end = Math.min(rows.length, Math.ceil((scrollTop + viewportHeight) / LOG_ROW_HEIGHT) + LOG_OVERSCAN_ROWS);
+  state.contextVirtualStart = start;
+  state.contextVirtualEnd = end;
+
+  const fragment = document.createDocumentFragment();
+  els.contextLogBody.textContent = "";
+
+  if (start > 0) {
+    fragment.appendChild(spacerRow(start * LOG_ROW_HEIGHT));
+  }
+
+  for (let index = start; index < end; index += 1) {
+    fragment.appendChild(createContextLogRow(rows[index], index));
+  }
+
+  const bottomRows = rows.length - end;
+  if (bottomRows > 0) {
+    fragment.appendChild(spacerRow(bottomRows * LOG_ROW_HEIGHT));
+  }
+
+  els.contextLogBody.appendChild(fragment);
+}
+
+function createContextLogRow(row, index) {
+  const tr = createLogRow(row, "", index, "context");
+  if (index === state.contextActiveIndex) {
+    tr.classList.add("context-target-row");
+  }
+  return tr;
 }
 
 async function openSearchResults() {
   const query = els.searchInput.value.trim();
   if (!query) {
-    showToast("Enter a search keyword first.");
+    showToast("请先输入搜索关键字。");
     return;
   }
 
   const rows = findMatchingRows(query).map(({ row }) => row);
   if (!rows.length) {
-    showToast(`No matches for: ${query}`);
+    showToast(`没有找到匹配项：${query}`);
     return;
   }
 
   state.searchResultRows = rows;
-  els.searchModalTitle.textContent = "Search Results";
+  els.searchModalTitle.textContent = "搜索结果";
   state.modalMatches = [];
   state.modalActiveMatch = -1;
   state.modalActiveSearch = "";
   state.modalSearchDirty = false;
   els.modalSearchInput.value = "";
   els.clearMarkedRows.classList.add("hidden");
-  els.searchModalMeta.textContent = `${state.fileName || "log"} · Search: ${query} · ${rows.length.toLocaleString()} matches`;
+  els.searchModalMeta.textContent = `${state.fileName || "log"} · 搜索：${query} · ${rows.length.toLocaleString()} 个匹配`;
   renderRowsInto(els.searchResultBody, rows, query);
   updateModalMatchStatus();
   els.searchModal.classList.remove("hidden");
@@ -386,13 +539,13 @@ async function openSearchResults() {
 function openMarkedRows() {
   const rows = state.rows.filter((row) => state.markedLines.has(row.sourceLine));
   if (!rows.length) {
-    showToast("No marked lines.");
+    showToast("没有已标记行。");
     return;
   }
 
   state.searchResultRows = rows;
-  els.searchModalTitle.textContent = "Marked Lines";
-  els.searchModalMeta.textContent = `${state.fileName || "log"} · ${rows.length.toLocaleString()} marked lines`;
+  els.searchModalTitle.textContent = "已标记行";
+  els.searchModalMeta.textContent = `${state.fileName || "log"} · ${rows.length.toLocaleString()} 行已标记`;
   state.modalMatches = [];
   state.modalActiveMatch = -1;
   state.modalActiveSearch = "";
@@ -412,7 +565,7 @@ function closeSearchModal() {
 function saveSearchResults() {
   if (!state.searchResultRows.length) return;
   const content = state.searchResultRows.map((row) => row.raw).join("\n");
-  const suffix = els.searchModalTitle.textContent === "Marked Lines" ? "marked" : "search";
+  const suffix = els.searchModalTitle.textContent === "已标记行" ? "marked" : "search";
   downloadText(content, `${state.fileName || "log"}.${suffix}.txt`);
 }
 
@@ -424,7 +577,7 @@ function clearMarkedRows() {
   state.searchResultRows = [];
   closeSearchModal();
   renderRows();
-  showToast("Marked lines cleared.");
+  showToast("已清除标记行。");
 }
 
 function markModalSearchDirty() {
@@ -472,22 +625,22 @@ function goModalMatch(direction) {
 }
 
 function updateModalMatchStatus() {
-  const visible = `${state.searchResultRows.length.toLocaleString()} visible`;
+  const visible = `${state.searchResultRows.length.toLocaleString()} 行`;
   if (state.modalSearchDirty) {
-    els.modalMatchStatus.textContent = `Search pending · ${visible}`;
+    els.modalMatchStatus.textContent = `搜索待执行 · ${visible}`;
     return;
   }
   if (!state.modalMatches.length) {
-    els.modalMatchStatus.textContent = `0 matches · ${visible}`;
+    els.modalMatchStatus.textContent = `0 个匹配 · ${visible}`;
     return;
   }
   const current = state.modalActiveMatch < 0 ? 0 : state.modalActiveMatch + 1;
-  els.modalMatchStatus.textContent = `${current}/${state.modalMatches.length} matches · ${visible}`;
+  els.modalMatchStatus.textContent = `${current}/${state.modalMatches.length} 个匹配 · ${visible}`;
 }
 
 async function copyLine(line) {
   await navigator.clipboard.writeText(line);
-  showToast(`Copied line: ${line.slice(0, 120)}`);
+  showToast(`已复制：${line.slice(0, 120)}`);
 }
 
 function saveFiltered() {
@@ -529,10 +682,10 @@ function closeAnalysisModal() {
 
 function openBreakpointsModal() {
   if (!state.breakpointsContent) {
-    showToast("No breakpoint file selected.");
+    showToast("未选择断点文件。");
     return;
   }
-  els.breakpointsModalMeta.textContent = `${state.breakpointsFileName || "BreakPoints"} · ${state.breakpointsContent.length.toLocaleString()} chars`;
+  els.breakpointsModalMeta.textContent = `${state.breakpointsFileName || "断点文件"} · ${state.breakpointsContent.length.toLocaleString()} 字符`;
   els.breakpointsModalBody.textContent = state.breakpointsContent;
   els.breakpointsModal.classList.remove("hidden");
 }
@@ -628,7 +781,7 @@ function renderBreakpointAnalysis(breakpoints, query) {
       const code = document.createElement("code");
       appendHighlightedText(code, logString, trimmedQuery, matches);
       row.append(indexEl, code);
-      row.title = "Double-click to copy this line";
+      row.title = "双击复制当前行";
       row.addEventListener("dblclick", () => copyLine(logString));
       leftBody.append(row);
     });
@@ -661,7 +814,7 @@ function renderBreakpointAnalysis(breakpoints, query) {
         line.className = "analysis-log-line";
         appendHighlightedText(line, lineText, trimmedQuery, matches);
         row.append(lineNumber, line);
-        row.title = "Double-click to copy this line";
+        row.title = "双击复制当前行";
         row.addEventListener("dblclick", () => copyLine(lineText));
         groupEl.append(row);
         renderedRightRows += 1;
@@ -750,17 +903,17 @@ function goAnalysisModalMatch(direction) {
 
 function updateAnalysisModalMatchStatus() {
   if (!state.analysisModalMatches.length) {
-    els.analysisModalMatchStatus.textContent = "0 matches";
+    els.analysisModalMatchStatus.textContent = "0 个匹配";
     return;
   }
   const current = state.analysisModalActiveMatch < 0 ? 0 : state.analysisModalActiveMatch + 1;
-  els.analysisModalMatchStatus.textContent = `${current}/${state.analysisModalMatches.length} matches`;
+  els.analysisModalMatchStatus.textContent = `${current}/${state.analysisModalMatches.length} 个匹配`;
 }
 
 function saveAnalysisModal() {
   const content = state.analysisModalText || els.analysisModalBody.textContent || "";
   if (!content) {
-    showToast("No analysis result to save.");
+    showToast("没有可保存的分析结果。");
     return;
   }
   const base = state.fileName ? state.fileName.replace(/\.[^.]+$/, "") : "mylogger";
@@ -774,7 +927,7 @@ function sanitizeFilename(value) {
 function setAnalysisServiceStatus(available) {
   els.analysisStatusButton.classList.toggle("available", available);
   els.analysisStatusButton.classList.toggle("unavailable", !available);
-  const label = available ? "Backend service available" : "Backend service unavailable";
+  const label = available ? "后台服务可用" : "后台服务不可用";
   els.analysisStatusButton.title = label;
   els.analysisStatusButton.setAttribute("aria-label", label);
 }
@@ -810,16 +963,16 @@ function scheduleAnalysisServiceCheck() {
 async function analyzeVisible() {
   const endpoint = els.analysisEndpoint.value.trim();
   if (!endpoint) {
-    showToast("Analysis endpoint is required.");
+    showToast("请填写分析服务地址。");
     return;
   }
   const filePath = state.filePath.trim();
   if (!filePath) {
-    showToast("Log path is required for backend analysis.");
+    showToast("请先选择日志文件。");
     return;
   }
   if (!state.breakpointsContent) {
-    showToast("请先选择 BreakPoints JSON 文件。");
+    showToast("请先选择断点 JSON 文件。");
     els.breakpointsInput.click();
     return;
   }
@@ -845,22 +998,22 @@ async function analyzeVisible() {
     const resultText = text || `HTTP ${response.status}`;
     openAnalysisModal(resultText, `${state.fileName || filePath} · HTTP ${response.status}`);
   } catch (error) {
-    showToast(`Analysis failed: ${error.message}`);
+    showToast(`分析失败：${error.message}`);
   }
 }
 
 function updateMatchStatus() {
-  const visible = `${state.visibleRows.length.toLocaleString()} visible`;
+  const visible = `${state.visibleRows.length.toLocaleString()} 行`;
   if (state.searchDirty) {
-    els.matchStatus.textContent = `Search pending · ${visible}`;
+    els.matchStatus.textContent = `搜索待执行 · ${visible}`;
     return;
   }
   if (!state.matches.length) {
-    els.matchStatus.textContent = `0 matches · ${visible}`;
+    els.matchStatus.textContent = `0 个匹配 · ${visible}`;
     return;
   }
   const current = state.activeMatch < 0 ? 0 : state.activeMatch + 1;
-  els.matchStatus.textContent = `${current}/${state.matches.length} matches · ${visible}`;
+  els.matchStatus.textContent = `${current}/${state.matches.length} 个匹配 · ${visible}`;
 }
 
 function showToast(message) {
@@ -879,6 +1032,22 @@ function formatBytes(bytes) {
 function scrollMainLogTo(position) {
   const top = position === "bottom" ? els.tableWrap.scrollHeight : 0;
   els.tableWrap.scrollTo({ top, behavior: "smooth" });
+}
+
+function scheduleVirtualRowsRender() {
+  if (virtualScrollFrame) return;
+  virtualScrollFrame = window.requestAnimationFrame(() => {
+    virtualScrollFrame = 0;
+    renderVirtualRows();
+  });
+}
+
+function scheduleContextRowsRender() {
+  if (contextVirtualScrollFrame) return;
+  contextVirtualScrollFrame = window.requestAnimationFrame(() => {
+    contextVirtualScrollFrame = 0;
+    renderContextRows();
+  });
 }
 
 els.fileInput.addEventListener("change", (event) => {
@@ -900,6 +1069,7 @@ els.analysisStatusButton.addEventListener("click", checkAnalysisService);
 els.openSearchResults.addEventListener("click", openSearchResults);
 els.openMarkedRows.addEventListener("click", openMarkedRows);
 els.closeSearchModal.addEventListener("click", closeSearchModal);
+els.closeContextModal.addEventListener("click", closeContextModal);
 els.closeAnalysisModal.addEventListener("click", closeAnalysisModal);
 els.closeBreakpointsModal.addEventListener("click", closeBreakpointsModal);
 els.saveAnalysisModal.addEventListener("click", saveAnalysisModal);
@@ -913,6 +1083,8 @@ els.modalPrevMatch.addEventListener("click", () => goModalMatch(-1));
 els.modalNextMatch.addEventListener("click", () => goModalMatch(1));
 els.prevMatch.addEventListener("click", () => goMatch(-1));
 els.nextMatch.addEventListener("click", () => goMatch(1));
+els.tableWrap.addEventListener("scroll", scheduleVirtualRowsRender);
+els.contextTableWrap.addEventListener("scroll", scheduleContextRowsRender);
 els.scrollToTop.addEventListener("click", () => scrollMainLogTo("top"));
 els.scrollToBottom.addEventListener("click", () => scrollMainLogTo("bottom"));
 els.saveFiltered.addEventListener("click", saveFiltered);
@@ -938,6 +1110,9 @@ for (const target of [document.body, els.dropZone]) {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !els.searchModal.classList.contains("hidden")) {
     closeSearchModal();
+  }
+  if (event.key === "Escape" && !els.contextModal.classList.contains("hidden")) {
+    closeContextModal();
   }
   if (event.key === "Escape" && !els.analysisModal.classList.contains("hidden")) {
     closeAnalysisModal();

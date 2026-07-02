@@ -1,95 +1,98 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MyLogger Viewer</title>
+    <title>MyLogger 日志查看器</title>
     <link rel="stylesheet" href="viewer.css" />
   </head>
   <body>
     <header class="app-header">
       <div>
-        <h1>MyLogger Viewer</h1>
-        <p id="fileMeta">Open a local log file or drop it into this window.</p>
-        <p id="breakpointsMeta">No breakpoint file selected.</p>
+        <h1>MyLogger 日志查看器</h1>
+        <p id="fileMeta">打开本地日志文件，或拖拽到当前窗口。</p>
+        <p id="breakpointsMeta">未选择断点文件。</p>
       </div>
       <div class="header-actions">
         <label class="button primary">
-          Open Log
+          打开日志
           <input id="fileInput" type="file" accept=".log,.txt,text/plain,*/*" hidden />
         </label>
-        <button id="saveFiltered" class="button" type="button" disabled>Save Filtered</button>
+        <button id="saveFiltered" class="button" type="button" disabled>保存过滤结果</button>
       </div>
     </header>
 
     <main class="layout">
-      <section class="toolbar" aria-label="Log controls">
+      <section class="toolbar" aria-label="日志控制">
         <label>
-          Filter
-          <input id="filterInput" type="search" placeholder="Keyword or regex" />
+          过滤
+          <input id="filterInput" type="search" placeholder="关键字或正则" />
         </label>
         <label class="checkbox">
           <input id="filterRegex" type="checkbox" />
-          Regex
+          正则
         </label>
         <label class="checkbox">
           <input id="filterCase" type="checkbox" />
-          Case
+          区分大小写
         </label>
         <label>
-          Search
-          <input id="searchInput" type="search" placeholder="Find in visible rows" />
+          搜索
+          <input id="searchInput" type="search" placeholder="在当前结果中查找" />
         </label>
-        <button id="openSearchResults" class="button compact" type="button">Search</button>
-        <button id="prevMatch" class="button compact" type="button">Prev</button>
-        <button id="nextMatch" class="button compact" type="button">Next</button>
-        <span id="matchStatus" class="status">0 matches</span>
+        <button id="openSearchResults" class="button compact" type="button">搜索</button>
+        <button id="prevMatch" class="button compact" type="button">上一个</button>
+        <button id="nextMatch" class="button compact" type="button">下一个</button>
+        <span id="matchStatus" class="status">0 个匹配</span>
         <span class="toolbar-spacer"></span>
-        <button id="openMarkedRows" class="button compact" type="button">标记</button>
+        <button id="openMarkedRows" class="button compact" type="button">全部标记</button>
       </section>
 
       <section class="content">
         <aside class="analysis-panel">
-          <h2>Backend Analysis</h2>
+          <h2>后台分析</h2>
           <label>
-            Endpoint
+            服务地址
             <input id="analysisEndpoint" type="url" value="http://127.0.0.1:7878/analyze" />
           </label>
           <div class="analysis-path-field">
-            <span>BreakPoints</span>
+            <span>断点文件</span>
             <label class="path-display path-display-button" for="breakpointsInput">
-              <span id="analysisBreakpointsPath">No breakpoint file selected.</span>
+              <span id="analysisBreakpointsPath">未选择断点文件。</span>
             </label>
             <input id="breakpointsInput" type="file" accept=".json,application/json" hidden />
           </div>
           <div class="analysis-path-field">
-            Log Path
-            <div id="analysisLogPath" class="path-display">No log file selected.</div>
+            日志路径
+            <div id="analysisLogPath" class="path-display">未选择日志文件。</div>
+          </div>
+          <div class="analysis-service-row">
+            <span>服务状态</span>
+            <button id="analysisStatusButton" class="service-status unavailable" type="button" title="后台服务不可用" aria-label="后台服务不可用"></button>
           </div>
           <div class="analysis-actions">
-            <button id="analysisStatusButton" class="service-status unavailable" type="button" title="Backend service unavailable" aria-label="Backend service unavailable"></button>
             <button id="analyzeButton" class="button primary" type="button" disabled>断点筛查</button>
           </div>
         </aside>
 
-        <section class="log-panel" aria-label="Log table">
-          <div class="quick-scroll" aria-label="Quick scroll controls">
-            <button id="scrollToTop" class="quick-scroll-button" type="button" title="Back to top" aria-label="Back to top">↑</button>
-            <button id="scrollToBottom" class="quick-scroll-button" type="button" title="Back to bottom" aria-label="Back to bottom">↓</button>
+        <section class="log-panel" aria-label="日志表格">
+          <div class="quick-scroll" aria-label="快速滚动">
+            <button id="scrollToTop" class="quick-scroll-button" type="button" title="回到顶部" aria-label="回到顶部">↑</button>
+            <button id="scrollToBottom" class="quick-scroll-button" type="button" title="回到底部" aria-label="回到底部">↓</button>
           </div>
           <div id="dropZone" class="drop-zone">
-            <strong>Drop a log file here</strong>
-            <span>or use Open Log.</span>
+            <strong>拖拽日志文件到这里</strong>
+            <span>或点击“打开日志”。</span>
           </div>
           <div id="tableWrap" class="table-wrap hidden">
             <table class="log-table">
               <thead>
                 <tr>
-                  <th class="line-col">Line</th>
-                  <th class="time-col">Time</th>
-                  <th class="level-col">Level</th>
+                  <th class="line-col">行号</th>
+                  <th class="time-col">时间</th>
+                  <th class="level-col">级别</th>
                   <th class="tag-col">Tag</th>
-                  <th class="message-col">Message</th>
+                  <th class="message-col">内容</th>
                 </tr>
               </thead>
               <tbody id="logBody"></tbody>
@@ -103,36 +106,64 @@
       <section class="modal-panel">
         <header class="modal-header">
           <div>
-            <h2 id="searchModalTitle">Search Results</h2>
-            <p id="searchModalMeta">No results.</p>
+            <h2 id="searchModalTitle">搜索结果</h2>
+            <p id="searchModalMeta">暂无结果。</p>
           </div>
           <div class="modal-search">
             <label>
-              Search
-              <input id="modalSearchInput" type="search" placeholder="Find in results" />
+              搜索
+              <input id="modalSearchInput" type="search" placeholder="在结果中查找" />
             </label>
-            <button id="modalPrevMatch" class="button compact" type="button">Prev</button>
-            <button id="modalNextMatch" class="button compact" type="button">Next</button>
-            <span id="modalMatchStatus" class="status">0 matches</span>
+            <button id="modalPrevMatch" class="button compact" type="button">上一个</button>
+            <button id="modalNextMatch" class="button compact" type="button">下一个</button>
+            <span id="modalMatchStatus" class="status">0 个匹配</span>
           </div>
           <div class="header-actions">
             <button id="clearMarkedRows" class="button danger hidden" type="button">清除标记</button>
-            <button id="saveSearchResults" class="button" type="button">Save Results</button>
-            <button id="closeSearchModal" class="button" type="button">Close</button>
+            <button id="saveSearchResults" class="button" type="button">保存结果</button>
+            <button id="closeSearchModal" class="button" type="button">关闭</button>
           </div>
         </header>
         <div class="modal-table-wrap">
           <table class="log-table">
             <thead>
               <tr>
-                <th class="line-col">Line</th>
-                <th class="time-col">Time</th>
-                <th class="level-col">Level</th>
+                <th class="line-col">行号</th>
+                <th class="time-col">时间</th>
+                <th class="level-col">级别</th>
                 <th class="tag-col">Tag</th>
-                <th class="message-col">Message</th>
+                <th class="message-col">内容</th>
               </tr>
             </thead>
             <tbody id="searchResultBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <div id="contextModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="contextModalTitle">
+      <section class="modal-panel context-modal-panel">
+        <header class="modal-header">
+          <div>
+            <h2 id="contextModalTitle">日志上下文</h2>
+            <p id="contextModalMeta">暂无日志。</p>
+          </div>
+          <div class="header-actions">
+            <button id="closeContextModal" class="button" type="button">关闭</button>
+          </div>
+        </header>
+        <div id="contextTableWrap" class="modal-table-wrap context-table-wrap">
+          <table class="log-table context-log-table">
+            <thead>
+              <tr>
+                <th class="line-col">行号</th>
+                <th class="time-col">时间</th>
+                <th class="level-col">级别</th>
+                <th class="tag-col">Tag</th>
+                <th class="message-col">内容</th>
+              </tr>
+            </thead>
+            <tbody id="contextLogBody"></tbody>
           </table>
         </div>
       </section>
@@ -142,21 +173,21 @@
       <section class="modal-panel analysis-modal-panel">
         <header class="modal-header">
           <div>
-            <h2 id="analysisModalTitle">Backend Analysis Result</h2>
-            <p id="analysisModalMeta">No result.</p>
+            <h2 id="analysisModalTitle">后台分析结果</h2>
+            <p id="analysisModalMeta">暂无结果。</p>
           </div>
           <div class="analysis-modal-search">
             <label>
-              Search
-              <input id="analysisModalSearchInput" type="search" placeholder="Find in result" />
+              搜索
+              <input id="analysisModalSearchInput" type="search" placeholder="在结果中查找" />
             </label>
-            <button id="analysisModalPrevMatch" class="button compact" type="button">Prev</button>
-            <button id="analysisModalNextMatch" class="button compact" type="button">Next</button>
-            <span id="analysisModalMatchStatus" class="status">0 matches</span>
+            <button id="analysisModalPrevMatch" class="button compact" type="button">上一个</button>
+            <button id="analysisModalNextMatch" class="button compact" type="button">下一个</button>
+            <span id="analysisModalMatchStatus" class="status">0 个匹配</span>
           </div>
           <div class="header-actions">
             <button id="saveAnalysisModal" class="button" type="button">保存</button>
-            <button id="closeAnalysisModal" class="button" type="button">Close</button>
+            <button id="closeAnalysisModal" class="button" type="button">关闭</button>
           </div>
         </header>
         <div id="analysisModalBody" class="analysis-modal-body"></div>
@@ -167,11 +198,11 @@
       <section class="modal-panel breakpoints-modal-panel">
         <header class="modal-header">
           <div>
-            <h2 id="breakpointsModalTitle">BreakPoints File</h2>
-            <p id="breakpointsModalMeta">No breakpoint file selected.</p>
+            <h2 id="breakpointsModalTitle">断点文件</h2>
+            <p id="breakpointsModalMeta">未选择断点文件。</p>
           </div>
           <div class="header-actions">
-            <button id="closeBreakpointsModal" class="button" type="button">Close</button>
+            <button id="closeBreakpointsModal" class="button" type="button">关闭</button>
           </div>
         </header>
         <pre id="breakpointsModalBody" class="breakpoints-modal-body"></pre>
@@ -179,6 +210,6 @@
     </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="viewer.js"></script>
+    <script src="dist/viewer.bundle.js"></script>
   </body>
 </html>

@@ -2,6 +2,9 @@
 /asplugin/.gradle/
 /asplugin/.intellijPlatform/
 /asplugin/build/
+/chrome/node_modules/
 *.log
 *.txt
 *.json
+!/chrome/package.json
+!/chrome/package-lock.json

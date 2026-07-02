@@ -1,0 +1,20 @@
+{
+  "name": "chrome",
+  "version": "1.0.0",
+  "description": "This Chrome extension provides a local log viewer UI.",
+  "type": "module",
+  "main": "viewer.js",
+  "scripts": {
+    "build": "esbuild viewer.js --bundle --format=iife --outfile=dist/viewer.bundle.js",
+    "check": "node --check viewer.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@chenglou/pretext": "^0.0.8"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1"
+  }
+}
