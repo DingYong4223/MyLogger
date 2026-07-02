@@ -43,6 +43,8 @@
         <button id="prevMatch" class="button compact" type="button">Prev</button>
         <button id="nextMatch" class="button compact" type="button">Next</button>
         <span id="matchStatus" class="status">0 matches</span>
+        <span class="toolbar-spacer"></span>
+        <button id="openMarkedRows" class="button compact" type="button">标记</button>
       </section>
 
       <section class="content">
@@ -86,7 +88,17 @@
             <h2 id="searchModalTitle">Search Results</h2>
             <p id="searchModalMeta">No results.</p>
           </div>
+          <div class="modal-search">
+            <label>
+              Search
+              <input id="modalSearchInput" type="search" placeholder="Find in results" />
+            </label>
+            <button id="modalPrevMatch" class="button compact" type="button">Prev</button>
+            <button id="modalNextMatch" class="button compact" type="button">Next</button>
+            <span id="modalMatchStatus" class="status">0 matches</span>
+          </div>
           <div class="header-actions">
+            <button id="clearMarkedRows" class="button danger hidden" type="button">清除标记</button>
             <button id="saveSearchResults" class="button" type="button">Save Results</button>
             <button id="closeSearchModal" class="button" type="button">Close</button>
           </div>

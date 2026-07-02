@@ -7,10 +7,17 @@ const state = {
   visibleRows: [],
   matches: [],
   searchResultRows: [],
+  markedLines: new Set(),
   activeMatch: -1,
   activeSearch: "",
   searchDirty: false,
+  modalMatches: [],
+  modalActiveMatch: -1,
+  modalActiveSearch: "",
+  modalSearchDirty: false,
 };
+
+let filterTimer = 0;
 
 const els = {
   fileInput: document.getElementById("fileInput"),
@@ -21,6 +28,7 @@ const els = {
   filterCase: document.getElementById("filterCase"),
   searchInput: document.getElementById("searchInput"),
   openSearchResults: document.getElementById("openSearchResults"),
+  openMarkedRows: document.getElementById("openMarkedRows"),
   prevMatch: document.getElementById("prevMatch"),
   nextMatch: document.getElementById("nextMatch"),
   matchStatus: document.getElementById("matchStatus"),
@@ -31,8 +39,14 @@ const els = {
   tableWrap: document.getElementById("tableWrap"),
   logBody: document.getElementById("logBody"),
   searchModal: document.getElementById("searchModal"),
+  searchModalTitle: document.getElementById("searchModalTitle"),
   searchModalMeta: document.getElementById("searchModalMeta"),
   searchResultBody: document.getElementById("searchResultBody"),
+  modalSearchInput: document.getElementById("modalSearchInput"),
+  modalPrevMatch: document.getElementById("modalPrevMatch"),
+  modalNextMatch: document.getElementById("modalNextMatch"),
+  modalMatchStatus: document.getElementById("modalMatchStatus"),
+  clearMarkedRows: document.getElementById("clearMarkedRows"),
   saveSearchResults: document.getElementById("saveSearchResults"),
   closeSearchModal: document.getElementById("closeSearchModal"),
   toast: document.getElementById("toast"),
@@ -75,6 +89,7 @@ async function openFile(file) {
   state.fileName = file.name;
   state.rawText = text;
   state.rows = text.split(/\r?\n/).map(parseLine);
+  state.markedLines.clear();
   applyFilter();
   els.fileMeta.textContent = `${file.name} · ${state.rows.length.toLocaleString()} lines · ${formatBytes(file.size)}`;
   els.dropZone.classList.add("hidden");
@@ -84,6 +99,7 @@ async function openFile(file) {
 }
 
 function applyFilter() {
+  window.clearTimeout(filterTimer);
   const filter = els.filterInput.value;
   const matcher = createMatcher(filter, {
     regex: els.filterRegex.checked,
@@ -93,6 +109,11 @@ function applyFilter() {
   state.visibleRows = matcher ? state.rows.filter((row) => matcher(row.searchable)) : state.rows.slice();
   clearSearchState();
   renderRows();
+}
+
+function scheduleFilter() {
+  window.clearTimeout(filterTimer);
+  filterTimer = window.setTimeout(applyFilter, 500);
 }
 
 function createMatcher(input, options) {
@@ -187,19 +208,56 @@ function renderRowsInto(target, rows, activeSearch) {
   for (const row of rows) {
     const tr = document.createElement("tr");
     tr.dataset.line = String(row.sourceLine);
-    tr.title = "Click to copy this line";
+    tr.title = "Double-click to copy this line";
+    if (state.markedLines.has(row.sourceLine)) {
+      tr.classList.add("marked-row");
+    }
+    const lineCell = cell(row.sourceLine, "line-col");
+    lineCell.title = "Click to mark or unmark this line";
+    lineCell.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleMarkedLine(row.sourceLine);
+    });
     tr.append(
-      cell(row.sourceLine, "line-col"),
+      lineCell,
       cell(highlight(row.time, activeSearch), "time-col"),
       cell(row.level, `level-col level-${row.level || "none"}`),
       cell(highlight(row.tag, activeSearch), "tag-col"),
       cell(highlight(row.message, activeSearch), "message-col")
     );
-    tr.addEventListener("click", () => copyLine(row.raw));
+    tr.addEventListener("dblclick", () => copyLine(row.raw));
     fragment.appendChild(tr);
   }
 
   target.appendChild(fragment);
+}
+
+function toggleMarkedLine(sourceLine) {
+  if (state.markedLines.has(sourceLine)) {
+    state.markedLines.delete(sourceLine);
+  } else {
+    state.markedLines.add(sourceLine);
+  }
+  if (state.activeSearch) {
+    runSearch();
+  } else {
+    renderRows();
+  }
+  if (!els.searchModal.classList.contains("hidden")) {
+    if (els.searchModalTitle.textContent === "Marked Lines") {
+      state.searchResultRows = state.rows.filter((row) => state.markedLines.has(row.sourceLine));
+      els.searchModalMeta.textContent = `${state.fileName || "log"} · ${state.searchResultRows.length.toLocaleString()} marked lines`;
+      if (!state.searchResultRows.length) {
+        closeSearchModal();
+        return;
+      }
+    }
+    renderRowsInto(els.searchResultBody, state.searchResultRows, state.modalActiveSearch);
+    state.modalMatches = [];
+    state.modalActiveMatch = -1;
+    state.modalSearchDirty = Boolean(state.modalActiveSearch);
+    updateModalMatchStatus();
+  }
 }
 
 function runSearch() {
@@ -244,19 +302,119 @@ async function openSearchResults() {
   }
 
   state.searchResultRows = rows;
+  els.searchModalTitle.textContent = "Search Results";
+  state.modalMatches = [];
+  state.modalActiveMatch = -1;
+  state.modalActiveSearch = "";
+  state.modalSearchDirty = false;
+  els.modalSearchInput.value = "";
+  els.clearMarkedRows.classList.add("hidden");
   els.searchModalMeta.textContent = `${state.fileName || "log"} · Search: ${query} · ${rows.length.toLocaleString()} matches`;
   renderRowsInto(els.searchResultBody, rows, query);
+  updateModalMatchStatus();
+  els.searchModal.classList.remove("hidden");
+}
+
+function openMarkedRows() {
+  const rows = state.rows.filter((row) => state.markedLines.has(row.sourceLine));
+  if (!rows.length) {
+    showToast("No marked lines.");
+    return;
+  }
+
+  state.searchResultRows = rows;
+  els.searchModalTitle.textContent = "Marked Lines";
+  els.searchModalMeta.textContent = `${state.fileName || "log"} · ${rows.length.toLocaleString()} marked lines`;
+  state.modalMatches = [];
+  state.modalActiveMatch = -1;
+  state.modalActiveSearch = "";
+  state.modalSearchDirty = false;
+  els.modalSearchInput.value = "";
+  els.clearMarkedRows.classList.remove("hidden");
+  renderRowsInto(els.searchResultBody, rows, "");
+  updateModalMatchStatus();
   els.searchModal.classList.remove("hidden");
 }
 
 function closeSearchModal() {
   els.searchModal.classList.add("hidden");
+  els.clearMarkedRows.classList.add("hidden");
 }
 
 function saveSearchResults() {
   if (!state.searchResultRows.length) return;
   const content = state.searchResultRows.map((row) => row.raw).join("\n");
-  downloadText(content, `${state.fileName || "log"}.search.log`);
+  const suffix = els.searchModalTitle.textContent === "Marked Lines" ? "marked" : "search";
+  downloadText(content, `${state.fileName || "log"}.${suffix}.log`);
+}
+
+function clearMarkedRows() {
+  if (!state.markedLines.size) return;
+  if (!window.confirm("确认清除所有标记行吗？")) return;
+
+  state.markedLines.clear();
+  state.searchResultRows = [];
+  closeSearchModal();
+  renderRows();
+  showToast("Marked lines cleared.");
+}
+
+function markModalSearchDirty() {
+  state.modalSearchDirty = true;
+  state.modalMatches = [];
+  state.modalActiveMatch = -1;
+  state.modalActiveSearch = "";
+  updateModalMatchStatus();
+}
+
+function findModalMatchingRows(query) {
+  const lowerQuery = query.trim().toLowerCase();
+  if (!lowerQuery) return [];
+  return state.searchResultRows
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => row.searchable.toLowerCase().includes(lowerQuery));
+}
+
+function runModalSearch() {
+  const query = els.modalSearchInput.value.trim();
+  state.modalMatches = [];
+  state.modalActiveMatch = -1;
+  state.modalActiveSearch = query;
+  state.modalSearchDirty = false;
+  renderRowsInto(els.searchResultBody, state.searchResultRows, query);
+
+  const renderedRows = Array.from(els.searchResultBody.querySelectorAll("tr"));
+  state.modalMatches = findModalMatchingRows(query).map(({ index }) => renderedRows[index]);
+  updateModalMatchStatus();
+}
+
+function goModalMatch(direction) {
+  if (state.modalSearchDirty || state.modalActiveSearch !== els.modalSearchInput.value.trim()) {
+    runModalSearch();
+  }
+  if (!state.modalMatches.length) return;
+  if (state.modalActiveMatch >= 0) {
+    state.modalMatches[state.modalActiveMatch].classList.remove("active-match");
+  }
+  state.modalActiveMatch = (state.modalActiveMatch + direction + state.modalMatches.length) % state.modalMatches.length;
+  const row = state.modalMatches[state.modalActiveMatch];
+  row.classList.add("active-match");
+  row.scrollIntoView({ block: "center", inline: "nearest" });
+  updateModalMatchStatus();
+}
+
+function updateModalMatchStatus() {
+  const visible = `${state.searchResultRows.length.toLocaleString()} visible`;
+  if (state.modalSearchDirty) {
+    els.modalMatchStatus.textContent = `Search pending · ${visible}`;
+    return;
+  }
+  if (!state.modalMatches.length) {
+    els.modalMatchStatus.textContent = `0 matches · ${visible}`;
+    return;
+  }
+  const current = state.modalActiveMatch < 0 ? 0 : state.modalActiveMatch + 1;
+  els.modalMatchStatus.textContent = `${current}/${state.modalMatches.length} matches · ${visible}`;
 }
 
 async function copyLine(line) {
@@ -340,13 +498,18 @@ els.fileInput.addEventListener("change", (event) => {
   if (file) openFile(file);
 });
 
-els.filterInput.addEventListener("input", applyFilter);
+els.filterInput.addEventListener("input", scheduleFilter);
 els.filterRegex.addEventListener("change", applyFilter);
 els.filterCase.addEventListener("change", applyFilter);
 els.searchInput.addEventListener("input", markSearchDirty);
 els.openSearchResults.addEventListener("click", openSearchResults);
+els.openMarkedRows.addEventListener("click", openMarkedRows);
 els.closeSearchModal.addEventListener("click", closeSearchModal);
 els.saveSearchResults.addEventListener("click", saveSearchResults);
+els.clearMarkedRows.addEventListener("click", clearMarkedRows);
+els.modalSearchInput.addEventListener("input", markModalSearchDirty);
+els.modalPrevMatch.addEventListener("click", () => goModalMatch(-1));
+els.modalNextMatch.addEventListener("click", () => goModalMatch(1));
 els.prevMatch.addEventListener("click", () => goMatch(-1));
 els.nextMatch.addEventListener("click", () => goMatch(1));
 els.saveFiltered.addEventListener("click", saveFiltered);

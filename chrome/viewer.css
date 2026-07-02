@@ -82,6 +82,10 @@ h2 {
   background: #fbfcfe;
 }
 
+.toolbar-spacer {
+  flex: 1;
+}
+
 label {
   display: grid;
   gap: 4px;
@@ -127,6 +131,12 @@ input[type="url"] {
   border-color: var(--blue);
   background: var(--blue);
   color: white;
+}
+
+.button.danger {
+  border-color: #fca5a5;
+  background: #fff1f2;
+  color: #b91c1c;
 }
 
 .button.compact {
@@ -253,9 +263,24 @@ input[type="url"] {
   background: #eff6ff;
 }
 
+.log-table tr.marked-row {
+  background: #fff7d6;
+}
+
+.log-table tr.marked-row:hover {
+  background: #ffefad;
+}
+
 .line-col {
   min-width: 48px;
   color: var(--line);
+  cursor: pointer;
+  user-select: none;
+}
+
+.marked-row .line-col {
+  color: #9a6700;
+  font-weight: 700;
 }
 
 .time-col {
@@ -270,8 +295,8 @@ input[type="url"] {
 }
 
 .tag-col {
-  width: 60px;
-  max-width: 60px;
+  width: 120px;
+  max-width: 120px;
   color: var(--tag);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -368,6 +393,17 @@ mark {
   padding: 12px 14px;
   border-bottom: 1px solid var(--border);
   background: #fbfcfe;
+}
+
+.modal-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 420px;
+}
+
+.modal-search input {
+  min-width: 180px;
 }
 
 .modal-header p {
