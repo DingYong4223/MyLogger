@@ -57,7 +57,7 @@ private object BreakpointJsonExporter {
     fun export(project: Project, breakpoints: List<XBreakpoint<*>>): String {
         return buildString {
             appendLine("{")
-            appendLine("  \"schemaVersion\": 1,")
+            appendLine("  \"schemaVersion\": 2,")
             appendLine("  \"exportedAt\": ${Instant.now().toString().json()},")
             appendLine("  \"project\": {")
             appendLine("    \"name\": ${project.name.json()},")
@@ -87,7 +87,7 @@ private object BreakpointJsonExporter {
         appendLine("$indent  \"typeId\": ${breakpoint.type.id.json()},")
         appendLine("$indent  \"typeTitle\": ${breakpoint.type.title.json()},")
         appendLine("$indent  \"enabled\": ${breakpoint.isEnabled},")
-        appendLine("$indent  \"line\": ${lineBreakpoint?.line ?: sourcePosition?.line},")
+        appendLine("$indent  \"line\": ${sourceLine(lineBreakpoint, sourcePosition)},")
         appendLine("$indent  \"fileUrl\": ${fileUrl.json()},")
         appendLine("$indent  \"filePath\": ${absolutePath.json()},")
         appendLine("$indent  \"relativePath\": ${relativePath(project, absolutePath).json()},")
@@ -105,6 +105,10 @@ private object BreakpointJsonExporter {
 
     private fun urlToPath(url: String): String {
         return VfsUtilCore.urlToPath(url)
+    }
+
+    private fun sourceLine(lineBreakpoint: XLineBreakpoint<*>?, sourcePosition: com.intellij.xdebugger.XSourcePosition?): Int? {
+        return (lineBreakpoint?.line ?: sourcePosition?.line)?.plus(1)
     }
 
     private fun relativePath(project: Project, absolutePath: String?): String? {

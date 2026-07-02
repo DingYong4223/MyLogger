@@ -3,16 +3,37 @@
 
 from pathlib import Path
 import argparse
+import ast
 import json
+import re
 import sys
 import zipfile
 from urllib.parse import unquote, urlparse
 
 
 DEFAULT_CONTEXT_LINES = 3
+STRING_LITERAL_RE = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'')
+LOG_CALL_RE = re.compile(
+    r"\b(?P<owner>SLLogger|Log|L|Logger|Timber|Logan|KLog|LogUtils|LogUtil|MLog|MTLog|XLog)"
+    r"(?:\s*\.\s*(?P<method>[A-Za-z_][A-Za-z0-9_]*))?\s*\("
+)
+ANDROID_LOG_LEVELS = {"v", "d", "i", "w", "e", "wtf", "println"}
+COMMON_LOG_LEVELS = {
+    "v",
+    "d",
+    "i",
+    "w",
+    "e",
+    "debug",
+    "info",
+    "warn",
+    "warning",
+    "error",
+    "verbose",
+}
 
 
-def analyze_breakpoints_file(file_path, context_lines=DEFAULT_CONTEXT_LINES):
+def analyze_breakpoints_file(file_path, context_lines=DEFAULT_CONTEXT_LINES, compact=True):
     path = resolve_local_path(file_path)
     if not path.is_file():
         return {
@@ -32,10 +53,10 @@ def analyze_breakpoints_file(file_path, context_lines=DEFAULT_CONTEXT_LINES):
             "items": [],
         }
 
-    return analyze_breakpoints_data(data, path=str(path), context_lines=context_lines)
+    return analyze_breakpoints_data(data, path=str(path), context_lines=context_lines, compact=compact)
 
 
-def analyze_breakpoints_content(content, source_name="<payload>", context_lines=DEFAULT_CONTEXT_LINES):
+def analyze_breakpoints_content(content, source_name="<payload>", context_lines=DEFAULT_CONTEXT_LINES, compact=True):
     try:
         data = json.loads(content)
     except json.JSONDecodeError as exc:
@@ -46,10 +67,10 @@ def analyze_breakpoints_content(content, source_name="<payload>", context_lines=
             "items": [],
         }
 
-    return analyze_breakpoints_data(data, path=source_name, context_lines=context_lines)
+    return analyze_breakpoints_data(data, path=source_name, context_lines=context_lines, compact=compact)
 
 
-def analyze_breakpoints_data(data, path, context_lines=DEFAULT_CONTEXT_LINES):
+def analyze_breakpoints_data(data, path, context_lines=DEFAULT_CONTEXT_LINES, compact=True):
     breakpoints = data.get("breakpoints") if isinstance(data, dict) else None
     if not isinstance(breakpoints, list):
         return {
@@ -61,11 +82,14 @@ def analyze_breakpoints_data(data, path, context_lines=DEFAULT_CONTEXT_LINES):
 
     project = data.get("project") if isinstance(data.get("project"), dict) else {}
     project_base_path = project.get("basePath")
+    schema_version = data.get("schemaVersion")
     items = [
-        analyze_breakpoint_source(breakpoint, project_base_path, context_lines)
+        analyze_breakpoint_source(breakpoint, project_base_path, context_lines, schema_version)
         for breakpoint in breakpoints
         if isinstance(breakpoint, dict)
     ]
+    if compact:
+        return compact_log_strings_result(items)
     return {
         "path": path,
         "schemaVersion": data.get("schemaVersion"),
@@ -76,15 +100,29 @@ def analyze_breakpoints_data(data, path, context_lines=DEFAULT_CONTEXT_LINES):
     }
 
 
-def analyze_breakpoint_source(breakpoint, project_base_path, context_lines=DEFAULT_CONTEXT_LINES):
+def compact_log_strings_result(items):
+    log_strings = []
+    seen = set()
+    for item in items:
+        for value in item.get("logStrings", []):
+            if value and value not in seen:
+                log_strings.append(value)
+                seen.add(value)
+    return {
+        "logStrings": log_strings,
+    }
+
+
+def analyze_breakpoint_source(breakpoint, project_base_path, context_lines=DEFAULT_CONTEXT_LINES, schema_version=None):
     source_ref = resolve_breakpoint_source_ref(breakpoint, project_base_path)
     line = breakpoint.get("line")
+    source_index, source_line = normalize_breakpoint_line(line, schema_version)
     result = {
         "typeId": breakpoint.get("typeId"),
         "typeTitle": breakpoint.get("typeTitle"),
         "enabled": breakpoint.get("enabled"),
         "line": line,
-        "sourceLine": line + 1 if isinstance(line, int) and line >= 0 else None,
+        "sourceLine": source_line,
         "filePath": source_ref_display(source_ref) if source_ref else breakpoint.get("filePath"),
         "fileUrl": breakpoint.get("fileUrl"),
         "relativePath": breakpoint.get("relativePath"),
@@ -93,13 +131,14 @@ def analyze_breakpoint_source(breakpoint, project_base_path, context_lines=DEFAU
         "condition": breakpoint.get("condition"),
         "logExpression": breakpoint.get("logExpression"),
         "code": None,
+        "logStrings": [],
         "context": [],
     }
 
     if source_ref is None:
         result["error"] = "missing_source_path"
         return result
-    if not isinstance(line, int) or line < 0:
+    if source_index is None:
         result["error"] = "invalid_line"
         result["message"] = f"Invalid breakpoint line: {line}"
         return result
@@ -108,24 +147,216 @@ def analyze_breakpoint_source(breakpoint, project_base_path, context_lines=DEFAU
     if error:
         result.update(error)
         return result
-    if line >= len(source_lines):
+    if source_index >= len(source_lines):
         result["error"] = "line_out_of_range"
         result["message"] = f"Breakpoint line {line} is outside source file with {len(source_lines)} lines."
         return result
 
-    start = max(0, line - context_lines)
-    end = min(len(source_lines), line + context_lines + 1)
-    result["code"] = source_lines[line]
+    start = max(0, source_index - context_lines)
+    end = min(len(source_lines), source_index + context_lines + 1)
+    result["code"] = source_lines[source_index]
+    result["logStrings"] = extract_log_strings(source_lines[source_index])
     result["context"] = [
         {
             "line": index,
             "sourceLine": index + 1,
             "code": source_lines[index],
-            "breakpoint": index == line,
+            "breakpoint": index == source_index,
         }
         for index in range(start, end)
     ]
     return result
+
+
+def normalize_breakpoint_line(line, schema_version):
+    if not isinstance(line, int):
+        return None, None
+    if is_one_based_line_schema(schema_version):
+        if line < 1:
+            return None, None
+        return line - 1, line
+    if line < 0:
+        return None, None
+    return line, line + 1
+
+
+def is_one_based_line_schema(schema_version):
+    try:
+        return int(schema_version) >= 2
+    except (TypeError, ValueError):
+        return False
+
+
+def extract_log_strings(code):
+    if not code:
+        return []
+
+    log_strings = extract_known_logger_strings(code)
+    if log_strings:
+        return log_strings
+
+    strings = []
+    seen = set()
+    for match in STRING_LITERAL_RE.finditer(code):
+        value = decode_string_literal(match.group(0))
+        if not value or value in seen:
+            continue
+        strings.append(value)
+        seen.add(value)
+        if is_followed_by_concat_operator(code, match.end()):
+            break
+    return strings
+
+
+def extract_known_logger_strings(code):
+    strings = []
+    seen = set()
+    for match in LOG_CALL_RE.finditer(code):
+        owner = match.group("owner")
+        method = match.group("method") or ""
+        args_text = extract_call_args(code, match.end() - 1)
+        if args_text is None:
+            continue
+
+        args = split_top_level_args(args_text)
+        indexes = log_message_arg_indexes(owner, method, args)
+        for index in indexes:
+            if index >= len(args):
+                continue
+            for value in extract_strings_from_expression(args[index]):
+                if value and value not in seen:
+                    strings.append(value)
+                    seen.add(value)
+        if strings:
+            break
+    return strings
+
+
+def log_message_arg_indexes(owner, method, args):
+    if owner == "Log":
+        if method == "println":
+            return [2]
+        if method in ANDROID_LOG_LEVELS:
+            return [1]
+    if owner in {"L", "KLog", "LogUtils", "LogUtil", "MLog", "MTLog", "XLog", "Timber"}:
+        if method in COMMON_LOG_LEVELS or method in ANDROID_LOG_LEVELS:
+            return [1] if len(args) > 1 else [0]
+    if owner == "Logger":
+        if method in COMMON_LOG_LEVELS or not method:
+            return [0]
+    if owner == "SLLogger":
+        return sl_logger_message_arg_indexes(args)
+    if owner == "Logan":
+        return logan_message_arg_indexes(args)
+    return []
+
+
+def sl_logger_message_arg_indexes(args):
+    if not args:
+        return []
+    if len(args) == 1:
+        return [0]
+
+    if looks_like_throwable_arg(args[0].strip()):
+        return [2] if len(args) > 2 else [1]
+    if len(args) > 2 and looks_like_throwable_arg(args[1].strip()):
+        return [2]
+    return [1]
+
+
+def logan_message_arg_indexes(args):
+    indexes = []
+    for index, arg in enumerate(args):
+        if index < 2:
+            continue
+        if extract_strings_from_expression(arg):
+            indexes.append(index)
+    return indexes
+
+
+def looks_like_throwable_arg(arg):
+    return arg in {"e", "t", "throwable", "exception"} or arg.endswith("Exception") or arg.endswith("Throwable")
+
+
+def extract_call_args(code, open_paren_index):
+    depth = 0
+    quote = None
+    escaped = False
+    for index in range(open_paren_index, len(code)):
+        char = code[index]
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            continue
+        if char in {'"', "'"}:
+            quote = char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return code[open_paren_index + 1:index]
+    return None
+
+
+def split_top_level_args(args_text):
+    args = []
+    start = 0
+    depth = 0
+    quote = None
+    escaped = False
+    for index, char in enumerate(args_text):
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            continue
+        if char in {'"', "'"}:
+            quote = char
+        elif char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth = max(0, depth - 1)
+        elif char == "," and depth == 0:
+            args.append(args_text[start:index].strip())
+            start = index + 1
+    tail = args_text[start:].strip()
+    if tail:
+        args.append(tail)
+    return args
+
+
+def extract_strings_from_expression(expression):
+    values = []
+    for match in STRING_LITERAL_RE.finditer(expression):
+        value = decode_string_literal(match.group(0))
+        if value:
+            values.append(value)
+        if is_followed_by_concat_operator(expression, match.end()):
+            break
+    return values
+
+
+def is_followed_by_concat_operator(code, index):
+    cursor = index
+    while cursor < len(code) and code[cursor].isspace():
+        cursor += 1
+    return cursor < len(code) and code[cursor] == "+"
+
+
+def decode_string_literal(token):
+    try:
+        value = ast.literal_eval(token)
+        return value if isinstance(value, str) else str(value)
+    except (SyntaxError, ValueError):
+        return token[1:-1]
 
 
 def resolve_breakpoint_source_ref(breakpoint, project_base_path):
@@ -241,6 +472,8 @@ def format_text(result):
         if item.get("error"):
             lines.append(f"error: {item.get('error')} {item.get('message') or ''}".rstrip())
         else:
+            if item.get("logStrings"):
+                lines.append(f"logStrings: {', '.join(item.get('logStrings'))}")
             for context in item.get("context", []):
                 marker = ">" if context.get("breakpoint") else " "
                 lines.append(f"{marker} {context.get('sourceLine'):>5}: {context.get('code')}")
@@ -264,10 +497,15 @@ def main():
     parser.add_argument("breakpoints_json", help="Path to mylogger-breakpoints.json")
     parser.add_argument("--context", type=int, default=DEFAULT_CONTEXT_LINES, help="Context lines around each breakpoint")
     parser.add_argument("--format", choices=("json", "text"), default="json", help="Output format")
+    parser.add_argument("--detail", action="store_true", help="Include breakpoint metadata, source code, and context")
     parser.add_argument("--output", "-o", help="Write output to a file instead of stdout")
     args = parser.parse_args()
 
-    result = analyze_breakpoints_file(args.breakpoints_json, context_lines=max(0, args.context))
+    result = analyze_breakpoints_file(
+        args.breakpoints_json,
+        context_lines=max(0, args.context),
+        compact=not args.detail,
+    )
     if args.format == "json":
         content = json.dumps(result, ensure_ascii=False, indent=2)
     else:
