@@ -7,6 +7,6 @@
     "default_title": "MyLogger Viewer",
     "default_popup": "popup.html"
   },
-  "permissions": ["clipboardWrite", "downloads", "storage"],
+  "permissions": ["clipboardWrite", "downloads"],
   "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"]
 }

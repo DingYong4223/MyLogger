@@ -6,10 +6,10 @@ const state = {
   rows: [],
   visibleRows: [],
   matches: [],
+  searchResultRows: [],
   activeMatch: -1,
   activeSearch: "",
   searchDirty: false,
-  resultMode: false,
 };
 
 const els = {
@@ -30,6 +30,11 @@ const els = {
   dropZone: document.getElementById("dropZone"),
   tableWrap: document.getElementById("tableWrap"),
   logBody: document.getElementById("logBody"),
+  searchModal: document.getElementById("searchModal"),
+  searchModalMeta: document.getElementById("searchModalMeta"),
+  searchResultBody: document.getElementById("searchResultBody"),
+  saveSearchResults: document.getElementById("saveSearchResults"),
+  closeSearchModal: document.getElementById("closeSearchModal"),
   toast: document.getElementById("toast"),
 };
 
@@ -78,42 +83,6 @@ async function openFile(file) {
   els.analyzeButton.disabled = false;
 }
 
-async function loadSearchResultWindow() {
-  const params = new URLSearchParams(window.location.search);
-  const resultId = params.get("result");
-  if (!resultId) return false;
-
-  const key = `searchResult:${resultId}`;
-  const data = await chrome.storage.local.get(key);
-  const result = data[key];
-  if (!result) {
-    showToast("Search result expired or not found.");
-    return true;
-  }
-
-  state.resultMode = true;
-  state.fileName = result.fileName || "search-results.log";
-  state.rawText = result.rows.map((row) => row.raw).join("\n");
-  state.rows = result.rows.map((row) => ({ ...row }));
-  state.visibleRows = state.rows.slice();
-  state.activeSearch = result.query || "";
-  els.fileMeta.textContent = `${state.fileName} · Search: ${result.query} · ${state.rows.length.toLocaleString()} matches`;
-  els.dropZone.classList.add("hidden");
-  els.tableWrap.classList.remove("hidden");
-  els.saveFiltered.disabled = false;
-  els.analyzeButton.disabled = false;
-  els.filterInput.disabled = true;
-  els.filterRegex.disabled = true;
-  els.filterCase.disabled = true;
-  els.searchInput.value = result.query || "";
-  renderRows();
-  state.matches = Array.from(els.logBody.querySelectorAll("tr"));
-  state.activeMatch = -1;
-  state.searchDirty = false;
-  updateMatchStatus();
-  return true;
-}
-
 function applyFilter() {
   const filter = els.filterInput.value;
   const matcher = createMatcher(filter, {
@@ -147,27 +116,7 @@ function createMatcher(input, options) {
 }
 
 function renderRows() {
-  const fragment = document.createDocumentFragment();
-  els.logBody.textContent = "";
-
-  for (const row of state.visibleRows) {
-    const tr = document.createElement("tr");
-    tr.dataset.line = String(row.sourceLine);
-    tr.title = "Click to copy this line";
-
-    tr.append(
-      cell(row.sourceLine, "line-col"),
-      cell(highlight(row.time, state.activeSearch), "time-col"),
-      cell(row.level, `level-col level-${row.level || "none"}`),
-      cell(highlight(row.tag, state.activeSearch), "tag-col"),
-      cell(highlight(row.message, state.activeSearch), "message-col")
-    );
-
-    tr.addEventListener("click", () => copyLine(row.raw));
-    fragment.appendChild(tr);
-  }
-
-  els.logBody.appendChild(fragment);
+  renderRowsInto(els.logBody, state.visibleRows, state.activeSearch);
   updateMatchStatus();
 }
 
@@ -231,6 +180,28 @@ function findMatchingRows(query) {
     .filter(({ row }) => row.searchable.toLowerCase().includes(lowerQuery));
 }
 
+function renderRowsInto(target, rows, activeSearch) {
+  const fragment = document.createDocumentFragment();
+  target.textContent = "";
+
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    tr.dataset.line = String(row.sourceLine);
+    tr.title = "Click to copy this line";
+    tr.append(
+      cell(row.sourceLine, "line-col"),
+      cell(highlight(row.time, activeSearch), "time-col"),
+      cell(row.level, `level-col level-${row.level || "none"}`),
+      cell(highlight(row.tag, activeSearch), "tag-col"),
+      cell(highlight(row.message, activeSearch), "message-col")
+    );
+    tr.addEventListener("click", () => copyLine(row.raw));
+    fragment.appendChild(tr);
+  }
+
+  target.appendChild(fragment);
+}
+
 function runSearch() {
   const query = els.searchInput.value.trim();
   state.matches = [];
@@ -272,24 +243,20 @@ async function openSearchResults() {
     return;
   }
 
-  const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const key = `searchResult:${id}`;
-  await chrome.storage.local.set({
-    [key]: {
-      fileName: `${state.fileName || "log"}.search.log`,
-      query,
-      rows: rows.map((row) => ({
-        sourceLine: row.sourceLine,
-        time: row.time,
-        level: row.level,
-        tag: row.tag,
-        message: row.message,
-        raw: row.raw,
-        searchable: row.searchable,
-      })),
-    },
-  });
-  chrome.tabs.create({ url: chrome.runtime.getURL(`viewer.html?result=${encodeURIComponent(id)}`) });
+  state.searchResultRows = rows;
+  els.searchModalMeta.textContent = `${state.fileName || "log"} · Search: ${query} · ${rows.length.toLocaleString()} matches`;
+  renderRowsInto(els.searchResultBody, rows, query);
+  els.searchModal.classList.remove("hidden");
+}
+
+function closeSearchModal() {
+  els.searchModal.classList.add("hidden");
+}
+
+function saveSearchResults() {
+  if (!state.searchResultRows.length) return;
+  const content = state.searchResultRows.map((row) => row.raw).join("\n");
+  downloadText(content, `${state.fileName || "log"}.search.log`);
 }
 
 async function copyLine(line) {
@@ -299,12 +266,16 @@ async function copyLine(line) {
 
 function saveFiltered() {
   const content = state.visibleRows.map((row) => row.raw).join("\n");
+  const base = state.fileName ? state.fileName.replace(/\.[^.]+$/, "") : "mylogger";
+  downloadText(content, `${base}.filtered.log`);
+}
+
+function downloadText(content, filename) {
   const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
-  const base = state.fileName ? state.fileName.replace(/\.[^.]+$/, "") : "mylogger";
   chrome.downloads.download({
     url,
-    filename: `${base}.filtered.log`,
+    filename,
     saveAs: true,
   }, () => URL.revokeObjectURL(url));
 }
@@ -374,6 +345,8 @@ els.filterRegex.addEventListener("change", applyFilter);
 els.filterCase.addEventListener("change", applyFilter);
 els.searchInput.addEventListener("input", markSearchDirty);
 els.openSearchResults.addEventListener("click", openSearchResults);
+els.closeSearchModal.addEventListener("click", closeSearchModal);
+els.saveSearchResults.addEventListener("click", saveSearchResults);
 els.prevMatch.addEventListener("click", () => goMatch(-1));
 els.nextMatch.addEventListener("click", () => goMatch(1));
 els.saveFiltered.addEventListener("click", saveFiltered);
@@ -393,4 +366,8 @@ for (const target of [document.body, els.dropZone]) {
   });
 }
 
-loadSearchResultWindow();
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !els.searchModal.classList.contains("hidden")) {
+    closeSearchModal();
+  }
+});

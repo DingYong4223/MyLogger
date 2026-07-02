@@ -16,7 +16,7 @@ This Chrome extension provides a local log viewer UI.
 - Display logs in columns: line, time, level, tag, message.
 - Filter visible logs by keyword or regex.
 - Search visible logs and jump between matches.
-- Open search matches in a separate viewer window with the `Search` button.
+- Open search matches in an in-page results dialog with the `Search` button.
 - Highlight log time, level, tag, and search terms.
 - Use native horizontal and vertical scrollbars.
 - Click any row to copy the original line.
