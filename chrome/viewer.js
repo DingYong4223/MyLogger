@@ -2,6 +2,7 @@ import { measureNaturalWidth, prepare } from "@chenglou/pretext";
 
 const LOG_ROW_HEIGHT = 24;
 const LOG_OVERSCAN_ROWS = 30;
+const LOG_CONTEXT_RADIUS = 50;
 const LOG_TEXT_FONT = '12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace';
 const LOG_FIXED_COLUMNS_WIDTH = 48 + 136 + 58 + 150;
 const TOOLS_PAGE_PATH = "mytools.htm";
@@ -26,6 +27,7 @@ const state = {
   timeFilterPoints: [],
   matches: [],
   searchResultRows: [],
+  searchModalCanOpenContext: false,
   markedLines: new Set(),
   activeMarkedLine: null,
   activeMatch: -1,
@@ -691,7 +693,7 @@ function createLogRow(row, activeSearch, visibleIndex, context) {
 }
 
 function shouldOpenContextOnClick(context) {
-  return context === "main" && els.filterInput.value.trim();
+  return (context === "main" && els.filterInput.value.trim()) || context === "search-modal";
 }
 
 function scheduleLogRowClick(row) {
@@ -823,9 +825,10 @@ function findMatchingRows(query) {
 function renderRowsInto(target, rows, activeSearch) {
   const fragment = document.createDocumentFragment();
   target.textContent = "";
+  const rowContext = state.searchModalCanOpenContext ? "search-modal" : "modal";
 
   for (const row of rows) {
-    fragment.appendChild(createLogRow(row, activeSearch, -1, "modal"));
+    fragment.appendChild(createLogRow(row, activeSearch, -1, rowContext));
   }
 
   target.appendChild(fragment);
@@ -930,10 +933,10 @@ function openLogContext(row) {
   if (!state.rows.length) return;
   const index = state.rows.indexOf(row);
   state.contextActiveIndex = index >= 0 ? index : Math.max(0, Math.min(state.rows.length - 1, row.sourceLine - 1));
-  els.contextModalMeta.textContent = `${state.fileName || "日志"} · 第 ${row.sourceLine} 行 · 前后 30 行`;
+  els.contextModalMeta.textContent = `${state.fileName || "日志"} · 第 ${row.sourceLine} 行 · 前后 ${LOG_CONTEXT_RADIUS} 行`;
   els.contextLogBody.textContent = "";
   els.contextModal.classList.remove("hidden");
-  window.requestAnimationFrame(() => window.requestAnimationFrame(centerContextTargetRow));
+  window.requestAnimationFrame(prepareContextRowsForCentering);
 }
 
 function closeContextModal() {
@@ -944,7 +947,7 @@ function closeContextModal() {
 function centerContextTargetRow() {
   const viewportHeight = els.contextTableWrap.clientHeight || els.contextTableWrap.getBoundingClientRect().height || 0;
   if (!viewportHeight) {
-    window.requestAnimationFrame(centerContextTargetRow);
+    window.requestAnimationFrame(prepareContextRowsForCentering);
     return;
   }
 
@@ -953,6 +956,16 @@ function centerContextTargetRow() {
   const maxTop = Math.max(0, state.rows.length * LOG_ROW_HEIGHT - viewportHeight);
   els.contextTableWrap.scrollTop = Math.max(0, Math.min(centeredTop, maxTop));
   renderContextRows();
+}
+
+function prepareContextRowsForCentering() {
+  const viewportHeight = els.contextTableWrap.clientHeight || els.contextTableWrap.getBoundingClientRect().height || 0;
+  if (!viewportHeight) {
+    window.requestAnimationFrame(prepareContextRowsForCentering);
+    return;
+  }
+  renderContextRows();
+  window.requestAnimationFrame(centerContextTargetRow);
 }
 
 function renderContextRows() {
@@ -1005,6 +1018,7 @@ async function openSearchResults() {
   }
 
   state.searchResultRows = rows;
+  state.searchModalCanOpenContext = true;
   els.searchModalTitle.textContent = "搜索结果";
   state.modalMatches = [];
   state.modalActiveMatch = -1;
@@ -1026,6 +1040,7 @@ function openMarkedRows() {
   }
 
   state.searchResultRows = rows;
+  state.searchModalCanOpenContext = false;
   els.searchModalTitle.textContent = "已标记行";
   els.searchModalMeta.textContent = `${state.fileName || "log"} · ${rows.length.toLocaleString()} 行已标记`;
   state.modalMatches = [];
@@ -1040,6 +1055,7 @@ function openMarkedRows() {
 }
 
 function closeSearchModal() {
+  state.searchModalCanOpenContext = false;
   els.searchModal.classList.add("hidden");
   els.clearMarkedRows.classList.add("hidden");
 }
@@ -1282,7 +1298,7 @@ function renderBreakpointAnalysis(breakpoints, query) {
 
   const split = document.createElement("div");
   split.className = "analysis-split";
-  const left = createAnalysisPane("断点日志", `${logStrings.length.toLocaleString()} 条`);
+  const left = createAnalysisPane("过滤日志", `${logStrings.length.toLocaleString()} 条`, { collapsible: true });
   const right = createAnalysisPane("相关日志", `${totalMatches.toLocaleString()} 行`);
 
   const leftBody = left.querySelector(".analysis-pane-body");
@@ -1366,9 +1382,10 @@ function renderBreakpointAnalysis(breakpoints, query) {
   state.analysisModalSearch = trimmedQuery;
 }
 
-function createAnalysisPane(title, meta) {
+function createAnalysisPane(title, meta, options = {}) {
   const pane = document.createElement("section");
   pane.className = "analysis-pane";
+  if (options.collapsible) pane.classList.add("analysis-pane-collapsible");
   const header = document.createElement("div");
   header.className = "analysis-pane-header";
   const titleEl = document.createElement("h3");
@@ -1378,8 +1395,31 @@ function createAnalysisPane(title, meta) {
   header.append(titleEl, metaEl);
   const body = document.createElement("div");
   body.className = "analysis-pane-body";
-  pane.append(header, body);
+  if (options.collapsible) {
+    const toggle = document.createElement("button");
+    toggle.className = "analysis-pane-toggle";
+    toggle.type = "button";
+    toggle.title = "收起过滤日志";
+    toggle.setAttribute("aria-label", "收起过滤日志");
+    toggle.setAttribute("aria-expanded", "true");
+    toggle.textContent = "<";
+    toggle.addEventListener("click", () => toggleAnalysisResultPane(pane, toggle));
+    pane.append(header, body, toggle);
+  } else {
+    pane.append(header, body);
+  }
   return pane;
+}
+
+function toggleAnalysisResultPane(pane, toggle) {
+  const split = pane.closest(".analysis-split");
+  if (!split) return;
+  const collapsed = !split.classList.contains("analysis-left-collapsed");
+  split.classList.toggle("analysis-left-collapsed", collapsed);
+  toggle.textContent = collapsed ? ">" : "<";
+  toggle.title = collapsed ? "展开过滤日志" : "收起过滤日志";
+  toggle.setAttribute("aria-label", collapsed ? "展开过滤日志" : "收起过滤日志");
+  toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
 }
 
 function appendHighlightedText(target, text, query, matches) {
@@ -1668,6 +1708,9 @@ els.openToolsPage.addEventListener("click", openToolsPage);
 els.openSearchResults.addEventListener("click", openSearchResults);
 els.openMarkedRows.addEventListener("click", openMarkedRows);
 els.closeSearchModal.addEventListener("click", closeSearchModal);
+els.contextModal.addEventListener("click", (event) => {
+  if (event.target === els.contextModal) closeContextModal();
+});
 els.closeContextModal.addEventListener("click", closeContextModal);
 els.closeAnalysisModal.addEventListener("click", closeAnalysisModal);
 els.closeBreakpointsModal.addEventListener("click", closeBreakpointsModal);

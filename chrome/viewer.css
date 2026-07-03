@@ -538,7 +538,7 @@ input[type="url"] {
 
 .log-table tr.context-target-row,
 .log-table tr.context-target-row:hover {
-  background: #fef08a;
+  background: #fecaca;
 }
 
 .line-col {
@@ -575,7 +575,8 @@ input[type="url"] {
 
 .log-table tr.context-target-row .line-col,
 .log-table tr.context-target-row:hover .line-col {
-  background: #fef08a;
+  background: #fecaca;
+  color: #991b1b;
 }
 
 .marked-row .line-col {
@@ -890,6 +891,10 @@ mark {
   display: none;
 }
 
+#contextModal {
+  z-index: 40;
+}
+
 .modal-panel {
   width: min(1180px, calc(100vw - 56px));
   height: min(760px, calc(100vh - 56px));
@@ -997,15 +1002,29 @@ mark {
   min-height: 100%;
 }
 
+.analysis-split.analysis-left-collapsed {
+  grid-template-columns: 42px minmax(0, 1fr);
+}
+
 .analysis-pane {
   min-width: 0;
   min-height: 0;
+  position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   border: 1px solid rgba(148, 163, 184, 0.42);
   border-radius: 8px;
   overflow: hidden;
   background: white;
+}
+
+.analysis-split.analysis-left-collapsed .analysis-pane-collapsible {
+  border-color: transparent;
+}
+
+.analysis-split.analysis-left-collapsed .analysis-pane-collapsible .analysis-pane-header,
+.analysis-split.analysis-left-collapsed .analysis-pane-collapsible .analysis-pane-body {
+  display: none;
 }
 
 .analysis-pane-header {
@@ -1027,6 +1046,27 @@ mark {
 .analysis-pane-header span {
   color: var(--muted);
   white-space: nowrap;
+}
+
+.analysis-pane-toggle {
+  display: grid;
+  place-items: center;
+  position: absolute;
+  top: 10px;
+  right: -13px;
+  z-index: 3;
+  width: 26px;
+  height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: white;
+  color: var(--text);
+  font: 800 18px/1 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+
+.analysis-split.analysis-left-collapsed .analysis-pane-toggle {
+  right: 7px;
 }
 
 .analysis-pane-body {

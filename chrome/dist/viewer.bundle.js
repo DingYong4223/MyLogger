@@ -3296,6 +3296,7 @@
   // viewer.js
   var LOG_ROW_HEIGHT = 24;
   var LOG_OVERSCAN_ROWS = 30;
+  var LOG_CONTEXT_RADIUS = 50;
   var LOG_TEXT_FONT = '12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace';
   var LOG_FIXED_COLUMNS_WIDTH = 48 + 136 + 58 + 150;
   var TOOLS_PAGE_PATH = "mytools.htm";
@@ -3319,6 +3320,7 @@
     timeFilterPoints: [],
     matches: [],
     searchResultRows: [],
+    searchModalCanOpenContext: false,
     markedLines: /* @__PURE__ */ new Set(),
     activeMarkedLine: null,
     activeMatch: -1,
@@ -3917,7 +3919,7 @@
     return tr;
   }
   function shouldOpenContextOnClick(context) {
-    return context === "main" && els.filterInput.value.trim();
+    return context === "main" && els.filterInput.value.trim() || context === "search-modal";
   }
   function scheduleLogRowClick(row) {
     cancelPendingLogRowClick();
@@ -4029,8 +4031,9 @@
   function renderRowsInto(target, rows, activeSearch) {
     const fragment = document.createDocumentFragment();
     target.textContent = "";
+    const rowContext = state.searchModalCanOpenContext ? "search-modal" : "modal";
     for (const row of rows) {
-      fragment.appendChild(createLogRow(row, activeSearch, -1, "modal"));
+      fragment.appendChild(createLogRow(row, activeSearch, -1, rowContext));
     }
     target.appendChild(fragment);
   }
@@ -4110,10 +4113,10 @@
     if (!state.rows.length) return;
     const index = state.rows.indexOf(row);
     state.contextActiveIndex = index >= 0 ? index : Math.max(0, Math.min(state.rows.length - 1, row.sourceLine - 1));
-    els.contextModalMeta.textContent = `${state.fileName || "\u65E5\u5FD7"} \xB7 \u7B2C ${row.sourceLine} \u884C \xB7 \u524D\u540E 30 \u884C`;
+    els.contextModalMeta.textContent = `${state.fileName || "\u65E5\u5FD7"} \xB7 \u7B2C ${row.sourceLine} \u884C \xB7 \u524D\u540E ${LOG_CONTEXT_RADIUS} \u884C`;
     els.contextLogBody.textContent = "";
     els.contextModal.classList.remove("hidden");
-    window.requestAnimationFrame(() => window.requestAnimationFrame(centerContextTargetRow));
+    window.requestAnimationFrame(prepareContextRowsForCentering);
   }
   function closeContextModal() {
     cancelPendingLogRowClick();
@@ -4122,7 +4125,7 @@
   function centerContextTargetRow() {
     const viewportHeight = els.contextTableWrap.clientHeight || els.contextTableWrap.getBoundingClientRect().height || 0;
     if (!viewportHeight) {
-      window.requestAnimationFrame(centerContextTargetRow);
+      window.requestAnimationFrame(prepareContextRowsForCentering);
       return;
     }
     const targetTop = state.contextActiveIndex * LOG_ROW_HEIGHT;
@@ -4130,6 +4133,15 @@
     const maxTop = Math.max(0, state.rows.length * LOG_ROW_HEIGHT - viewportHeight);
     els.contextTableWrap.scrollTop = Math.max(0, Math.min(centeredTop, maxTop));
     renderContextRows();
+  }
+  function prepareContextRowsForCentering() {
+    const viewportHeight = els.contextTableWrap.clientHeight || els.contextTableWrap.getBoundingClientRect().height || 0;
+    if (!viewportHeight) {
+      window.requestAnimationFrame(prepareContextRowsForCentering);
+      return;
+    }
+    renderContextRows();
+    window.requestAnimationFrame(centerContextTargetRow);
   }
   function renderContextRows() {
     const rows = state.rows;
@@ -4172,6 +4184,7 @@
       return;
     }
     state.searchResultRows = rows;
+    state.searchModalCanOpenContext = true;
     els.searchModalTitle.textContent = "\u641C\u7D22\u7ED3\u679C";
     state.modalMatches = [];
     state.modalActiveMatch = -1;
@@ -4191,6 +4204,7 @@
       return;
     }
     state.searchResultRows = rows;
+    state.searchModalCanOpenContext = false;
     els.searchModalTitle.textContent = "\u5DF2\u6807\u8BB0\u884C";
     els.searchModalMeta.textContent = `${state.fileName || "log"} \xB7 ${rows.length.toLocaleString()} \u884C\u5DF2\u6807\u8BB0`;
     state.modalMatches = [];
@@ -4204,6 +4218,7 @@
     els.searchModal.classList.remove("hidden");
   }
   function closeSearchModal() {
+    state.searchModalCanOpenContext = false;
     els.searchModal.classList.add("hidden");
     els.clearMarkedRows.classList.add("hidden");
   }
@@ -4414,7 +4429,7 @@
     }, 0);
     const split = document.createElement("div");
     split.className = "analysis-split";
-    const left = createAnalysisPane("\u65AD\u70B9\u65E5\u5FD7", `${logStrings.length.toLocaleString()} \u6761`);
+    const left = createAnalysisPane("\u8FC7\u6EE4\u65E5\u5FD7", `${logStrings.length.toLocaleString()} \u6761`, { collapsible: true });
     const right = createAnalysisPane("\u76F8\u5173\u65E5\u5FD7", `${totalMatches.toLocaleString()} \u884C`);
     const leftBody = left.querySelector(".analysis-pane-body");
     const rightBody = right.querySelector(".analysis-pane-body");
@@ -4487,9 +4502,10 @@
     state.analysisModalActiveMatch = -1;
     state.analysisModalSearch = trimmedQuery;
   }
-  function createAnalysisPane(title, meta) {
+  function createAnalysisPane(title, meta, options = {}) {
     const pane = document.createElement("section");
     pane.className = "analysis-pane";
+    if (options.collapsible) pane.classList.add("analysis-pane-collapsible");
     const header = document.createElement("div");
     header.className = "analysis-pane-header";
     const titleEl = document.createElement("h3");
@@ -4499,8 +4515,30 @@
     header.append(titleEl, metaEl);
     const body = document.createElement("div");
     body.className = "analysis-pane-body";
-    pane.append(header, body);
+    if (options.collapsible) {
+      const toggle = document.createElement("button");
+      toggle.className = "analysis-pane-toggle";
+      toggle.type = "button";
+      toggle.title = "\u6536\u8D77\u8FC7\u6EE4\u65E5\u5FD7";
+      toggle.setAttribute("aria-label", "\u6536\u8D77\u8FC7\u6EE4\u65E5\u5FD7");
+      toggle.setAttribute("aria-expanded", "true");
+      toggle.textContent = "<";
+      toggle.addEventListener("click", () => toggleAnalysisResultPane(pane, toggle));
+      pane.append(header, body, toggle);
+    } else {
+      pane.append(header, body);
+    }
     return pane;
+  }
+  function toggleAnalysisResultPane(pane, toggle) {
+    const split = pane.closest(".analysis-split");
+    if (!split) return;
+    const collapsed = !split.classList.contains("analysis-left-collapsed");
+    split.classList.toggle("analysis-left-collapsed", collapsed);
+    toggle.textContent = collapsed ? ">" : "<";
+    toggle.title = collapsed ? "\u5C55\u5F00\u8FC7\u6EE4\u65E5\u5FD7" : "\u6536\u8D77\u8FC7\u6EE4\u65E5\u5FD7";
+    toggle.setAttribute("aria-label", collapsed ? "\u5C55\u5F00\u8FC7\u6EE4\u65E5\u5FD7" : "\u6536\u8D77\u8FC7\u6EE4\u65E5\u5FD7");
+    toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
   }
   function appendHighlightedText(target, text, query, matches) {
     if (!query) {
@@ -4754,6 +4792,9 @@
   els.openSearchResults.addEventListener("click", openSearchResults);
   els.openMarkedRows.addEventListener("click", openMarkedRows);
   els.closeSearchModal.addEventListener("click", closeSearchModal);
+  els.contextModal.addEventListener("click", (event) => {
+    if (event.target === els.contextModal) closeContextModal();
+  });
   els.closeContextModal.addEventListener("click", closeContextModal);
   els.closeAnalysisModal.addEventListener("click", closeAnalysisModal);
   els.closeBreakpointsModal.addEventListener("click", closeBreakpointsModal);
