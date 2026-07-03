@@ -3854,6 +3854,7 @@
     const scrollTop = els.tableWrap.scrollTop;
     const start = Math.max(0, Math.floor(scrollTop / LOG_ROW_HEIGHT) - LOG_OVERSCAN_ROWS);
     const end = Math.min(rows.length, Math.ceil((scrollTop + viewportHeight) / LOG_ROW_HEIGHT) + LOG_OVERSCAN_ROWS);
+    const activeHighlight = getMainRowHighlight();
     state.virtualStart = start;
     state.virtualEnd = end;
     const fragment = document.createDocumentFragment();
@@ -3862,13 +3863,25 @@
       fragment.appendChild(spacerRow(start * LOG_ROW_HEIGHT));
     }
     for (let index = start; index < end; index += 1) {
-      fragment.appendChild(createLogRow(rows[index], state.activeSearch, index, "main"));
+      fragment.appendChild(createLogRow(rows[index], activeHighlight, index, "main"));
     }
     const bottomRows = rows.length - end;
     if (bottomRows > 0) {
       fragment.appendChild(spacerRow(bottomRows * LOG_ROW_HEIGHT));
     }
     els.logBody.appendChild(fragment);
+  }
+  function getMainRowHighlight() {
+    if (state.activeSearch) {
+      return { query: state.activeSearch, regex: false, caseSensitive: false };
+    }
+    const query = els.filterInput.value.trim();
+    if (!query) return "";
+    return {
+      query,
+      regex: els.filterRegex.checked,
+      caseSensitive: els.filterCase.checked
+    };
   }
   function spacerRow(height) {
     const tr = document.createElement("tr");
@@ -3988,15 +4001,40 @@
     }
     return td;
   }
-  function highlight(value, query) {
+  function highlight(value, highlightSpec) {
     const span = document.createElement("span");
     const text = value || "";
+    const spec = normalizeHighlightSpec(highlightSpec);
+    const query = spec.query;
     if (!query) {
       span.textContent = text;
       return span;
     }
-    const lowerText = text.toLowerCase();
-    const lowerQuery = query.toLowerCase();
+    if (spec.regex) {
+      try {
+        const flags = spec.caseSensitive ? "g" : "gi";
+        const regex = new RegExp(query, flags);
+        let cursor2 = 0;
+        let match = regex.exec(text);
+        while (match) {
+          const matchedText = match[0];
+          if (!matchedText) break;
+          span.append(document.createTextNode(text.slice(cursor2, match.index)));
+          const mark = document.createElement("mark");
+          mark.textContent = matchedText;
+          span.append(mark);
+          cursor2 = match.index + matchedText.length;
+          match = regex.exec(text);
+        }
+        span.append(document.createTextNode(text.slice(cursor2)));
+        return span;
+      } catch {
+        span.textContent = text;
+        return span;
+      }
+    }
+    const lowerText = spec.caseSensitive ? text : text.toLowerCase();
+    const lowerQuery = spec.caseSensitive ? query : query.toLowerCase();
     let cursor = 0;
     while (true) {
       const index = lowerText.indexOf(lowerQuery, cursor);
@@ -4009,6 +4047,17 @@
     }
     span.append(document.createTextNode(text.slice(cursor)));
     return span;
+  }
+  function normalizeHighlightSpec(highlightSpec) {
+    if (!highlightSpec) return { query: "", regex: false, caseSensitive: false };
+    if (typeof highlightSpec === "string") {
+      return { query: highlightSpec, regex: false, caseSensitive: false };
+    }
+    return {
+      query: highlightSpec.query || "",
+      regex: Boolean(highlightSpec.regex),
+      caseSensitive: Boolean(highlightSpec.caseSensitive)
+    };
   }
   function clearSearchState() {
     state.matches = [];
