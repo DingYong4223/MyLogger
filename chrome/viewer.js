@@ -16,6 +16,10 @@ const state = {
   visibleRows: [],
   selectedLevels: new Set(),
   tagFilters: [""],
+  draftTagFilters: [""],
+  timeFilterStart: null,
+  timeFilterEnd: null,
+  timeFilterPoints: [],
   matches: [],
   searchResultRows: [],
   markedLines: new Set(),
@@ -56,6 +60,12 @@ const els = {
   filterInput: document.getElementById("filterInput"),
   filterRegex: document.getElementById("filterRegex"),
   filterCase: document.getElementById("filterCase"),
+  timeFilterHeader: document.getElementById("timeFilterHeader"),
+  timeFilterPopover: document.getElementById("timeFilterPopover"),
+  timeFilterStart: document.getElementById("timeFilterStart"),
+  timeFilterEnd: document.getElementById("timeFilterEnd"),
+  confirmTimeFilter: document.getElementById("confirmTimeFilter"),
+  clearTimeFilter: document.getElementById("clearTimeFilter"),
   levelFilterHeader: document.getElementById("levelFilterHeader"),
   levelFilterPopover: document.getElementById("levelFilterPopover"),
   tagFilterHeader: document.getElementById("tagFilterHeader"),
@@ -130,6 +140,7 @@ function parseLine(text, index) {
       tag: "",
       message: body,
       raw: text,
+      timeValue: null,
       searchable: text,
     };
   }
@@ -144,8 +155,16 @@ function parseLine(text, index) {
     pid,
     tid,
     raw: text,
+    timeValue: parseLogTimeValue(time),
     searchable: `${sourceLine} ${time} ${pid} ${tid} ${level} ${tag} ${message}`,
   };
+}
+
+function parseLogTimeValue(value) {
+  const match = value.match(/^(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})\.(\d{3})$/);
+  if (!match) return null;
+  const [, month, day, hour, minute, second, millisecond] = match.map(Number);
+  return Date.UTC(2000, month - 1, day, hour, minute, second, millisecond);
 }
 
 async function openFile(file) {
@@ -156,6 +175,11 @@ async function openFile(file) {
   state.rows = text.split(/\r?\n/).map(parseLine);
   state.selectedLevels.clear();
   state.tagFilters = [""];
+  state.draftTagFilters = [""];
+  state.timeFilterStart = null;
+  state.timeFilterEnd = null;
+  updateTimeFilterOptions();
+  updateTimeFilterHeader();
   renderTagFilterInputs();
   updateTagFilterHeader();
   state.markedLines.clear();
@@ -223,7 +247,10 @@ function applyFilter() {
   state.visibleRows = state.rows.filter((row) => {
     if (matcher && !matcher(row.searchable)) return false;
     if (hasLevelFilter && !state.selectedLevels.has(row.level || "")) return false;
-    return !tagNeedles.length || tagNeedles.some((tagNeedle) => (row.tag || "").trim().toLowerCase() === tagNeedle);
+    if (tagNeedles.length && !tagNeedles.some((tagNeedle) => (row.tag || "").trim().toLowerCase() === tagNeedle)) return false;
+    if (state.timeFilterStart != null && (row.timeValue == null || row.timeValue < state.timeFilterStart)) return false;
+    if (state.timeFilterEnd != null && (row.timeValue == null || row.timeValue > state.timeFilterEnd)) return false;
+    return true;
   });
   if (state.activeMarkedLine != null && !state.visibleRows.some((row) => row.sourceLine === state.activeMarkedLine)) {
     state.activeMarkedLine = null;
@@ -306,6 +333,94 @@ function closeLevelFilterPopover() {
   els.levelFilterPopover.classList.add("hidden");
 }
 
+function updateTimeFilterOptions() {
+  const values = state.rows.map((row) => row.timeValue).filter((value) => Number.isFinite(value));
+  els.timeFilterStart.textContent = "";
+  els.timeFilterEnd.textContent = "";
+  if (!values.length) {
+    state.timeFilterPoints = [];
+    appendTimeOption(els.timeFilterStart, "", "无时间");
+    appendTimeOption(els.timeFilterEnd, "", "无时间");
+    return;
+  }
+
+  const sortedValues = values.slice().sort((left, right) => left - right);
+  state.timeFilterPoints = Array.from(new Set(Array.from({ length: 21 }, (_, index) => {
+    const valueIndex = Math.round((sortedValues.length - 1) * index / 20);
+    return Math.floor(sortedValues[valueIndex] / 1000) * 1000;
+  })));
+
+  appendTimeOption(els.timeFilterStart, "", "不限");
+  appendTimeOption(els.timeFilterEnd, "", "不限");
+  for (const value of state.timeFilterPoints) {
+    const label = formatLogTimeValue(value);
+    appendTimeOption(els.timeFilterStart, String(value), label);
+    appendTimeOption(els.timeFilterEnd, String(value), label);
+  }
+}
+
+function appendTimeOption(select, value, label) {
+  const option = document.createElement("option");
+  option.value = value;
+  option.textContent = label;
+  select.append(option);
+}
+
+function formatLogTimeValue(value) {
+  const date = new Date(value);
+  const pad = (number, size = 2) => String(number).padStart(size, "0");
+  return `${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
+}
+
+function updateTimeFilterHeader() {
+  const active = state.timeFilterStart != null || state.timeFilterEnd != null;
+  els.timeFilterHeader.textContent = active ? "时间(1)" : "时间";
+  els.timeFilterHeader.classList.toggle("active", active);
+}
+
+function toggleTimeFilterPopover(event) {
+  event.stopPropagation();
+  if (els.timeFilterPopover.classList.contains("hidden")) {
+    updateTimeFilterOptions();
+    els.timeFilterStart.value = state.timeFilterStart == null ? "" : String(Math.floor(state.timeFilterStart / 1000) * 1000);
+    els.timeFilterEnd.value = state.timeFilterEnd == null ? "" : String(Math.floor(state.timeFilterEnd / 1000) * 1000);
+    positionTimeFilterPopover();
+    els.timeFilterPopover.classList.remove("hidden");
+  } else {
+    closeTimeFilterPopover();
+  }
+}
+
+function positionTimeFilterPopover() {
+  const rect = els.timeFilterHeader.getBoundingClientRect();
+  els.timeFilterPopover.style.left = `${Math.max(8, rect.left)}px`;
+  els.timeFilterPopover.style.top = `${rect.bottom + 4}px`;
+}
+
+function closeTimeFilterPopover() {
+  els.timeFilterPopover.classList.add("hidden");
+}
+
+function confirmTimeFilter() {
+  const start = els.timeFilterStart.value ? Number(els.timeFilterStart.value) : null;
+  const end = els.timeFilterEnd.value ? Number(els.timeFilterEnd.value) : null;
+  state.timeFilterStart = start != null && end != null ? Math.min(start, end) : start;
+  const normalizedEnd = start != null && end != null ? Math.max(start, end) : end;
+  state.timeFilterEnd = normalizedEnd == null ? null : normalizedEnd + 999;
+  updateTimeFilterHeader();
+  applyFilter();
+  closeTimeFilterPopover();
+}
+
+function clearTimeFilter() {
+  state.timeFilterStart = null;
+  state.timeFilterEnd = null;
+  els.timeFilterStart.value = "";
+  els.timeFilterEnd.value = "";
+  updateTimeFilterHeader();
+  applyFilter();
+}
+
 function updateTagFilterHeader() {
   const count = getActiveTagFilters().length;
   els.tagFilterHeader.textContent = count ? `Tag(${count})` : "Tag";
@@ -315,6 +430,7 @@ function updateTagFilterHeader() {
 function toggleTagFilterPopover(event) {
   event.stopPropagation();
   if (els.tagFilterPopover.classList.contains("hidden")) {
+    state.draftTagFilters = state.tagFilters.slice();
     renderTagFilterInputs();
     positionTagFilterPopover();
     els.tagFilterPopover.classList.remove("hidden");
@@ -340,11 +456,11 @@ function getActiveTagFilters() {
 
 function renderTagFilterInputs() {
   els.tagFilterInputs.textContent = "";
-  if (!state.tagFilters.length) {
-    state.tagFilters = [""];
+  if (!state.draftTagFilters.length) {
+    state.draftTagFilters = [""];
   }
 
-  state.tagFilters.forEach((value, index) => {
+  state.draftTagFilters.forEach((value, index) => {
     const input = document.createElement("input");
     input.type = "search";
     input.placeholder = "输入 Tag";
@@ -358,18 +474,24 @@ function renderTagFilterInputs() {
 }
 
 function updateTagFilterAt(index, value) {
-  state.tagFilters[index] = value;
-  updateTagFilterHeader();
-  applyFilter();
+  state.draftTagFilters[index] = value;
 }
 
 function addTagFilter() {
-  state.tagFilters.push("");
+  state.draftTagFilters.push("");
   renderTagFilterInputs();
   window.requestAnimationFrame(() => els.tagFilterInputs.querySelector("input:last-child")?.focus());
 }
 
+function confirmTagFilter() {
+  state.tagFilters = state.draftTagFilters.slice();
+  updateTagFilterHeader();
+  applyFilter();
+  closeTagFilterPopover();
+}
+
 function clearTagFilter() {
+  state.draftTagFilters = [""];
   state.tagFilters = [""];
   renderTagFilterInputs();
   updateTagFilterHeader();
@@ -1386,6 +1508,16 @@ els.viewBreakpointsFile.addEventListener("click", openBreakpointsModal);
 els.filterInput.addEventListener("input", scheduleFilter);
 els.filterRegex.addEventListener("change", applyFilter);
 els.filterCase.addEventListener("change", applyFilter);
+els.timeFilterHeader.addEventListener("click", toggleTimeFilterPopover);
+els.timeFilterHeader.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  toggleTimeFilterPopover(event);
+});
+els.timeFilterPopover.addEventListener("click", (event) => event.stopPropagation());
+els.confirmTimeFilter.addEventListener("click", confirmTimeFilter);
+els.clearTimeFilter.addEventListener("click", clearTimeFilter);
+document.addEventListener("click", closeTimeFilterPopover);
 els.levelFilterHeader.addEventListener("click", toggleLevelFilterPopover);
 els.levelFilterHeader.addEventListener("keydown", (event) => {
   if (event.key !== "Enter" && event.key !== " ") return;
@@ -1402,7 +1534,7 @@ els.tagFilterHeader.addEventListener("keydown", (event) => {
 });
 els.tagFilterPopover.addEventListener("click", (event) => event.stopPropagation());
 els.addTagFilter.addEventListener("click", addTagFilter);
-els.confirmTagFilter.addEventListener("click", closeTagFilterPopover);
+els.confirmTagFilter.addEventListener("click", confirmTagFilter);
 els.clearTagFilter.addEventListener("click", clearTagFilter);
 document.addEventListener("click", closeTagFilterPopover);
 els.searchInput.addEventListener("input", markSearchDirty);
@@ -1427,6 +1559,7 @@ els.modalNextMatch.addEventListener("click", () => goModalMatch(1));
 els.prevMarkedLine.addEventListener("click", () => goMarkedLine(-1));
 els.nextMarkedLine.addEventListener("click", () => goMarkedLine(1));
 els.tableWrap.addEventListener("scroll", scheduleVirtualRowsRender);
+els.tableWrap.addEventListener("scroll", closeTimeFilterPopover);
 els.tableWrap.addEventListener("scroll", closeLevelFilterPopover);
 els.tableWrap.addEventListener("scroll", closeTagFilterPopover);
 els.contextTableWrap.addEventListener("scroll", scheduleContextRowsRender);

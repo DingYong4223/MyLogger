@@ -479,6 +479,66 @@ input[type="url"] {
   color: var(--time);
 }
 
+.time-filter-header {
+  cursor: pointer;
+  user-select: none;
+}
+
+.time-filter-header.active {
+  color: var(--blue);
+}
+
+.time-filter-popover {
+  position: fixed;
+  z-index: 20;
+  display: grid;
+  gap: 10px;
+  min-width: 280px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: white;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.16);
+  color: var(--text);
+}
+
+.time-filter-popover.hidden {
+  display: none;
+}
+
+.time-filter-popover label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font: 12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.time-filter-popover select {
+  height: 34px;
+  min-width: 240px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: white;
+  color: var(--text);
+}
+
+.time-filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.time-filter-actions button {
+  min-width: 42px;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  font: 600 12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+
 .level-col {
   min-width: 58px;
   text-align: center;

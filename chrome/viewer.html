@@ -102,7 +102,7 @@
               <thead>
                 <tr>
                   <th class="line-col">行号</th>
-                  <th class="time-col">时间</th>
+                  <th id="timeFilterHeader" class="time-col time-filter-header" tabindex="0">时间</th>
                   <th id="levelFilterHeader" class="level-col level-filter-header" tabindex="0">级别</th>
                   <th id="tagFilterHeader" class="tag-col tag-filter-header" tabindex="0">Tag</th>
                   <th class="message-col">内容</th>
@@ -230,6 +230,20 @@
         <span class="tag-filter-action-spacer"></span>
         <button id="confirmTagFilter" type="button">确定</button>
         <button id="clearTagFilter" type="button">清除</button>
+      </div>
+    </div>
+    <div id="timeFilterPopover" class="time-filter-popover hidden">
+      <label>
+        起点
+        <select id="timeFilterStart"></select>
+      </label>
+      <label>
+        终点
+        <select id="timeFilterEnd"></select>
+      </label>
+      <div class="time-filter-actions">
+        <button id="confirmTimeFilter" type="button">确定</button>
+        <button id="clearTimeFilter" type="button">清除</button>
       </div>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
