@@ -3355,6 +3355,7 @@
     breakpointsMeta: document.getElementById("breakpointsMeta"),
     saveFiltered: document.getElementById("saveFiltered"),
     filterInput: document.getElementById("filterInput"),
+    viewFilterResults: document.getElementById("viewFilterResults"),
     filterRegex: document.getElementById("filterRegex"),
     filterCase: document.getElementById("filterCase"),
     timeFilterHeader: document.getElementById("timeFilterHeader"),
@@ -3381,7 +3382,6 @@
     filterLogsButton: document.getElementById("filterLogsButton"),
     analysisStatusButton: document.getElementById("analysisStatusButton"),
     analysisEndpoint: document.getElementById("analysisEndpoint"),
-    analysisResultText: document.getElementById("analysisResultText"),
     openToolsPage: document.getElementById("openToolsPage"),
     analysisBreakpointsPath: document.getElementById("analysisBreakpointsPath"),
     analysisLogPath: document.getElementById("analysisLogPath"),
@@ -3490,7 +3490,7 @@
     els.tableWrap.classList.remove("hidden");
     updateLevelFilterOptions();
     applyFilter();
-    els.analyzeButton.disabled = false;
+    updateAnalyzeButtonState();
   }
   async function openBreakpointsFile(file) {
     if (!file.name.toLowerCase().endsWith(".json")) {
@@ -3513,7 +3513,7 @@
     state.breakpointsContent = text;
     els.breakpointsMeta.textContent = `\u65AD\u70B9\u6587\u4EF6\uFF1A${state.breakpointsFilePath}`;
     els.analysisBreakpointsPath.textContent = state.breakpointsFilePath;
-    els.analyzeButton.disabled = false;
+    updateAnalyzeButtonState();
     els.viewBreakpointsFile.classList.remove("hidden");
     showToast(`\u5DF2\u52A0\u8F7D\u65AD\u70B9\u6587\u4EF6\uFF1A${file.name}`);
   }
@@ -3525,8 +3525,11 @@
     els.analysisBreakpointsPath.textContent = "\u672A\u9009\u62E9\u65AD\u70B9\u6587\u4EF6\u3002";
     els.breakpointsModalMeta.textContent = "\u672A\u9009\u62E9\u65AD\u70B9\u6587\u4EF6\u3002";
     els.breakpointsModalBody.textContent = "";
-    els.analyzeButton.disabled = !state.filePath;
+    updateAnalyzeButtonState();
     els.viewBreakpointsFile.classList.add("hidden");
+  }
+  function updateAnalyzeButtonState() {
+    els.analyzeButton.disabled = !state.breakpointsContent;
   }
   function toggleAnalysisPanel() {
     const collapsed = !els.content.classList.contains("analysis-collapsed");
@@ -3539,8 +3542,8 @@
   }
   function applyFilter() {
     window.clearTimeout(filterTimer);
-    const filter = els.filterInput.value;
-    const matcher = createMatcher(filter, {
+    const filterRules = getFilterRules();
+    const matcher = createMatcher(filterRules, {
       regex: els.filterRegex.checked,
       caseSensitive: els.filterCase.checked
     });
@@ -3826,22 +3829,22 @@
     window.clearTimeout(filterTimer);
     filterTimer = window.setTimeout(applyFilter, 500);
   }
-  function createMatcher(input, options) {
-    if (!input) return null;
+  function createMatcher(rules, options) {
+    if (!rules.length) return null;
     if (options.regex) {
       try {
         const flags = options.caseSensitive ? "" : "i";
-        const regex = new RegExp(input, flags);
-        return (value) => regex.test(value);
+        const regexes = rules.map((rule) => new RegExp(rule, flags));
+        return (value) => regexes.some((regex) => regex.test(value));
       } catch (error) {
         showToast(`\u6B63\u5219\u8868\u8FBE\u5F0F\u65E0\u6548\uFF1A${error.message}`);
         return null;
       }
     }
-    const needle = options.caseSensitive ? input : input.toLowerCase();
+    const needles = options.caseSensitive ? rules : rules.map((rule) => rule.toLowerCase());
     return (value) => {
       const haystack = options.caseSensitive ? value : value.toLowerCase();
-      return haystack.includes(needle);
+      return needles.some((needle) => haystack.includes(needle));
     };
   }
   function renderRows() {
@@ -3854,7 +3857,7 @@
     const scrollTop = els.tableWrap.scrollTop;
     const start = Math.max(0, Math.floor(scrollTop / LOG_ROW_HEIGHT) - LOG_OVERSCAN_ROWS);
     const end = Math.min(rows.length, Math.ceil((scrollTop + viewportHeight) / LOG_ROW_HEIGHT) + LOG_OVERSCAN_ROWS);
-    const activeHighlight = getMainRowHighlight();
+    const filterRules = getFilterRules();
     state.virtualStart = start;
     state.virtualEnd = end;
     const fragment = document.createDocumentFragment();
@@ -3863,7 +3866,7 @@
       fragment.appendChild(spacerRow(start * LOG_ROW_HEIGHT));
     }
     for (let index = start; index < end; index += 1) {
-      fragment.appendChild(createLogRow(rows[index], activeHighlight, index, "main"));
+      fragment.appendChild(createLogRow(rows[index], getMainRowHighlight(rows[index], filterRules), index, "main"));
     }
     const bottomRows = rows.length - end;
     if (bottomRows > 0) {
@@ -3871,17 +3874,36 @@
     }
     els.logBody.appendChild(fragment);
   }
-  function getMainRowHighlight() {
+  function getMainRowHighlight(row, filterRules) {
     if (state.activeSearch) {
       return { query: state.activeSearch, regex: false, caseSensitive: false };
     }
-    const query = els.filterInput.value.trim();
-    if (!query) return "";
+    const matchedRule = findMatchingFilterRule(row, filterRules);
+    if (!matchedRule) return "";
     return {
-      query,
+      query: matchedRule,
       regex: els.filterRegex.checked,
       caseSensitive: els.filterCase.checked
     };
+  }
+  function getFilterRules() {
+    return els.filterInput.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
+  }
+  function findMatchingFilterRule(row, filterRules) {
+    if (!filterRules.length) return "";
+    if (els.filterRegex.checked) {
+      const flags = els.filterCase.checked ? "" : "i";
+      for (const rule of filterRules) {
+        try {
+          if (new RegExp(rule, flags).test(row.searchable)) return rule;
+        } catch {
+          return "";
+        }
+      }
+      return "";
+    }
+    const haystack = els.filterCase.checked ? row.searchable : row.searchable.toLowerCase();
+    return filterRules.find((rule) => haystack.includes(els.filterCase.checked ? rule : rule.toLowerCase())) || "";
   }
   function spacerRow(height) {
     const tr = document.createElement("tr");
@@ -4523,7 +4545,11 @@
           lineNumber.textContent = item && item.lineNumber ? String(item.lineNumber) : "-";
           const line = document.createElement("pre");
           line.className = "analysis-log-line";
-          appendHighlightedText(line, lineText, trimmedQuery, matches);
+          appendHighlightedText(line, lineText, trimmedQuery || group.logString || "", matches, {
+            regex: !trimmedQuery && els.filterRegex.checked,
+            caseSensitive: !trimmedQuery && els.filterCase.checked,
+            trackMatches: Boolean(trimmedQuery)
+          });
           row.append(lineNumber, line);
           row.title = "\u5355\u51FB\u67E5\u770B\u4E0A\u4E0B\u6587\uFF0C\u53CC\u51FB\u590D\u5236\u5F53\u524D\u884C";
           row.addEventListener("click", () => scheduleAnalysisLogRowClick(item && item.lineNumber));
@@ -4589,13 +4615,39 @@
     toggle.setAttribute("aria-label", collapsed ? "\u5C55\u5F00\u8FC7\u6EE4\u65E5\u5FD7" : "\u6536\u8D77\u8FC7\u6EE4\u65E5\u5FD7");
     toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
   }
-  function appendHighlightedText(target, text, query, matches) {
+  function appendHighlightedText(target, text, query, matches, options = {}) {
     if (!query) {
       target.textContent = text;
       return;
     }
-    const lowerText = text.toLowerCase();
-    const lowerQuery = query.toLowerCase();
+    const trackMatches = options.trackMatches !== false;
+    if (options.regex) {
+      try {
+        const flags = options.caseSensitive ? "g" : "gi";
+        const regex = new RegExp(query, flags);
+        let cursor2 = 0;
+        let match = regex.exec(text);
+        while (match) {
+          const matchedText = match[0];
+          if (!matchedText) break;
+          target.append(document.createTextNode(text.slice(cursor2, match.index)));
+          const mark = document.createElement("mark");
+          mark.className = "analysis-modal-match";
+          mark.textContent = matchedText;
+          if (trackMatches) matches.push(mark);
+          target.append(mark);
+          cursor2 = match.index + matchedText.length;
+          match = regex.exec(text);
+        }
+        target.append(document.createTextNode(text.slice(cursor2)));
+        return;
+      } catch {
+        target.textContent = text;
+        return;
+      }
+    }
+    const lowerText = options.caseSensitive ? text : text.toLowerCase();
+    const lowerQuery = options.caseSensitive ? query : query.toLowerCase();
     let cursor = 0;
     while (true) {
       const index = lowerText.indexOf(lowerQuery, cursor);
@@ -4604,7 +4656,7 @@
       const mark = document.createElement("mark");
       mark.className = "analysis-modal-match";
       mark.textContent = text.slice(index, index + query.length);
-      matches.push(mark);
+      if (trackMatches) matches.push(mark);
       target.append(mark);
       cursor = index + query.length;
     }
@@ -4705,22 +4757,23 @@
       });
       const text = await response.text();
       const resultText = text || `HTTP ${response.status}`;
-      els.analysisResultText.value = extractBreakpointLogText(resultText);
+      els.filterInput.value = extractBreakpointLogText(resultText);
+      applyFilter();
       showToast("\u5DF2\u83B7\u53D6\u65AD\u70B9\u65E5\u5FD7\u3002");
     } catch (error) {
       showToast(`\u5206\u6790\u5931\u8D25\uFF1A${error.message}`);
     }
   }
   function filterLogsByBreakpointText() {
-    const logStrings = els.analysisResultText.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
+    const logStrings = getFilterRules();
     if (!logStrings.length) {
-      showToast("\u8BF7\u5148\u83B7\u53D6\u6216\u8F93\u5165\u65AD\u70B9\u65E5\u5FD7\u3002");
+      showToast("\u8BF7\u5148\u83B7\u53D6\u6216\u8F93\u5165\u8FC7\u6EE4\u5173\u952E\u5B57\u3002");
       return;
     }
     const matchedLogs = logStrings.map((logString) => {
       const matches = [];
       for (const row of state.rows) {
-        if (row.raw.includes(logString)) {
+        if (filterRuleMatchesRow(logString, row)) {
           matches.push({
             lineNumber: row.sourceLine,
             line: row.raw
@@ -4737,6 +4790,19 @@
     }, null, 2);
     const totalMatches = matchedLogs.reduce((sum, group) => sum + group.matches.length, 0);
     openAnalysisModal(resultText, `\u65E5\u5FD7\u7B5B\u9009 \xB7 ${logStrings.length.toLocaleString()} \u6761\u89C4\u5219 \xB7 ${totalMatches.toLocaleString()} \u884C`);
+  }
+  function filterRuleMatchesRow(rule, row) {
+    if (els.filterRegex.checked) {
+      try {
+        const flags = els.filterCase.checked ? "" : "i";
+        return new RegExp(rule, flags).test(row.searchable);
+      } catch {
+        return false;
+      }
+    }
+    const haystack = els.filterCase.checked ? row.searchable : row.searchable.toLowerCase();
+    const needle = els.filterCase.checked ? rule : rule.toLowerCase();
+    return haystack.includes(needle);
   }
   function extractBreakpointLogText(resultText) {
     try {
@@ -4837,6 +4903,7 @@
   els.analysisEndpoint.addEventListener("input", scheduleAnalysisServiceCheck);
   els.analysisStatusButton.addEventListener("click", checkAnalysisService);
   els.filterLogsButton.addEventListener("click", filterLogsByBreakpointText);
+  els.viewFilterResults.addEventListener("click", filterLogsByBreakpointText);
   els.openToolsPage.addEventListener("click", openToolsPage);
   els.openSearchResults.addEventListener("click", openSearchResults);
   els.openMarkedRows.addEventListener("click", openMarkedRows);

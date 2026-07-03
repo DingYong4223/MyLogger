@@ -281,22 +281,6 @@ input[type="url"] {
   min-width: 0;
 }
 
-.analysis-result-field textarea {
-  width: 100%;
-  min-width: 0;
-  min-height: 220px;
-  max-height: calc(100vh - 430px);
-  resize: vertical;
-  overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 10px;
-  background: #0f172a;
-  color: #dbeafe;
-  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  white-space: pre;
-}
-
 .analysis-tools-title {
   display: block;
   width: 100%;
@@ -610,6 +594,52 @@ input[type="url"] {
   background: white;
   box-shadow: 0 10px 22px rgba(15, 23, 42, 0.16);
   color: var(--text);
+}
+
+.filter-input {
+  width: 320px;
+  min-width: 260px;
+  min-height: 46px;
+  max-height: 92px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  resize: vertical;
+  overflow: auto;
+  font: inherit;
+  color: var(--text);
+}
+
+.filter-input-row {
+  position: relative;
+  min-height: 46px;
+}
+
+.filter-input-row .filter-input {
+  padding-right: 54px;
+}
+
+.filter-view-button {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  z-index: 2;
+  height: 22px;
+  min-height: 0;
+  padding: 1px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  box-shadow: none;
+  transform: translateY(-50%);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.filter-view-button:hover {
+  color: #1d4ed8;
 }
 
 .time-filter-popover.hidden {

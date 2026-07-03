@@ -35,7 +35,10 @@
       <section class="toolbar" aria-label="日志控制">
         <label>
           过滤
-          <input id="filterInput" type="search" placeholder="关键字或正则" />
+          <div class="filter-input-row">
+            <textarea id="filterInput" class="filter-input" rows="2" spellcheck="false" placeholder="关键字或正则；多行按任意一行命中过滤"></textarea>
+            <button id="viewFilterResults" class="filter-view-button" type="button">查看</button>
+          </div>
         </label>
         <label class="checkbox">
           <input id="filterRegex" type="checkbox" />
@@ -85,12 +88,8 @@
             </div>
             <div class="analysis-actions">
               <button id="analyzeButton" class="button primary" type="button" disabled>获取断点日志</button>
-              <button id="filterLogsButton" class="button" type="button">日志筛选</button>
+              <button id="filterLogsButton" class="button" type="button">查看筛查结果</button>
             </div>
-            <label class="analysis-result-field">
-              过滤日志列表
-              <textarea id="analysisResultText" spellcheck="false" placeholder="获取到的断点日志会显示在这里，也可以手动编辑。"></textarea>
-            </label>
             <button id="openToolsPage" class="analysis-tools-title" type="button">实用工具</button>
           </div>
           <button id="toggleAnalysisPanel" class="analysis-toggle" type="button" aria-expanded="false" title="展开后台分析" aria-label="展开后台分析">&gt;</button>
@@ -280,15 +279,15 @@
           </section>
           <section>
             <h3>断点日志筛查</h3>
-            <p>“断点日志”文本框可手动编辑。点击“日志筛选”后，会用文本框中的每一行作为规则，在当前日志中筛查相关日志，并在“筛查结果”子窗口中展示。</p>
+            <p>顶部“过滤”支持多行输入，每一行都是一条过滤规则，多行之间按“任意一条命中”过滤主窗口日志。勾选“正则”时，每一行会作为独立正则参与匹配。“查看筛查结果”用于打开左右分屏明细窗口。</p>
           </section>
           <section>
             <h3>本地服务</h3>
-            <p>后台分析服务地址默认为 `http://127.0.0.1:7878/analyze`。服务状态绿灯表示本地服务可用，红灯表示不可用。点击“获取断点日志”时，插件会将断点 JSON 内容传给后台；后台根据 JSON 中的断点信息对比本地源码，找到断点对应源码行中的日志字符串并返回。点击“日志筛选”时，会使用这些日志字符串在当前日志文件中筛选出所有相关日志。</p>
+            <p>后台分析服务地址默认为 `http://127.0.0.1:7878/analyze`。服务状态绿灯表示本地服务可用，红灯表示不可用。点击“获取断点日志”时，插件会将断点 JSON 内容传给后台；后台根据 JSON 中的断点信息对比本地源码，找到断点对应源码行中的日志字符串并返回，并自动填入顶部“过滤”刷新主窗口。</p>
           </section>
           <section>
             <h3>实用工具</h3>
-            <p>展开左侧“后台分析”后，点击“断点日志”下方的“实用工具”可打开随插件打包的本地工具页。该页面包含 JSON 格式化、参数处理、二维码生成等常用小工具，可在不离开插件环境的情况下辅助处理日志和调试文本。</p>
+            <p>展开左侧“后台分析”后，点击“实用工具”可打开随插件打包的本地工具页。该页面包含 JSON 格式化、参数处理、二维码生成等常用小工具，可在不离开插件环境的情况下辅助处理日志和调试文本。</p>
           </section>
         </div>
       </section>
