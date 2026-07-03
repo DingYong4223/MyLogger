@@ -4089,6 +4089,7 @@
       button.disabled = !hasMarkedRows;
       button.classList.toggle("available", hasMarkedRows);
     }
+    els.openMarkedRows.disabled = state.markedLines.size === 0;
   }
   function runSearch() {
     const query = els.searchInput.value.trim();

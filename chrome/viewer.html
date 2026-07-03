@@ -54,7 +54,7 @@
         <button id="nextMarkedLine" class="button compact mark-jump" type="button" disabled title="跳转到下一个标记">↓</button>
         <span id="matchStatus" class="status">0 个匹配</span>
         <span class="toolbar-spacer"></span>
-        <button id="openMarkedRows" class="button compact" type="button">全部标记</button>
+        <button id="openMarkedRows" class="button compact" type="button" disabled>全部标记</button>
       </section>
 
       <section id="content" class="content analysis-collapsed">
@@ -284,7 +284,11 @@
           </section>
           <section>
             <h3>本地服务</h3>
-            <p>后台分析服务地址默认为 `http://127.0.0.1:7878/analyze`。服务状态绿灯表示本地服务可用，红灯表示不可用。</p>
+            <p>后台分析服务地址默认为 `http://127.0.0.1:7878/analyze`。服务状态绿灯表示本地服务可用，红灯表示不可用。点击“获取断点日志”时，插件会将断点 JSON 内容传给后台；后台根据 JSON 中的断点信息对比本地源码，找到断点对应源码行中的日志字符串并返回。点击“日志筛选”时，会使用这些日志字符串在当前日志文件中筛选出所有相关日志。</p>
+          </section>
+          <section>
+            <h3>实用工具</h3>
+            <p>展开左侧“后台分析”后，点击“断点日志”下方的“实用工具”可打开随插件打包的本地工具页。该页面包含 JSON 格式化、参数处理、二维码生成等常用小工具，可在不离开插件环境的情况下辅助处理日志和调试文本。</p>
           </section>
         </div>
       </section>
