@@ -46,8 +46,6 @@
           <input id="searchInput" type="search" placeholder="在当前结果中查找" />
         </label>
         <button id="openSearchResults" class="button compact" type="button">搜索</button>
-        <button id="prevMatch" class="button compact" type="button">上一个</button>
-        <button id="nextMatch" class="button compact" type="button">下一个</button>
         <button id="prevMarkedLine" class="button compact mark-jump" type="button" disabled title="跳转到上一个标记">↑</button>
         <button id="nextMarkedLine" class="button compact mark-jump" type="button" disabled title="跳转到下一个标记">↓</button>
         <span id="matchStatus" class="status">0 个匹配</span>
@@ -64,9 +62,12 @@
           </label>
           <div class="analysis-path-field">
             <span>断点文件</span>
-            <label class="path-display path-display-button" for="breakpointsInput">
-              <span id="analysisBreakpointsPath">未选择断点文件。</span>
-            </label>
+            <div class="breakpoints-path-row">
+              <label class="path-display path-display-button" for="breakpointsInput">
+                <span id="analysisBreakpointsPath">未选择断点文件。</span>
+              </label>
+              <button id="viewBreakpointsFile" class="button compact hidden" type="button">查看</button>
+            </div>
             <input id="breakpointsInput" type="file" accept=".json,application/json" hidden />
           </div>
           <div class="analysis-path-field">
@@ -78,8 +79,13 @@
             <button id="analysisStatusButton" class="service-status unavailable" type="button" title="后台服务不可用" aria-label="后台服务不可用"></button>
           </div>
           <div class="analysis-actions">
-            <button id="analyzeButton" class="button primary" type="button" disabled>断点筛查</button>
+            <button id="analyzeButton" class="button primary" type="button" disabled>获取断点日志</button>
+            <button id="filterLogsButton" class="button" type="button">日志筛选</button>
           </div>
+          <label class="analysis-result-field">
+            断点日志
+            <textarea id="analysisResultText" spellcheck="false" placeholder="获取到的断点日志会显示在这里，也可以手动编辑。"></textarea>
+          </label>
         </aside>
 
         <section class="log-panel" aria-label="日志表格">
@@ -180,7 +186,7 @@
       <section class="modal-panel analysis-modal-panel">
         <header class="modal-header">
           <div>
-            <h2 id="analysisModalTitle">后台分析结果</h2>
+            <h2 id="analysisModalTitle">筛查结果</h2>
             <p id="analysisModalMeta">暂无结果。</p>
           </div>
           <div class="analysis-modal-search">

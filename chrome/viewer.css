@@ -189,6 +189,22 @@ input[type="url"] {
   min-width: 0;
 }
 
+.analysis-result-field textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 220px;
+  max-height: calc(100vh - 430px);
+  resize: vertical;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+  background: #0f172a;
+  color: #dbeafe;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  white-space: pre;
+}
+
 .analysis-path-field {
   display: grid;
   gap: 4px;
@@ -222,6 +238,28 @@ input[type="url"] {
 .path-display-button:hover {
   border-color: var(--blue);
   color: var(--blue);
+}
+
+.breakpoints-path-row {
+  position: relative;
+}
+
+.breakpoints-path-row .path-display {
+  padding-right: 54px;
+}
+
+.breakpoints-path-row #viewBreakpointsFile {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  min-height: 20px;
+  padding: 1px 8px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: translateY(-50%);
+  font-size: 12px;
+  line-height: 16px;
 }
 
 .analysis-service-row {
@@ -644,8 +682,8 @@ mark {
 }
 
 .analysis-match-group {
-  padding-bottom: 4px;
-  margin-bottom: 4px;
+  padding-bottom: 0;
+  margin-bottom: 0;
   width: max-content;
   min-width: 100%;
 }
@@ -654,7 +692,8 @@ mark {
   display: grid;
   grid-template-columns: 46px max-content;
   gap: 8px;
-  padding: 2px 0;
+  padding: 1px 0;
+  line-height: 1.35;
   width: max-content;
   min-width: 100%;
 }

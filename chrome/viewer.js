@@ -47,6 +47,7 @@ let suppressNextLogRowClick = false;
 const els = {
   fileInput: document.getElementById("fileInput"),
   breakpointsInput: document.getElementById("breakpointsInput"),
+  viewBreakpointsFile: document.getElementById("viewBreakpointsFile"),
   fileMeta: document.getElementById("fileMeta"),
   breakpointsMeta: document.getElementById("breakpointsMeta"),
   saveFiltered: document.getElementById("saveFiltered"),
@@ -56,14 +57,14 @@ const els = {
   searchInput: document.getElementById("searchInput"),
   openSearchResults: document.getElementById("openSearchResults"),
   openMarkedRows: document.getElementById("openMarkedRows"),
-  prevMatch: document.getElementById("prevMatch"),
-  nextMatch: document.getElementById("nextMatch"),
   prevMarkedLine: document.getElementById("prevMarkedLine"),
   nextMarkedLine: document.getElementById("nextMarkedLine"),
   matchStatus: document.getElementById("matchStatus"),
   analyzeButton: document.getElementById("analyzeButton"),
+  filterLogsButton: document.getElementById("filterLogsButton"),
   analysisStatusButton: document.getElementById("analysisStatusButton"),
   analysisEndpoint: document.getElementById("analysisEndpoint"),
+  analysisResultText: document.getElementById("analysisResultText"),
   analysisBreakpointsPath: document.getElementById("analysisBreakpointsPath"),
   analysisLogPath: document.getElementById("analysisLogPath"),
   dropZone: document.getElementById("dropZone"),
@@ -177,7 +178,8 @@ async function openBreakpointsFile(file) {
   state.breakpointsContent = text;
   els.breakpointsMeta.textContent = `断点文件：${state.breakpointsFilePath}`;
   els.analysisBreakpointsPath.textContent = state.breakpointsFilePath;
-  openBreakpointsModal();
+  els.analyzeButton.disabled = false;
+  els.viewBreakpointsFile.classList.remove("hidden");
   showToast(`已加载断点文件：${file.name}`);
 }
 
@@ -189,6 +191,8 @@ function clearBreakpointsFile() {
   els.analysisBreakpointsPath.textContent = "未选择断点文件。";
   els.breakpointsModalMeta.textContent = "未选择断点文件。";
   els.breakpointsModalBody.textContent = "";
+  els.analyzeButton.disabled = !state.filePath;
+  els.viewBreakpointsFile.classList.add("hidden");
 }
 
 function applyFilter() {
@@ -1082,11 +1086,6 @@ async function analyzeVisible() {
     showToast("请填写分析服务地址。");
     return;
   }
-  const filePath = state.filePath.trim();
-  if (!filePath) {
-    showToast("请先选择日志文件。");
-    return;
-  }
   if (!state.breakpointsContent) {
     showToast("请先选择断点 JSON 文件。");
     els.breakpointsInput.click();
@@ -1094,16 +1093,11 @@ async function analyzeVisible() {
   }
 
   const payload = {
-    fileName: state.fileName,
-    filePath,
     breakpointsFileName: state.breakpointsFileName,
-    breakpointsFilePath: state.breakpointsFilePath,
     breakpointsContent: state.breakpointsContent,
-    visibleLineCount: state.visibleRows.length,
-    filter: els.filterInput.value,
   };
 
-  showToast("筛查中...");
+  showToast("正在获取断点日志...");
   try {
     const response = await fetch(endpoint, {
       method: "POST",
@@ -1112,10 +1106,60 @@ async function analyzeVisible() {
     });
     const text = await response.text();
     const resultText = text || `HTTP ${response.status}`;
-    openAnalysisModal(resultText, `${state.fileName || filePath} · HTTP ${response.status}`);
+    els.analysisResultText.value = extractBreakpointLogText(resultText);
+    showToast("已获取断点日志。");
   } catch (error) {
     showToast(`分析失败：${error.message}`);
   }
+}
+
+function filterLogsByBreakpointText() {
+  const logStrings = els.analysisResultText.value
+    .split(/\r?\n/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  if (!logStrings.length) {
+    showToast("请先获取或输入断点日志。");
+    return;
+  }
+
+  const matchedLogs = logStrings.map((logString) => {
+    const matches = [];
+    for (const row of state.rows) {
+      if (row.raw.includes(logString)) {
+        matches.push({
+          lineNumber: row.sourceLine,
+          line: row.raw,
+        });
+      }
+    }
+    return { logString, matches };
+  });
+
+  const resultText = JSON.stringify({
+    breakpoints: {
+      logStrings,
+      matchedLogs,
+    },
+  }, null, 2);
+  const totalMatches = matchedLogs.reduce((sum, group) => sum + group.matches.length, 0);
+  openAnalysisModal(resultText, `日志筛选 · ${logStrings.length.toLocaleString()} 条规则 · ${totalMatches.toLocaleString()} 行`);
+}
+
+function extractBreakpointLogText(resultText) {
+  try {
+    const data = JSON.parse(resultText);
+    const logStrings = data && data.breakpoints && Array.isArray(data.breakpoints.logStrings)
+      ? data.breakpoints.logStrings.filter((value) => typeof value === "string" && value)
+      : [];
+    if (logStrings.length) {
+      return logStrings.join("\n");
+    }
+  } catch {
+    // Fall back to the raw backend response below.
+  }
+  return resultText;
 }
 
 function updateMatchStatus() {
@@ -1176,12 +1220,14 @@ els.breakpointsInput.addEventListener("change", (event) => {
   if (file) openBreakpointsFile(file);
 });
 
+els.viewBreakpointsFile.addEventListener("click", openBreakpointsModal);
 els.filterInput.addEventListener("input", scheduleFilter);
 els.filterRegex.addEventListener("change", applyFilter);
 els.filterCase.addEventListener("change", applyFilter);
 els.searchInput.addEventListener("input", markSearchDirty);
 els.analysisEndpoint.addEventListener("input", scheduleAnalysisServiceCheck);
 els.analysisStatusButton.addEventListener("click", checkAnalysisService);
+els.filterLogsButton.addEventListener("click", filterLogsByBreakpointText);
 els.openSearchResults.addEventListener("click", openSearchResults);
 els.openMarkedRows.addEventListener("click", openMarkedRows);
 els.closeSearchModal.addEventListener("click", closeSearchModal);
@@ -1197,8 +1243,6 @@ els.clearMarkedRows.addEventListener("click", clearMarkedRows);
 els.modalSearchInput.addEventListener("input", markModalSearchDirty);
 els.modalPrevMatch.addEventListener("click", () => goModalMatch(-1));
 els.modalNextMatch.addEventListener("click", () => goModalMatch(1));
-els.prevMatch.addEventListener("click", () => goMatch(-1));
-els.nextMatch.addEventListener("click", () => goMatch(1));
 els.prevMarkedLine.addEventListener("click", () => goMarkedLine(-1));
 els.nextMarkedLine.addEventListener("click", () => goMarkedLine(1));
 els.tableWrap.addEventListener("scroll", scheduleVirtualRowsRender);

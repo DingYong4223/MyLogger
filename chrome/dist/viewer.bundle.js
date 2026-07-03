@@ -3338,6 +3338,7 @@
   var els = {
     fileInput: document.getElementById("fileInput"),
     breakpointsInput: document.getElementById("breakpointsInput"),
+    viewBreakpointsFile: document.getElementById("viewBreakpointsFile"),
     fileMeta: document.getElementById("fileMeta"),
     breakpointsMeta: document.getElementById("breakpointsMeta"),
     saveFiltered: document.getElementById("saveFiltered"),
@@ -3347,14 +3348,14 @@
     searchInput: document.getElementById("searchInput"),
     openSearchResults: document.getElementById("openSearchResults"),
     openMarkedRows: document.getElementById("openMarkedRows"),
-    prevMatch: document.getElementById("prevMatch"),
-    nextMatch: document.getElementById("nextMatch"),
     prevMarkedLine: document.getElementById("prevMarkedLine"),
     nextMarkedLine: document.getElementById("nextMarkedLine"),
     matchStatus: document.getElementById("matchStatus"),
     analyzeButton: document.getElementById("analyzeButton"),
+    filterLogsButton: document.getElementById("filterLogsButton"),
     analysisStatusButton: document.getElementById("analysisStatusButton"),
     analysisEndpoint: document.getElementById("analysisEndpoint"),
+    analysisResultText: document.getElementById("analysisResultText"),
     analysisBreakpointsPath: document.getElementById("analysisBreakpointsPath"),
     analysisLogPath: document.getElementById("analysisLogPath"),
     dropZone: document.getElementById("dropZone"),
@@ -3461,7 +3462,8 @@
     state.breakpointsContent = text;
     els.breakpointsMeta.textContent = `\u65AD\u70B9\u6587\u4EF6\uFF1A${state.breakpointsFilePath}`;
     els.analysisBreakpointsPath.textContent = state.breakpointsFilePath;
-    openBreakpointsModal();
+    els.analyzeButton.disabled = false;
+    els.viewBreakpointsFile.classList.remove("hidden");
     showToast(`\u5DF2\u52A0\u8F7D\u65AD\u70B9\u6587\u4EF6\uFF1A${file.name}`);
   }
   function clearBreakpointsFile() {
@@ -3472,6 +3474,8 @@
     els.analysisBreakpointsPath.textContent = "\u672A\u9009\u62E9\u65AD\u70B9\u6587\u4EF6\u3002";
     els.breakpointsModalMeta.textContent = "\u672A\u9009\u62E9\u65AD\u70B9\u6587\u4EF6\u3002";
     els.breakpointsModalBody.textContent = "";
+    els.analyzeButton.disabled = !state.filePath;
+    els.viewBreakpointsFile.classList.add("hidden");
   }
   function applyFilter() {
     window.clearTimeout(filterTimer);
@@ -3767,16 +3771,6 @@
     state.activeSearch = query;
     state.searchDirty = false;
     state.matches = findMatchingRows(query).map(({ index }) => index);
-    renderRows();
-    updateMatchStatus();
-  }
-  function goMatch(direction) {
-    if (state.searchDirty || state.activeSearch !== els.searchInput.value.trim()) {
-      runSearch();
-    }
-    if (!state.matches.length) return;
-    state.activeMatch = (state.activeMatch + direction + state.matches.length) % state.matches.length;
-    scrollMainRowIndexIntoView(state.matches[state.activeMatch]);
     renderRows();
     updateMatchStatus();
   }
@@ -4245,26 +4239,16 @@
       showToast("\u8BF7\u586B\u5199\u5206\u6790\u670D\u52A1\u5730\u5740\u3002");
       return;
     }
-    const filePath = state.filePath.trim();
-    if (!filePath) {
-      showToast("\u8BF7\u5148\u9009\u62E9\u65E5\u5FD7\u6587\u4EF6\u3002");
-      return;
-    }
     if (!state.breakpointsContent) {
       showToast("\u8BF7\u5148\u9009\u62E9\u65AD\u70B9 JSON \u6587\u4EF6\u3002");
       els.breakpointsInput.click();
       return;
     }
     const payload = {
-      fileName: state.fileName,
-      filePath,
       breakpointsFileName: state.breakpointsFileName,
-      breakpointsFilePath: state.breakpointsFilePath,
-      breakpointsContent: state.breakpointsContent,
-      visibleLineCount: state.visibleRows.length,
-      filter: els.filterInput.value
+      breakpointsContent: state.breakpointsContent
     };
-    showToast("\u7B5B\u67E5\u4E2D...");
+    showToast("\u6B63\u5728\u83B7\u53D6\u65AD\u70B9\u65E5\u5FD7...");
     try {
       const response = await fetch(endpoint, {
         method: "POST",
@@ -4273,10 +4257,49 @@
       });
       const text = await response.text();
       const resultText = text || `HTTP ${response.status}`;
-      openAnalysisModal(resultText, `${state.fileName || filePath} \xB7 HTTP ${response.status}`);
+      els.analysisResultText.value = extractBreakpointLogText(resultText);
+      showToast("\u5DF2\u83B7\u53D6\u65AD\u70B9\u65E5\u5FD7\u3002");
     } catch (error) {
       showToast(`\u5206\u6790\u5931\u8D25\uFF1A${error.message}`);
     }
+  }
+  function filterLogsByBreakpointText() {
+    const logStrings = els.analysisResultText.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
+    if (!logStrings.length) {
+      showToast("\u8BF7\u5148\u83B7\u53D6\u6216\u8F93\u5165\u65AD\u70B9\u65E5\u5FD7\u3002");
+      return;
+    }
+    const matchedLogs = logStrings.map((logString) => {
+      const matches = [];
+      for (const row of state.rows) {
+        if (row.raw.includes(logString)) {
+          matches.push({
+            lineNumber: row.sourceLine,
+            line: row.raw
+          });
+        }
+      }
+      return { logString, matches };
+    });
+    const resultText = JSON.stringify({
+      breakpoints: {
+        logStrings,
+        matchedLogs
+      }
+    }, null, 2);
+    const totalMatches = matchedLogs.reduce((sum, group) => sum + group.matches.length, 0);
+    openAnalysisModal(resultText, `\u65E5\u5FD7\u7B5B\u9009 \xB7 ${logStrings.length.toLocaleString()} \u6761\u89C4\u5219 \xB7 ${totalMatches.toLocaleString()} \u884C`);
+  }
+  function extractBreakpointLogText(resultText) {
+    try {
+      const data = JSON.parse(resultText);
+      const logStrings = data && data.breakpoints && Array.isArray(data.breakpoints.logStrings) ? data.breakpoints.logStrings.filter((value) => typeof value === "string" && value) : [];
+      if (logStrings.length) {
+        return logStrings.join("\n");
+      }
+    } catch {
+    }
+    return resultText;
   }
   function updateMatchStatus() {
     const visible = `${state.visibleRows.length.toLocaleString()} \u884C`;
@@ -4328,12 +4351,14 @@
     const file = event.target.files && event.target.files[0];
     if (file) openBreakpointsFile(file);
   });
+  els.viewBreakpointsFile.addEventListener("click", openBreakpointsModal);
   els.filterInput.addEventListener("input", scheduleFilter);
   els.filterRegex.addEventListener("change", applyFilter);
   els.filterCase.addEventListener("change", applyFilter);
   els.searchInput.addEventListener("input", markSearchDirty);
   els.analysisEndpoint.addEventListener("input", scheduleAnalysisServiceCheck);
   els.analysisStatusButton.addEventListener("click", checkAnalysisService);
+  els.filterLogsButton.addEventListener("click", filterLogsByBreakpointText);
   els.openSearchResults.addEventListener("click", openSearchResults);
   els.openMarkedRows.addEventListener("click", openMarkedRows);
   els.closeSearchModal.addEventListener("click", closeSearchModal);
@@ -4349,8 +4374,6 @@
   els.modalSearchInput.addEventListener("input", markModalSearchDirty);
   els.modalPrevMatch.addEventListener("click", () => goModalMatch(-1));
   els.modalNextMatch.addEventListener("click", () => goModalMatch(1));
-  els.prevMatch.addEventListener("click", () => goMatch(-1));
-  els.nextMatch.addEventListener("click", () => goMatch(1));
   els.prevMarkedLine.addEventListener("click", () => goMarkedLine(-1));
   els.nextMarkedLine.addEventListener("click", () => goMarkedLine(1));
   els.tableWrap.addEventListener("scroll", scheduleVirtualRowsRender);
