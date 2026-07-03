@@ -3301,12 +3301,17 @@
   var LOG_TEXT_FONT = '12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace';
   var TOOLS_PAGE_PATH = "mytools.htm";
   var QRCODE_SCRIPT_PATH = "vendor/qrcode.min.js";
+  var DEFAULT_ANALYSIS_ENDPOINT = "http://127.0.0.1:7878/analyze";
+  var SERVICE_ENDPOINT_STORAGE_KEY = "myloggerServiceEndpoint";
   var LANGUAGE_STORAGE_KEY = "myloggerLanguage";
   var COMMON_FILTERS_STORAGE_KEY = "myloggerCommonFilters";
   var FILTER_HISTORY_STORAGE_KEY = "myloggerFilterHistory";
   var state = {
     language: localStorage.getItem(LANGUAGE_STORAGE_KEY) === "zh" ? "zh" : "en",
+    serviceEndpoint: localStorage.getItem(SERVICE_ENDPOINT_STORAGE_KEY) || DEFAULT_ANALYSIS_ENDPOINT,
     commonFilters: loadCommonFilters(),
+    editingCommonFilterId: "",
+    draggedCommonFilterId: "",
     filterHistory: loadFilterHistory(),
     fileName: "",
     filePath: "",
@@ -3409,6 +3414,9 @@
     analysisEndpoint: document.getElementById("analysisEndpoint"),
     openToolsPage: document.getElementById("openToolsPage"),
     addCommonFilter: document.getElementById("addCommonFilter"),
+    importCommonFilters: document.getElementById("importCommonFilters"),
+    exportCommonFilters: document.getElementById("exportCommonFilters"),
+    commonFilterFileInput: document.getElementById("commonFilterFileInput"),
     commonFilterList: document.getElementById("commonFilterList"),
     commonFilterModal: document.getElementById("commonFilterModal"),
     commonFilterModalMeta: document.getElementById("commonFilterModalMeta"),
@@ -3466,6 +3474,20 @@
     openHelpModal: document.getElementById("openHelpModal"),
     helpModal: document.getElementById("helpModal"),
     closeHelpModal: document.getElementById("closeHelpModal"),
+    openSettingsModal: document.getElementById("openSettingsModal"),
+    settingsModal: document.getElementById("settingsModal"),
+    settingsModalMeta: document.getElementById("settingsModalMeta"),
+    closeSettingsModal: document.getElementById("closeSettingsModal"),
+    settingsServiceEndpoint: document.getElementById("settingsServiceEndpoint"),
+    settingsLanguage: document.getElementById("settingsLanguage"),
+    saveSettingsBasics: document.getElementById("saveSettingsBasics"),
+    backupSettings: document.getElementById("backupSettings"),
+    restoreSettings: document.getElementById("restoreSettings"),
+    settingsBackupInput: document.getElementById("settingsBackupInput"),
+    settingsAddCommonFilter: document.getElementById("settingsAddCommonFilter"),
+    settingsCommonFilterList: document.getElementById("settingsCommonFilterList"),
+    settingsFilterHistoryList: document.getElementById("settingsFilterHistoryList"),
+    clearFilterHistory: document.getElementById("clearFilterHistory"),
     toast: document.getElementById("toast")
   };
   var I18N = {
@@ -3473,6 +3495,7 @@
       openFile: "\u6253\u5F00\u6587\u672C/\u65E5\u5FD7",
       saveFiltered: "\u4FDD\u5B58\u8FC7\u6EE4\u7ED3\u679C",
       help: "\u5E2E\u52A9",
+      settings: "\u8BBE\u7F6E",
       filter: "\u8FC7\u6EE4",
       filterPlaceholder: "\u5173\u952E\u5B57\u6216\u6B63\u5219\uFF1B\u591A\u884C\u6309\u4EFB\u610F\u4E00\u884C\u547D\u4E2D\u8FC7\u6EE4",
       view: "\u67E5\u770B",
@@ -3480,6 +3503,14 @@
       importFilterLogFile: "\u5BFC\u5165\u672C\u5730\u8FC7\u6EE4\u65E5\u5FD7",
       filterHistory: "\u5386\u53F2\u8FC7\u6EE4\u8BB0\u5F55",
       filterHistoryEmpty: "\u6682\u65E0\u5386\u53F2\u8FC7\u6EE4\u8BB0\u5F55\u3002",
+      userSettings: "\u7528\u6237\u914D\u7F6E",
+      settingsIntro: "\u7EDF\u4E00\u7BA1\u7406\u670D\u52A1\u5730\u5740\u3001\u8BED\u8A00\u3001\u5E38\u7528\u8FC7\u6EE4\u548C\u5386\u53F2\u8FC7\u6EE4\u3002",
+      basicSettings: "\u57FA\u7840\u8BBE\u7F6E",
+      language: "\u8BED\u8A00",
+      backupSettings: "\u5907\u4EFD\u914D\u7F6E",
+      restoreSettings: "\u6062\u590D\u914D\u7F6E",
+      saveSettings: "\u4FDD\u5B58",
+      add: "\u6DFB\u52A0",
       regex: "\u6B63\u5219",
       caseSensitive: "\u533A\u5206\u5927\u5C0F\u5199",
       search: "\u641C\u7D22",
@@ -3504,6 +3535,11 @@
       tools: "\u5B9E\u7528\u5DE5\u5177",
       commonFilters: "\u5E38\u7528\u8FC7\u6EE4",
       addCommonFilter: "\u6DFB\u52A0\u5E38\u7528\u8FC7\u6EE4",
+      editCommonFilter: "\u7F16\u8F91\u5E38\u7528\u8FC7\u6EE4",
+      importCommonFilters: "\u5BFC\u5165\u5E38\u7528\u8FC7\u6EE4",
+      exportCommonFilters: "\u5BFC\u51FA\u5E38\u7528\u8FC7\u6EE4",
+      delete: "\u5220\u9664",
+      edit: "\u7F16\u8F91",
       commonFilterTitle: "\u6807\u9898",
       commonFilterText: "\u8FC7\u6EE4\u8BCD",
       commonFilterIntro: "\u6DFB\u52A0\u6807\u9898\u548C\u8FC7\u6EE4\u8BCD\uFF0C\u8FC7\u6EE4\u8BCD\u89C4\u5219\u4E0E\u9876\u90E8 Filter \u4E00\u81F4\u3002",
@@ -3583,6 +3619,7 @@
       openFile: "Open Text/Log",
       saveFiltered: "Save Filtered",
       help: "Help",
+      settings: "Settings",
       filter: "Filter",
       filterPlaceholder: "Keyword or regex; multiple lines match any rule",
       view: "View",
@@ -3590,6 +3627,14 @@
       importFilterLogFile: "Import Local Filter Logs",
       filterHistory: "Filter History",
       filterHistoryEmpty: "No filter history.",
+      userSettings: "User Settings",
+      settingsIntro: "Manage service URL, language, common filters, and filter history in one place.",
+      basicSettings: "Basic Settings",
+      language: "Language",
+      backupSettings: "Back Up",
+      restoreSettings: "Restore",
+      saveSettings: "Save",
+      add: "Add",
       regex: "Regex",
       caseSensitive: "Case sensitive",
       search: "Search",
@@ -3614,6 +3659,11 @@
       tools: "Tools",
       commonFilters: "Common Filters",
       addCommonFilter: "Add Common Filter",
+      editCommonFilter: "Edit Common Filter",
+      importCommonFilters: "Import Common Filters",
+      exportCommonFilters: "Export Common Filters",
+      delete: "Delete",
+      edit: "Edit",
       commonFilterTitle: "Title",
       commonFilterText: "Filter",
       commonFilterIntro: "Add a title and filter rules. Rules follow the top Filter input.",
@@ -3697,15 +3747,26 @@
     }
     return value;
   }
+  function normalizeCommonFilters(value) {
+    if (!Array.isArray(value)) return [];
+    return value.map((item) => ({
+      id: String(item.id || `${Date.now()}-${Math.random()}`),
+      title: String(item.title || "").trim(),
+      filterText: String(item.filterText || "").trim()
+    })).filter((item) => item.title && item.filterText);
+  }
+  function normalizeFilterHistory(value) {
+    if (!Array.isArray(value)) return [];
+    return value.map((item) => ({
+      id: String(item.id || `${Date.now()}-${Math.random()}`),
+      title: String(item.title || "").trim(),
+      filterText: String(item.filterText || "").trim(),
+      createdAt: Number(item.createdAt || Date.now())
+    })).filter((item) => item.filterText).sort((left, right) => right.createdAt - left.createdAt).slice(0, 20);
+  }
   function loadCommonFilters() {
     try {
-      const value = JSON.parse(localStorage.getItem(COMMON_FILTERS_STORAGE_KEY) || "[]");
-      if (!Array.isArray(value)) return [];
-      return value.map((item) => ({
-        id: String(item.id || `${Date.now()}-${Math.random()}`),
-        title: String(item.title || "").trim(),
-        filterText: String(item.filterText || "").trim()
-      })).filter((item) => item.title && item.filterText);
+      return normalizeCommonFilters(JSON.parse(localStorage.getItem(COMMON_FILTERS_STORAGE_KEY) || "[]"));
     } catch {
       return [];
     }
@@ -3715,14 +3776,7 @@
   }
   function loadFilterHistory() {
     try {
-      const value = JSON.parse(localStorage.getItem(FILTER_HISTORY_STORAGE_KEY) || "[]");
-      if (!Array.isArray(value)) return [];
-      return value.map((item) => ({
-        id: String(item.id || `${Date.now()}-${Math.random()}`),
-        title: String(item.title || "").trim(),
-        filterText: String(item.filterText || "").trim(),
-        createdAt: Number(item.createdAt || Date.now())
-      })).filter((item) => item.filterText).slice(0, 20);
+      return normalizeFilterHistory(JSON.parse(localStorage.getItem(FILTER_HISTORY_STORAGE_KEY) || "[]"));
     } catch {
       return [];
     }
@@ -3754,6 +3808,8 @@
     els.languageButton.setAttribute("aria-label", state.language === "en" ? "Language" : "\u8BED\u8A00");
     els.openHelpModal.title = t("help");
     els.openHelpModal.setAttribute("aria-label", t("help"));
+    els.openSettingsModal.title = t("settings");
+    els.openSettingsModal.setAttribute("aria-label", t("settings"));
     setLeadingText(".header-actions-left label.button.primary", "openFile");
     setText("#saveFiltered", "saveFiltered");
     setLeadingText(".toolbar > label:nth-of-type(1)", "filter");
@@ -3789,12 +3845,32 @@
     setText(".common-filter-header h3", "commonFilters");
     els.addCommonFilter.title = t("addCommonFilter");
     els.addCommonFilter.setAttribute("aria-label", t("addCommonFilter"));
+    els.importCommonFilters.title = t("importCommonFilters");
+    els.importCommonFilters.setAttribute("aria-label", t("importCommonFilters"));
+    els.exportCommonFilters.title = t("exportCommonFilters");
+    els.exportCommonFilters.setAttribute("aria-label", t("exportCommonFilters"));
     setText("#commonFilterModalTitle", "addCommonFilter");
     setText("#commonFilterModalMeta", "commonFilterIntro");
     setLeadingText(".common-filter-modal-body label:nth-of-type(1)", "commonFilterTitle");
     setLeadingText(".common-filter-modal-body label:nth-of-type(2)", "commonFilterText");
     setText("#saveCommonFilter", "save");
     setText("#closeCommonFilterModal", "close");
+    setText("#settingsModalTitle", "userSettings");
+    setText("#settingsModalMeta", "settingsIntro");
+    setText(".settings-section:nth-of-type(1) h3", "basicSettings");
+    setLeadingText(".settings-section:nth-of-type(1) label:nth-of-type(1)", "serviceUrl");
+    setLeadingText(".settings-section:nth-of-type(1) label:nth-of-type(2)", "language");
+    setText("#saveSettingsBasics", "saveSettings");
+    setText("#backupSettings", "backupSettings");
+    setText("#restoreSettings", "restoreSettings");
+    setText("#closeSettingsModal", "close");
+    const settingsLanguageOptions = els.settingsLanguage.querySelectorAll("option");
+    if (settingsLanguageOptions[0]) settingsLanguageOptions[0].textContent = t("languageEn");
+    if (settingsLanguageOptions[1]) settingsLanguageOptions[1].textContent = t("languageZh");
+    setText(".settings-section:nth-of-type(2) h3", "commonFilters");
+    setText("#settingsAddCommonFilter", "add");
+    setText(".settings-section:nth-of-type(3) h3", "filterHistory");
+    setText("#clearFilterHistory", "clear");
     updateAnalysisToggleText();
     document.querySelector(".toolbar")?.setAttribute("aria-label", t("logControls"));
     document.querySelector(".log-panel")?.setAttribute("aria-label", t("logTable"));
@@ -3818,6 +3894,7 @@
     updateFileMeta();
     updateBreakpointsMeta();
     renderCommonFilters();
+    renderSettings();
   }
   function setText(selector, key) {
     const el = document.querySelector(selector);
@@ -5095,27 +5172,75 @@
       return;
     }
     for (const item of state.commonFilters) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "common-filter-item";
+      const row = document.createElement("div");
+      row.className = "common-filter-item";
+      row.draggable = true;
+      row.dataset.id = item.id;
+      const main = document.createElement("button");
+      main.type = "button";
+      main.className = "common-filter-item-main";
       const title = document.createElement("span");
       title.className = "common-filter-item-title";
       title.textContent = item.title;
       const preview = document.createElement("span");
       preview.className = "common-filter-item-preview";
       preview.textContent = item.filterText.split(/\r?\n/).map((value) => value.trim()).filter(Boolean).join(" | ");
-      button.append(title, preview);
-      button.addEventListener("click", () => applyCommonFilter(item));
-      els.commonFilterList.append(button);
+      main.append(title, preview);
+      main.addEventListener("click", () => applyCommonFilter(item));
+      const actions = document.createElement("div");
+      actions.className = "common-filter-item-actions";
+      const editButton = document.createElement("button");
+      editButton.type = "button";
+      editButton.title = t("edit");
+      editButton.setAttribute("aria-label", t("edit"));
+      editButton.textContent = "\u270E";
+      editButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openCommonFilterModal(item);
+      });
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "danger";
+      deleteButton.title = t("delete");
+      deleteButton.setAttribute("aria-label", t("delete"));
+      deleteButton.textContent = "\xD7";
+      deleteButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        deleteCommonFilter(item);
+      });
+      actions.append(editButton, deleteButton);
+      row.append(main, actions);
+      row.addEventListener("dragstart", (event) => {
+        state.draggedCommonFilterId = item.id;
+        row.classList.add("dragging");
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", item.id);
+      });
+      row.addEventListener("dragend", () => {
+        state.draggedCommonFilterId = "";
+        row.classList.remove("dragging");
+      });
+      row.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+      });
+      row.addEventListener("drop", (event) => {
+        event.preventDefault();
+        reorderCommonFilter(state.draggedCommonFilterId || event.dataTransfer.getData("text/plain"), item.id);
+      });
+      els.commonFilterList.append(row);
     }
   }
-  function openCommonFilterModal() {
-    els.commonFilterTitleInput.value = "";
-    els.commonFilterTextInput.value = "";
+  function openCommonFilterModal(item = null) {
+    state.editingCommonFilterId = item ? item.id : "";
+    els.commonFilterTitleInput.value = item ? item.title : "";
+    els.commonFilterTextInput.value = item ? item.filterText : "";
+    document.getElementById("commonFilterModalTitle").textContent = item ? t("editCommonFilter") : t("addCommonFilter");
     els.commonFilterModal.classList.remove("hidden");
     window.requestAnimationFrame(() => els.commonFilterTitleInput.focus());
   }
   function closeCommonFilterModal() {
+    state.editingCommonFilterId = "";
     els.commonFilterModal.classList.add("hidden");
   }
   function saveCommonFilter() {
@@ -5125,14 +5250,83 @@
       showToast(state.language === "en" ? "Enter a title and filter." : "\u8BF7\u8F93\u5165\u6807\u9898\u548C\u8FC7\u6EE4\u8BCD\u3002");
       return;
     }
-    state.commonFilters.push({
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      title,
-      filterText
-    });
+    if (state.editingCommonFilterId) {
+      state.commonFilters = state.commonFilters.map((item) => item.id === state.editingCommonFilterId ? { ...item, title, filterText } : item);
+    } else {
+      state.commonFilters.push({
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        title,
+        filterText
+      });
+    }
     saveCommonFilters();
     renderCommonFilters();
+    renderSettingsCommonFilters();
     closeCommonFilterModal();
+  }
+  function deleteCommonFilter(item) {
+    const confirmed = window.confirm(state.language === "en" ? `Delete "${item.title}"?` : `\u786E\u8BA4\u5220\u9664\u201C${item.title}\u201D\uFF1F`);
+    if (!confirmed) return;
+    state.commonFilters = state.commonFilters.filter((value) => value.id !== item.id);
+    saveCommonFilters();
+    renderCommonFilters();
+    renderSettingsCommonFilters();
+  }
+  function exportCommonFilters() {
+    const content = JSON.stringify({
+      version: 1,
+      commonFilters: state.commonFilters.map(({ title, filterText }) => ({ title, filterText }))
+    }, null, 2);
+    downloadText(content, "mylogger-common-filters.json");
+  }
+  function openCommonFilterFilePicker() {
+    els.commonFilterFileInput.value = "";
+    els.commonFilterFileInput.click();
+  }
+  async function importCommonFilters(file) {
+    let data;
+    try {
+      data = JSON.parse(await file.text());
+    } catch (error) {
+      showToast(state.language === "en" ? `Invalid JSON: ${error.message}` : `JSON \u65E0\u6548\uFF1A${error.message}`);
+      return;
+    }
+    const source = Array.isArray(data) ? data : data && data.commonFilters;
+    if (!Array.isArray(source)) {
+      showToast(state.language === "en" ? "No common filters found." : "\u672A\u627E\u5230\u5E38\u7528\u8FC7\u6EE4\u3002");
+      return;
+    }
+    const imported = source.map((item) => ({
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      title: String(item.title || "").trim(),
+      filterText: String(item.filterText || "").trim()
+    })).filter((item) => item.title && item.filterText);
+    if (!imported.length) {
+      showToast(state.language === "en" ? "No valid common filters found." : "\u672A\u627E\u5230\u6709\u6548\u7684\u5E38\u7528\u8FC7\u6EE4\u3002");
+      return;
+    }
+    const existingByText = new Map(state.commonFilters.map((item) => [item.filterText, item]));
+    for (const item of imported) {
+      existingByText.set(item.filterText, item);
+    }
+    state.commonFilters = Array.from(existingByText.values());
+    saveCommonFilters();
+    renderCommonFilters();
+    renderSettingsCommonFilters();
+    showToast(state.language === "en" ? `Imported ${imported.length} common filters.` : `\u5DF2\u5BFC\u5165 ${imported.length} \u6761\u5E38\u7528\u8FC7\u6EE4\u3002`);
+  }
+  function reorderCommonFilter(sourceId, targetId) {
+    if (!sourceId || !targetId || sourceId === targetId) return;
+    const sourceIndex = state.commonFilters.findIndex((item) => item.id === sourceId);
+    const targetIndex = state.commonFilters.findIndex((item) => item.id === targetId);
+    if (sourceIndex < 0 || targetIndex < 0) return;
+    const next = state.commonFilters.slice();
+    const [source] = next.splice(sourceIndex, 1);
+    next.splice(targetIndex, 0, source);
+    state.commonFilters = next;
+    saveCommonFilters();
+    renderCommonFilters();
+    renderSettingsCommonFilters();
   }
   function applyCommonFilter(item) {
     const confirmed = window.confirm(state.language === "en" ? `Replace the top Filter with "${item.title}"?` : `\u786E\u8BA4\u4F7F\u7528\u201C${item.title}\u201D\u8986\u76D6\u9876\u90E8\u8FC7\u6EE4\u5185\u5BB9\uFF1F`);
@@ -5227,6 +5421,165 @@
   }
   function closeHelpModal() {
     els.helpModal.classList.add("hidden");
+  }
+  function syncServiceEndpoint(value) {
+    const endpoint = String(value || "").trim() || DEFAULT_ANALYSIS_ENDPOINT;
+    state.serviceEndpoint = endpoint;
+    localStorage.setItem(SERVICE_ENDPOINT_STORAGE_KEY, endpoint);
+    els.analysisEndpoint.value = endpoint;
+    if (els.settingsServiceEndpoint) els.settingsServiceEndpoint.value = endpoint;
+  }
+  function openSettingsModal() {
+    els.settingsServiceEndpoint.value = state.serviceEndpoint || DEFAULT_ANALYSIS_ENDPOINT;
+    els.settingsLanguage.value = state.language;
+    renderSettings();
+    els.settingsModal.classList.remove("hidden");
+  }
+  function closeSettingsModal() {
+    els.settingsModal.classList.add("hidden");
+  }
+  function renderSettings() {
+    if (!els.settingsCommonFilterList || !els.settingsFilterHistoryList) return;
+    els.settingsLanguage.value = state.language;
+    els.settingsServiceEndpoint.value = state.serviceEndpoint || DEFAULT_ANALYSIS_ENDPOINT;
+    renderSettingsCommonFilters();
+    renderSettingsFilterHistory();
+  }
+  function renderSettingsCommonFilters() {
+    els.settingsCommonFilterList.textContent = "";
+    if (!state.commonFilters.length) {
+      const empty = document.createElement("div");
+      empty.className = "settings-empty";
+      empty.textContent = t("commonFilterEmpty");
+      els.settingsCommonFilterList.append(empty);
+      return;
+    }
+    for (const item of state.commonFilters) {
+      const row = document.createElement("div");
+      row.className = "settings-list-item";
+      const content = document.createElement("div");
+      content.className = "settings-list-item-content";
+      const title = document.createElement("strong");
+      title.textContent = item.title;
+      const preview = document.createElement("span");
+      preview.textContent = item.filterText.split(/\r?\n/).map((value) => value.trim()).filter(Boolean).join(" | ");
+      content.append(title, preview);
+      const actions = document.createElement("div");
+      actions.className = "settings-list-item-actions";
+      const editButton = document.createElement("button");
+      editButton.type = "button";
+      editButton.textContent = t("edit");
+      editButton.addEventListener("click", () => openCommonFilterModal(item));
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "danger";
+      deleteButton.textContent = t("delete");
+      deleteButton.addEventListener("click", () => deleteCommonFilter(item));
+      actions.append(editButton, deleteButton);
+      row.append(content, actions);
+      els.settingsCommonFilterList.append(row);
+    }
+  }
+  function renderSettingsFilterHistory() {
+    els.settingsFilterHistoryList.textContent = "";
+    if (!state.filterHistory.length) {
+      const empty = document.createElement("div");
+      empty.className = "settings-empty";
+      empty.textContent = t("filterHistoryEmpty");
+      els.settingsFilterHistoryList.append(empty);
+      return;
+    }
+    for (const item of state.filterHistory.slice().sort((left, right) => right.createdAt - left.createdAt)) {
+      const row = document.createElement("div");
+      row.className = "settings-list-item";
+      const content = document.createElement("div");
+      content.className = "settings-list-item-content";
+      const title = document.createElement("strong");
+      title.textContent = item.title;
+      const preview = document.createElement("span");
+      preview.textContent = item.filterText.split(/\r?\n/).map((value) => value.trim()).filter(Boolean).join(" | ");
+      content.append(title, preview);
+      const actions = document.createElement("div");
+      actions.className = "settings-list-item-actions";
+      const useButton = document.createElement("button");
+      useButton.type = "button";
+      useButton.textContent = t("confirm");
+      useButton.addEventListener("click", () => {
+        applyFilterHistory(item);
+        closeSettingsModal();
+      });
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "danger";
+      deleteButton.textContent = t("delete");
+      deleteButton.addEventListener("click", () => deleteFilterHistory(item));
+      actions.append(useButton, deleteButton);
+      row.append(content, actions);
+      els.settingsFilterHistoryList.append(row);
+    }
+  }
+  function saveSettingsBasics() {
+    syncServiceEndpoint(els.settingsServiceEndpoint.value);
+    setLanguage(els.settingsLanguage.value);
+    checkAnalysisService();
+    showToast(state.language === "en" ? "Settings saved." : "\u914D\u7F6E\u5DF2\u4FDD\u5B58\u3002");
+  }
+  function deleteFilterHistory(item) {
+    state.filterHistory = state.filterHistory.filter((value) => value.id !== item.id);
+    saveFilterHistory();
+    renderFilterHistoryPopover();
+    renderSettingsFilterHistory();
+  }
+  function clearFilterHistory() {
+    if (!state.filterHistory.length) return;
+    const confirmed = window.confirm(state.language === "en" ? "Clear all filter history?" : "\u786E\u8BA4\u6E05\u9664\u5168\u90E8\u5386\u53F2\u8FC7\u6EE4\uFF1F");
+    if (!confirmed) return;
+    state.filterHistory = [];
+    saveFilterHistory();
+    renderFilterHistoryPopover();
+    renderSettingsFilterHistory();
+  }
+  function createSettingsBackup() {
+    return {
+      version: 1,
+      exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      serviceEndpoint: state.serviceEndpoint || DEFAULT_ANALYSIS_ENDPOINT,
+      language: state.language,
+      commonFilters: state.commonFilters.map(({ title, filterText }) => ({ title, filterText })),
+      filterHistory: state.filterHistory.map(({ title, filterText, createdAt }) => ({ title, filterText, createdAt }))
+    };
+  }
+  function backupSettings() {
+    downloadText(JSON.stringify(createSettingsBackup(), null, 2), "mylogger-settings-backup.json");
+  }
+  function openSettingsBackupPicker() {
+    els.settingsBackupInput.value = "";
+    els.settingsBackupInput.click();
+  }
+  async function restoreSettings(file) {
+    let data;
+    try {
+      data = JSON.parse(await file.text());
+    } catch (error) {
+      showToast(state.language === "en" ? `Invalid JSON: ${error.message}` : `JSON \u65E0\u6548\uFF1A${error.message}`);
+      return;
+    }
+    if (!data || typeof data !== "object") {
+      showToast(state.language === "en" ? "Invalid settings backup." : "\u914D\u7F6E\u5907\u4EFD\u65E0\u6548\u3002");
+      return;
+    }
+    syncServiceEndpoint(data.serviceEndpoint || DEFAULT_ANALYSIS_ENDPOINT);
+    if (data.language === "zh" || data.language === "en") {
+      state.language = data.language;
+      localStorage.setItem(LANGUAGE_STORAGE_KEY, data.language);
+    }
+    state.commonFilters = normalizeCommonFilters(data.commonFilters);
+    state.filterHistory = normalizeFilterHistory(data.filterHistory);
+    saveCommonFilters();
+    saveFilterHistory();
+    applyLanguage();
+    checkAnalysisService();
+    showToast(state.language === "en" ? "Settings restored." : "\u914D\u7F6E\u5DF2\u6062\u590D\u3002");
   }
   async function openToolsPage() {
     try {
@@ -5873,7 +6226,17 @@
     if (button) setLanguage(button.dataset.language);
   });
   document.addEventListener("click", closeLanguagePopover);
-  els.analysisEndpoint.addEventListener("input", scheduleAnalysisServiceCheck);
+  els.analysisEndpoint.addEventListener("input", () => {
+    const endpoint = els.analysisEndpoint.value.trim();
+    state.serviceEndpoint = endpoint;
+    if (endpoint) {
+      localStorage.setItem(SERVICE_ENDPOINT_STORAGE_KEY, endpoint);
+    } else {
+      localStorage.removeItem(SERVICE_ENDPOINT_STORAGE_KEY);
+    }
+    if (els.settingsServiceEndpoint) els.settingsServiceEndpoint.value = endpoint;
+    scheduleAnalysisServiceCheck();
+  });
   els.analysisStatusButton.addEventListener("click", checkAnalysisService);
   els.viewFilterResults.addEventListener("click", handleFilterAction);
   els.importFilterLogFile.addEventListener("click", openFilterLogFilePicker);
@@ -5882,6 +6245,12 @@
   document.addEventListener("click", closeFilterHistoryPopover);
   els.openToolsPage.addEventListener("click", openToolsPage);
   els.addCommonFilter.addEventListener("click", openCommonFilterModal);
+  els.importCommonFilters.addEventListener("click", openCommonFilterFilePicker);
+  els.exportCommonFilters.addEventListener("click", exportCommonFilters);
+  els.commonFilterFileInput.addEventListener("change", (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (file) importCommonFilters(file);
+  });
   els.commonFilterModal.addEventListener("click", (event) => {
     if (event.target === els.commonFilterModal) closeCommonFilterModal();
   });
@@ -5907,6 +6276,20 @@
   els.closeBreakpointsModal.addEventListener("click", closeBreakpointsModal);
   els.openHelpModal.addEventListener("click", openHelpModal);
   els.closeHelpModal.addEventListener("click", closeHelpModal);
+  els.openSettingsModal.addEventListener("click", openSettingsModal);
+  els.settingsModal.addEventListener("click", (event) => {
+    if (event.target === els.settingsModal) closeSettingsModal();
+  });
+  els.closeSettingsModal.addEventListener("click", closeSettingsModal);
+  els.saveSettingsBasics.addEventListener("click", saveSettingsBasics);
+  els.backupSettings.addEventListener("click", backupSettings);
+  els.restoreSettings.addEventListener("click", openSettingsBackupPicker);
+  els.settingsBackupInput.addEventListener("change", (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (file) restoreSettings(file);
+  });
+  els.settingsAddCommonFilter.addEventListener("click", () => openCommonFilterModal());
+  els.clearFilterHistory.addEventListener("click", clearFilterHistory);
   els.saveAnalysisModal.addEventListener("click", saveAnalysisModal);
   els.analysisModalSearchInput.addEventListener("input", runAnalysisModalSearch);
   els.analysisModalPrevMatch.addEventListener("click", () => goAnalysisModalMatch(-1));
@@ -5929,6 +6312,7 @@
   els.scrollToBottom.addEventListener("click", () => scrollMainLogTo("bottom"));
   els.saveFiltered.addEventListener("click", saveFiltered);
   els.analyzeButton.addEventListener("click", analyzeVisible);
+  els.analysisEndpoint.value = state.serviceEndpoint || DEFAULT_ANALYSIS_ENDPOINT;
   applyLanguage();
   checkAnalysisService();
   window.setInterval(checkAnalysisService, 5e3);
@@ -5966,6 +6350,9 @@
     }
     if (event.key === "Escape" && !els.helpModal.classList.contains("hidden")) {
       closeHelpModal();
+    }
+    if (event.key === "Escape" && !els.settingsModal.classList.contains("hidden")) {
+      closeSettingsModal();
     }
   });
 })();

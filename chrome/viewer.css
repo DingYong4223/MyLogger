@@ -211,6 +211,25 @@ input[type="url"] {
   background: #eff6ff;
 }
 
+.settings-button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: white;
+  color: var(--text);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.settings-button:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: #eff6ff;
+}
+
 .language-popover {
   position: absolute;
   top: calc(100% + 6px);
@@ -375,7 +394,13 @@ input[type="url"] {
   font: 700 14px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-.common-filter-header button {
+.common-filter-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.common-filter-header-actions button {
   display: grid;
   place-items: center;
   width: 24px;
@@ -388,7 +413,7 @@ input[type="url"] {
   cursor: pointer;
 }
 
-.common-filter-header button:hover {
+.common-filter-header-actions button:hover {
   border-color: var(--blue);
   background: #eff6ff;
 }
@@ -399,6 +424,10 @@ input[type="url"] {
 }
 
 .common-filter-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -406,12 +435,55 @@ input[type="url"] {
   background: #f8fafc;
   color: var(--text);
   text-align: left;
-  cursor: pointer;
+  cursor: grab;
+}
+
+.common-filter-item.dragging {
+  opacity: 0.55;
 }
 
 .common-filter-item:hover {
   border-color: var(--blue);
   background: #eff6ff;
+}
+
+.common-filter-item-main {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.common-filter-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.common-filter-item-actions button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font: 700 13px/1 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+
+.common-filter-item-actions button:hover {
+  background: #e0ecff;
+  color: var(--blue);
+}
+
+.common-filter-item-actions button.danger:hover {
+  background: #fee2e2;
+  color: #b91c1c;
 }
 
 .common-filter-item-title {
@@ -1173,6 +1245,12 @@ mark {
   min-width: 680px;
 }
 
+.modal-panel.settings-modal-panel {
+  width: min(860px, calc(100vw - 56px));
+  height: min(720px, calc(100vh - 56px));
+  min-width: 640px;
+}
+
 .modal-header {
   display: flex;
   align-items: center;
@@ -1354,6 +1432,125 @@ mark {
 .common-filter-modal-actions {
   display: flex;
   justify-content: flex-end;
+}
+
+.settings-modal-body {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+  background: #f8fafc;
+}
+
+.settings-section {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: white;
+}
+
+.settings-section h3 {
+  margin: 0;
+  color: #344054;
+  font: 700 13px/1.3 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.settings-section label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.settings-section input,
+.settings-section select {
+  width: 100%;
+  min-width: 0;
+}
+
+.settings-section-header,
+.settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settings-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.settings-list-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  background: #f8fafc;
+}
+
+.settings-list-item-content {
+  min-width: 0;
+}
+
+.settings-list-item-content strong,
+.settings-list-item-content span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-list-item-content strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.settings-list-item-content span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.settings-list-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-list-item-actions button {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 4px 7px;
+  background: white;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.settings-list-item-actions button:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.settings-list-item-actions button.danger:hover {
+  border-color: #dc2626;
+  color: #dc2626;
+}
+
+.settings-empty {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .analysis-split {
