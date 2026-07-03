@@ -3297,6 +3297,7 @@
   var LOG_ROW_HEIGHT = 24;
   var LOG_OVERSCAN_ROWS = 30;
   var LOG_CONTEXT_RADIUS = 50;
+  var ANALYSIS_ROW_HEIGHT = 18;
   var LOG_TEXT_FONT = '12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace';
   var TOOLS_PAGE_PATH = "mytools.htm";
   var QRCODE_SCRIPT_PATH = "vendor/qrcode.min.js";
@@ -3333,6 +3334,8 @@
     modalActiveMatch: -1,
     modalActiveSearch: "",
     modalFilteredRows: [],
+    modalVirtualStart: 0,
+    modalVirtualEnd: 0,
     analysisModalText: "",
     analysisModalData: null,
     analysisModalMatches: [],
@@ -3340,6 +3343,11 @@
     analysisModalSearch: "",
     analysisModalFilteredCount: 0,
     analysisModalTotalCount: 0,
+    analysisRightRows: [],
+    analysisRightHighlight: "",
+    analysisRightBody: null,
+    analysisRightVirtualStart: 0,
+    analysisRightVirtualEnd: 0,
     virtualStart: 0,
     virtualEnd: 0,
     contextActiveIndex: -1,
@@ -3350,6 +3358,8 @@
   var analysisStatusTimer = 0;
   var virtualScrollFrame = 0;
   var contextVirtualScrollFrame = 0;
+  var modalVirtualScrollFrame = 0;
+  var analysisRightVirtualScrollFrame = 0;
   var pendingLogRowClickTimer = 0;
   var suppressNextLogRowClick = false;
   var els = {
@@ -3402,6 +3412,8 @@
     searchModal: document.getElementById("searchModal"),
     searchModalTitle: document.getElementById("searchModalTitle"),
     searchModalMeta: document.getElementById("searchModalMeta"),
+    searchTableWrap: document.getElementById("searchTableWrap"),
+    searchResultTable: document.querySelector("#searchTableWrap .log-table"),
     searchResultBody: document.getElementById("searchResultBody"),
     contextModal: document.getElementById("contextModal"),
     contextModalMeta: document.getElementById("contextModalMeta"),
@@ -3890,6 +3902,8 @@
     state.fileSize = file.size;
     state.rawText = text;
     state.rows = text.split(/\r?\n/).map(parseLine);
+    els.filterInput.value = "";
+    els.searchInput.value = "";
     state.selectedLevels.clear();
     state.tagFilters = [""];
     state.draftTagFilters = [""];
@@ -3904,6 +3918,8 @@
     updateTagFilterHeader();
     state.markedLines.clear();
     state.activeMarkedLine = null;
+    state.searchResultRows = [];
+    closeSearchModal();
     els.analysisLogPath.textContent = state.filePath;
     updateFileMeta();
     els.dropZone.classList.add("hidden");
@@ -4367,6 +4383,9 @@
     if (context === "main" && state.activeMatch >= 0 && state.matches[state.activeMatch] === visibleIndex) {
       tr.classList.add("active-match");
     }
+    if ((context === "search-modal" || context === "modal") && state.modalActiveMatch === visibleIndex) {
+      tr.classList.add("active-match");
+    }
     const lineCell = cell(row.sourceLine, "line-col");
     lineCell.title = "\u70B9\u51FB\u6807\u8BB0\u6216\u53D6\u6D88\u6807\u8BB0\u5F53\u524D\u884C";
     lineCell.addEventListener("click", (event) => {
@@ -4439,6 +4458,20 @@
     }
     const messageWidth = Math.max(720, Math.ceil(measureLogTextWidth(longestMessage)) + 32);
     for (const table of [els.logTable, els.contextLogTable]) {
+      if (!table) continue;
+      table.style.setProperty("--message-col-width", `${messageWidth}px`);
+      table.style.minWidth = `${getVisibleFixedColumnsWidth() + messageWidth + 96}px`;
+    }
+  }
+  function updateLogTableWidthForTables(rows, tables) {
+    let longestMessage = "";
+    for (const row of rows) {
+      if ((row.message || "").length > longestMessage.length) {
+        longestMessage = row.message || "";
+      }
+    }
+    const messageWidth = Math.max(720, Math.ceil(measureLogTextWidth(longestMessage)) + 32);
+    for (const table of tables) {
       if (!table) continue;
       table.style.setProperty("--message-col-width", `${messageWidth}px`);
       table.style.minWidth = `${getVisibleFixedColumnsWidth() + messageWidth + 96}px`;
@@ -4545,14 +4578,35 @@
     if (!lowerQuery) return [];
     return state.visibleRows.map((row, index) => ({ row, index })).filter(({ row }) => row.searchable.toLowerCase().includes(lowerQuery));
   }
-  function renderRowsInto(target, rows, activeSearch) {
-    const fragment = document.createDocumentFragment();
-    target.textContent = "";
+  function renderSearchModalRows() {
+    const rows = state.modalFilteredRows;
+    const viewportHeight = els.searchTableWrap.clientHeight || 1;
+    const scrollTop = els.searchTableWrap.scrollTop;
+    const start = Math.max(0, Math.floor(scrollTop / LOG_ROW_HEIGHT) - LOG_OVERSCAN_ROWS);
+    const end = Math.min(rows.length, Math.ceil((scrollTop + viewportHeight) / LOG_ROW_HEIGHT) + LOG_OVERSCAN_ROWS);
     const rowContext = state.searchModalCanOpenContext ? "search-modal" : "modal";
-    for (const row of rows) {
-      fragment.appendChild(createLogRow(row, activeSearch, -1, rowContext));
+    state.modalVirtualStart = start;
+    state.modalVirtualEnd = end;
+    const fragment = document.createDocumentFragment();
+    els.searchResultBody.textContent = "";
+    if (start > 0) {
+      fragment.appendChild(spacerRow(start * LOG_ROW_HEIGHT));
     }
-    target.appendChild(fragment);
+    for (let index = start; index < end; index += 1) {
+      fragment.appendChild(createLogRow(rows[index], state.modalActiveSearch, index, rowContext));
+    }
+    const bottomRows = rows.length - end;
+    if (bottomRows > 0) {
+      fragment.appendChild(spacerRow(bottomRows * LOG_ROW_HEIGHT));
+    }
+    els.searchResultBody.appendChild(fragment);
+  }
+  function scheduleSearchModalRowsRender() {
+    if (modalVirtualScrollFrame) return;
+    modalVirtualScrollFrame = window.requestAnimationFrame(() => {
+      modalVirtualScrollFrame = 0;
+      renderSearchModalRows();
+    });
   }
   function toggleMarkedLine(sourceLine) {
     if (state.markedLines.has(sourceLine)) {
@@ -4707,10 +4761,14 @@
     els.modalSearchInput.value = "";
     els.clearMarkedRows.classList.add("hidden");
     els.searchModalMeta.textContent = state.language === "en" ? `${state.fileName || "log"} \xB7 Search: ${query} \xB7 ${rows.length.toLocaleString()} matches` : `${state.fileName || "log"} \xB7 \u641C\u7D22\uFF1A${query} \xB7 ${rows.length.toLocaleString()} \u4E2A\u5339\u914D`;
-    renderRowsInto(els.searchResultBody, rows, query);
     state.modalFilteredRows = rows;
-    updateModalMatchStatus();
+    state.modalVirtualStart = 0;
+    state.modalVirtualEnd = 0;
+    updateLogTableWidthForTables(rows, [els.searchResultTable]);
     els.searchModal.classList.remove("hidden");
+    els.searchTableWrap.scrollTop = 0;
+    renderSearchModalRows();
+    updateModalMatchStatus();
   }
   function openMarkedRows() {
     const rows = state.rows.filter((row) => state.markedLines.has(row.sourceLine));
@@ -4729,15 +4787,21 @@
     state.modalFilteredRows = rows;
     els.modalSearchInput.value = "";
     els.clearMarkedRows.classList.remove("hidden");
-    renderRowsInto(els.searchResultBody, rows, "");
     state.modalFilteredRows = rows;
-    updateModalMatchStatus();
+    state.modalVirtualStart = 0;
+    state.modalVirtualEnd = 0;
+    updateLogTableWidthForTables(rows, [els.searchResultTable]);
     els.searchModal.classList.remove("hidden");
+    els.searchTableWrap.scrollTop = 0;
+    renderSearchModalRows();
+    updateModalMatchStatus();
   }
   function closeSearchModal() {
     state.searchModalCanOpenContext = false;
     state.searchModalMode = "";
     state.modalFilteredRows = [];
+    state.modalVirtualStart = 0;
+    state.modalVirtualEnd = 0;
     els.searchModal.classList.add("hidden");
     els.clearMarkedRows.classList.add("hidden");
   }
@@ -4766,8 +4830,10 @@
     state.modalActiveSearch = query;
     const matches = findModalMatchingRows(query);
     state.modalFilteredRows = query ? matches.map(({ row }) => row) : state.searchResultRows.slice();
-    renderRowsInto(els.searchResultBody, state.modalFilteredRows, query);
-    state.modalMatches = query ? Array.from(els.searchResultBody.querySelectorAll("tr")) : [];
+    state.modalMatches = query ? state.modalFilteredRows.map((_, index) => index) : [];
+    updateLogTableWidthForTables(state.modalFilteredRows, [els.searchResultTable]);
+    els.searchTableWrap.scrollTop = 0;
+    renderSearchModalRows();
     updateModalMatchStatus();
   }
   function findModalMatchingRows(query) {
@@ -4783,14 +4849,16 @@
       runModalSearch();
     }
     if (!state.modalMatches.length) return;
-    if (state.modalActiveMatch >= 0) {
-      state.modalMatches[state.modalActiveMatch].classList.remove("active-match");
-    }
-    state.modalActiveMatch = (state.modalActiveMatch + direction + state.modalMatches.length) % state.modalMatches.length;
-    const row = state.modalMatches[state.modalActiveMatch];
-    row.classList.add("active-match");
-    row.scrollIntoView({ block: "center", inline: "nearest" });
+    state.modalActiveMatch = state.modalActiveMatch < 0 ? direction > 0 ? 0 : state.modalMatches.length - 1 : (state.modalActiveMatch + direction + state.modalMatches.length) % state.modalMatches.length;
+    const targetIndex = state.modalMatches[state.modalActiveMatch];
+    scrollSearchModalRowIndexIntoView(targetIndex);
+    renderSearchModalRows();
     updateModalMatchStatus();
+  }
+  function scrollSearchModalRowIndexIntoView(index) {
+    const viewportHeight = els.searchTableWrap.clientHeight || 0;
+    const targetTop = Math.max(0, index * LOG_ROW_HEIGHT - Math.max(0, viewportHeight - LOG_ROW_HEIGHT) / 2);
+    els.searchTableWrap.scrollTop = targetTop;
   }
   function updateModalMatchStatus() {
     const filteredCount = state.modalFilteredRows.length;
@@ -4898,6 +4966,8 @@
       renderBreakpointAnalysis(breakpoints, query);
       return;
     }
+    state.analysisRightRows = [];
+    state.analysisRightBody = null;
     renderPlainAnalysisText(query);
   }
   function renderPlainAnalysisText(query) {
@@ -4932,6 +5002,9 @@
   function renderBreakpointAnalysis(breakpoints, query) {
     const trimmedQuery = query.trim();
     const matches = [];
+    state.analysisRightRows = [];
+    state.analysisRightBody = null;
+    state.analysisRightHighlight = trimmedQuery;
     const logStrings = Array.isArray(breakpoints.logStrings) ? breakpoints.logStrings.filter((value) => typeof value === "string" && value) : [];
     const matchedLogs = Array.isArray(breakpoints.matchedLogs) ? breakpoints.matchedLogs : [];
     const matchedByLogString = /* @__PURE__ */ new Map();
@@ -4981,7 +5054,6 @@
     const rightMeta = hasFilter ? state.language === "en" ? `${renderedRightRows.toLocaleString()}/${totalMatches.toLocaleString()} rows` : `${renderedRightRows.toLocaleString()}/${totalMatches.toLocaleString()} \u884C` : state.language === "en" ? `${totalMatches.toLocaleString()} rows` : `${totalMatches.toLocaleString()} \u884C`;
     const right = createAnalysisPane(t("relatedLogs"), rightMeta);
     const rightBody = right.querySelector(".analysis-pane-body");
-    let appendedRightRows = 0;
     if (!rightGroups.length) {
       const empty = document.createElement("div");
       empty.className = "analysis-empty";
@@ -4990,50 +5062,109 @@
     } else {
       for (const group of rightGroups) {
         const groupMatches = Array.isArray(group.matches) ? group.matches : [];
-        const groupEl = document.createElement("section");
-        groupEl.className = "analysis-match-group";
         for (const item of groupMatches) {
           const lineText = item && item.line ? String(item.line) : "";
-          const row = document.createElement("div");
-          row.className = "analysis-log-match-row";
-          const lineNumber = document.createElement("span");
-          lineNumber.className = "analysis-line-number";
-          lineNumber.textContent = item && item.lineNumber ? String(item.lineNumber) : "-";
-          const line = document.createElement("pre");
-          line.className = "analysis-log-line";
-          appendHighlightedText(line, lineText, trimmedQuery || group.logString || "", matches, {
+          state.analysisRightRows.push({
+            item,
+            lineText,
+            lineNumber: item && item.lineNumber ? String(item.lineNumber) : "-",
+            highlight: trimmedQuery || group.logString || "",
             regex: !trimmedQuery && els.filterRegex.checked,
             caseSensitive: !trimmedQuery && els.filterCase.checked,
             trackMatches: Boolean(trimmedQuery)
           });
-          row.append(lineNumber, line);
-          row.title = "\u5355\u51FB\u67E5\u770B\u4E0A\u4E0B\u6587\uFF0C\u53CC\u51FB\u590D\u5236\u5F53\u524D\u884C";
-          row.addEventListener("click", () => scheduleAnalysisLogRowClick(item && item.lineNumber));
-          row.addEventListener("dblclick", () => {
-            cancelPendingLogRowClick();
-            copyLine(lineText);
-          });
-          groupEl.append(row);
-          appendedRightRows += 1;
-        }
-        if (groupMatches.length) {
-          rightBody.append(groupEl);
         }
       }
-      if (!appendedRightRows) {
+      if (!state.analysisRightRows.length) {
         const empty = document.createElement("div");
         empty.className = "analysis-empty";
         empty.textContent = t("noMatchedRelatedLogs");
         rightBody.append(empty);
       }
     }
+    if (state.analysisRightRows.length) {
+      rightBody.textContent = "";
+      rightBody.classList.add("analysis-pane-body-virtual");
+      state.analysisRightBody = rightBody;
+      state.analysisModalMatches = trimmedQuery ? state.analysisRightRows.map((_, index) => index) : [];
+      rightBody.addEventListener("scroll", scheduleAnalysisRightRowsRender);
+      renderAnalysisRightRows();
+    } else {
+      rightBody.classList.remove("analysis-pane-body-virtual");
+    }
     split.append(left, right);
     els.analysisModalBody.append(split);
-    state.analysisModalMatches = matches;
+    if (!state.analysisRightRows.length) {
+      state.analysisModalMatches = matches;
+    }
     state.analysisModalActiveMatch = -1;
     state.analysisModalSearch = trimmedQuery;
     state.analysisModalFilteredCount = hasFilter ? renderedRightRows : totalMatches;
     state.analysisModalTotalCount = totalMatches;
+  }
+  function renderAnalysisRightRows() {
+    const body = state.analysisRightBody;
+    if (!body) return;
+    const rows = state.analysisRightRows;
+    const viewportHeight = body.clientHeight || 1;
+    const scrollTop = body.scrollTop;
+    const start = Math.max(0, Math.floor(scrollTop / ANALYSIS_ROW_HEIGHT) - LOG_OVERSCAN_ROWS);
+    const end = Math.min(rows.length, Math.ceil((scrollTop + viewportHeight) / ANALYSIS_ROW_HEIGHT) + LOG_OVERSCAN_ROWS);
+    state.analysisRightVirtualStart = start;
+    state.analysisRightVirtualEnd = end;
+    const fragment = document.createDocumentFragment();
+    body.textContent = "";
+    if (start > 0) {
+      fragment.appendChild(spacerBlock(start * ANALYSIS_ROW_HEIGHT));
+    }
+    for (let index = start; index < end; index += 1) {
+      fragment.appendChild(createAnalysisRightRow(rows[index], index));
+    }
+    const bottomRows = rows.length - end;
+    if (bottomRows > 0) {
+      fragment.appendChild(spacerBlock(bottomRows * ANALYSIS_ROW_HEIGHT));
+    }
+    body.append(fragment);
+  }
+  function createAnalysisRightRow(rowData, index) {
+    const matches = [];
+    const row = document.createElement("div");
+    row.className = "analysis-log-match-row";
+    if (state.analysisModalActiveMatch === index) {
+      row.classList.add("active-analysis-row");
+    }
+    const lineNumber = document.createElement("span");
+    lineNumber.className = "analysis-line-number";
+    lineNumber.textContent = rowData.lineNumber;
+    const line = document.createElement("pre");
+    line.className = "analysis-log-line";
+    appendHighlightedText(line, rowData.lineText, rowData.highlight, matches, {
+      regex: rowData.regex,
+      caseSensitive: rowData.caseSensitive,
+      trackMatches: rowData.trackMatches
+    });
+    row.append(lineNumber, line);
+    row.title = "\u5355\u51FB\u67E5\u770B\u4E0A\u4E0B\u6587\uFF0C\u53CC\u51FB\u590D\u5236\u5F53\u524D\u884C";
+    row.addEventListener("click", () => scheduleAnalysisLogRowClick(rowData.item && rowData.item.lineNumber));
+    row.addEventListener("dblclick", () => {
+      cancelPendingLogRowClick();
+      copyLine(rowData.lineText);
+    });
+    return row;
+  }
+  function spacerBlock(height) {
+    const div = document.createElement("div");
+    div.className = "virtual-spacer-block";
+    div.setAttribute("aria-hidden", "true");
+    div.style.height = `${height}px`;
+    return div;
+  }
+  function scheduleAnalysisRightRowsRender() {
+    if (analysisRightVirtualScrollFrame) return;
+    analysisRightVirtualScrollFrame = window.requestAnimationFrame(() => {
+      analysisRightVirtualScrollFrame = 0;
+      renderAnalysisRightRows();
+    });
   }
   function analysisTextMatches(text, query) {
     if (!query) return true;
@@ -5134,6 +5265,14 @@
       runAnalysisModalSearch();
     }
     if (!state.analysisModalMatches.length) return;
+    if (state.analysisRightRows.length && state.analysisRightBody) {
+      state.analysisModalActiveMatch = state.analysisModalActiveMatch < 0 ? direction > 0 ? 0 : state.analysisModalMatches.length - 1 : (state.analysisModalActiveMatch + direction + state.analysisModalMatches.length) % state.analysisModalMatches.length;
+      const targetIndex = state.analysisModalMatches[state.analysisModalActiveMatch];
+      scrollAnalysisRightRowIndexIntoView(targetIndex);
+      renderAnalysisRightRows();
+      updateAnalysisModalMatchStatus();
+      return;
+    }
     if (state.analysisModalActiveMatch >= 0) {
       state.analysisModalMatches[state.analysisModalActiveMatch].classList.remove("active-analysis-match");
     }
@@ -5142,6 +5281,13 @@
     match.classList.add("active-analysis-match");
     match.scrollIntoView({ block: "center", inline: "nearest" });
     updateAnalysisModalMatchStatus();
+  }
+  function scrollAnalysisRightRowIndexIntoView(index) {
+    const body = state.analysisRightBody;
+    if (!body) return;
+    const viewportHeight = body.clientHeight || 0;
+    const targetTop = Math.max(0, index * ANALYSIS_ROW_HEIGHT - Math.max(0, viewportHeight - ANALYSIS_ROW_HEIGHT) / 2);
+    body.scrollTop = targetTop;
   }
   function updateAnalysisModalMatchStatus() {
     const query = els.analysisModalSearchInput.value.trim();
@@ -5161,6 +5307,9 @@
     downloadText(content, `${sanitizeFilename(base)}.analysis.txt`);
   }
   function getAnalysisRightPaneText() {
+    if (state.analysisRightRows.length) {
+      return state.analysisRightRows.map((row) => `${row.lineNumber}: ${row.lineText}`).join("\n");
+    }
     const panes = Array.from(els.analysisModalBody.querySelectorAll(".analysis-pane"));
     const rightPane = panes[1];
     if (!rightPane) return "";
@@ -5439,6 +5588,7 @@
   els.tableWrap.addEventListener("scroll", closeTimeFilterPopover);
   els.tableWrap.addEventListener("scroll", closeLevelFilterPopover);
   els.tableWrap.addEventListener("scroll", closeTagFilterPopover);
+  els.searchTableWrap.addEventListener("scroll", scheduleSearchModalRowsRender);
   els.contextTableWrap.addEventListener("scroll", scheduleContextRowsRender);
   els.scrollToTop.addEventListener("click", () => scrollMainLogTo("top"));
   els.scrollToBottom.addEventListener("click", () => scrollMainLogTo("bottom"));

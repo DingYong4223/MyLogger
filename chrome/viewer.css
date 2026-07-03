@@ -1172,6 +1172,11 @@ mark {
   padding: 8px 10px;
 }
 
+.analysis-pane-body-virtual {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
 .analysis-log-string {
   display: grid;
   grid-template-columns: 28px max-content;
@@ -1206,9 +1211,14 @@ mark {
   grid-template-columns: 46px max-content;
   gap: 8px;
   padding: 1px 0;
+  min-height: 18px;
   line-height: 1.35;
   width: max-content;
   min-width: 100%;
+}
+
+.analysis-log-match-row.active-analysis-row {
+  background: #fff1f2;
 }
 
 .analysis-log-line {
@@ -1222,6 +1232,12 @@ mark {
   color: var(--muted);
   opacity: 0.78;
   padding: 8px 0;
+}
+
+.virtual-spacer-block {
+  width: 1px;
+  min-width: 1px;
+  pointer-events: none;
 }
 
 .analysis-empty.compact {
