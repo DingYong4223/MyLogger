@@ -1027,7 +1027,7 @@ mark {
 
 .analysis-split {
   display: grid;
-  grid-template-columns: minmax(180px, 0.28fr) minmax(440px, 0.72fr);
+  grid-template-columns: minmax(120px, 0.19fr) minmax(440px, 0.81fr);
   gap: 12px;
   min-height: 100%;
 }

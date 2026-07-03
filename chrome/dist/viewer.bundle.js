@@ -3429,7 +3429,7 @@
     toast: document.getElementById("toast")
   };
   function parseLine(text, index) {
-    const filtered = text.match(/^(\d+):(.*)$/);
+    const filtered = text.match(/^(\d+):\s*(.*)$/);
     const sourceLine = filtered ? Number(filtered[1]) : index + 1;
     const body = filtered ? filtered[2] : text;
     const logcat = body.match(/^(\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3})\s+(\d+)\s+(\d+)\s+([VDIWEF])\s+([^:]+?)\s*:\s?(.*)$/);
@@ -3440,9 +3440,9 @@
         level: "",
         tag: "",
         message: body,
-        raw: text,
+        raw: body,
         timeValue: null,
-        searchable: text
+        searchable: `${sourceLine} ${body}`
       };
     }
     const [, time, pid, tid, level, tag, message] = logcat;
@@ -3454,7 +3454,7 @@
       message,
       pid,
       tid,
-      raw: text,
+      raw: body,
       timeValue: parseLogTimeValue(time),
       searchable: `${sourceLine} ${time} ${pid} ${tid} ${level} ${tag} ${message}`
     };
@@ -4295,7 +4295,7 @@
   }
   function saveSearchResults() {
     if (!state.searchResultRows.length) return;
-    const content = state.searchResultRows.map((row) => row.raw).join("\n");
+    const content = formatRowsForSave(state.searchResultRows);
     const suffix = els.searchModalTitle.textContent === "\u5DF2\u6807\u8BB0\u884C" ? "marked" : "search";
     downloadText(content, `${state.fileName || "log"}.${suffix}.txt`);
   }
@@ -4365,9 +4365,12 @@
     showToast(`\u5DF2\u590D\u5236\uFF1A${line.slice(0, 120)}`);
   }
   function saveFiltered() {
-    const content = state.visibleRows.map((row) => row.raw).join("\n");
+    const content = formatRowsForSave(state.visibleRows);
     const base = state.fileName ? state.fileName.replace(/\.[^.]+$/, "") : "mylogger";
     downloadText(content, `${base}.filtered.txt`);
+  }
+  function formatRowsForSave(rows) {
+    return rows.map((row) => `${row.sourceLine}: ${row.raw}`).join("\n");
   }
   function downloadText(content, filename) {
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
@@ -4690,13 +4693,25 @@
     els.analysisModalMatchStatus.textContent = `${current}/${state.analysisModalMatches.length} \u4E2A\u5339\u914D`;
   }
   function saveAnalysisModal() {
-    const content = state.analysisModalText || els.analysisModalBody.textContent || "";
+    const content = getAnalysisRightPaneText() || state.analysisModalText || els.analysisModalBody.textContent || "";
     if (!content) {
       showToast("\u6CA1\u6709\u53EF\u4FDD\u5B58\u7684\u5206\u6790\u7ED3\u679C\u3002");
       return;
     }
     const base = state.fileName ? state.fileName.replace(/\.[^.]+$/, "") : "mylogger";
     downloadText(content, `${sanitizeFilename(base)}.analysis.txt`);
+  }
+  function getAnalysisRightPaneText() {
+    const panes = Array.from(els.analysisModalBody.querySelectorAll(".analysis-pane"));
+    const rightPane = panes[1];
+    if (!rightPane) return "";
+    const rows = Array.from(rightPane.querySelectorAll(".analysis-log-match-row"));
+    if (!rows.length) return rightPane.textContent.trim();
+    return rows.map((row) => {
+      const lineNumber = row.querySelector(".analysis-line-number")?.textContent.trim() || "-";
+      const line = row.querySelector(".analysis-log-line")?.textContent || "";
+      return `${lineNumber}: ${line}`;
+    }).join("\n");
   }
   function sanitizeFilename(value) {
     return value.replace(/[\\/:*?"<>|]+/g, "_").trim() || "mylogger";

@@ -139,7 +139,7 @@ const els = {
 };
 
 function parseLine(text, index) {
-  const filtered = text.match(/^(\d+):(.*)$/);
+  const filtered = text.match(/^(\d+):\s*(.*)$/);
   const sourceLine = filtered ? Number(filtered[1]) : index + 1;
   const body = filtered ? filtered[2] : text;
   const logcat = body.match(/^(\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3})\s+(\d+)\s+(\d+)\s+([VDIWEF])\s+([^:]+?)\s*:\s?(.*)$/);
@@ -151,9 +151,9 @@ function parseLine(text, index) {
       level: "",
       tag: "",
       message: body,
-      raw: text,
+      raw: body,
       timeValue: null,
-      searchable: text,
+      searchable: `${sourceLine} ${body}`,
     };
   }
 
@@ -166,7 +166,7 @@ function parseLine(text, index) {
     message,
     pid,
     tid,
-    raw: text,
+    raw: body,
     timeValue: parseLogTimeValue(time),
     searchable: `${sourceLine} ${time} ${pid} ${tid} ${level} ${tag} ${message}`,
   };
@@ -1142,7 +1142,7 @@ function closeSearchModal() {
 
 function saveSearchResults() {
   if (!state.searchResultRows.length) return;
-  const content = state.searchResultRows.map((row) => row.raw).join("\n");
+  const content = formatRowsForSave(state.searchResultRows);
   const suffix = els.searchModalTitle.textContent === "已标记行" ? "marked" : "search";
   downloadText(content, `${state.fileName || "log"}.${suffix}.txt`);
 }
@@ -1224,9 +1224,13 @@ async function copyLine(line) {
 }
 
 function saveFiltered() {
-  const content = state.visibleRows.map((row) => row.raw).join("\n");
+  const content = formatRowsForSave(state.visibleRows);
   const base = state.fileName ? state.fileName.replace(/\.[^.]+$/, "") : "mylogger";
   downloadText(content, `${base}.filtered.txt`);
+}
+
+function formatRowsForSave(rows) {
+  return rows.map((row) => `${row.sourceLine}: ${row.raw}`).join("\n");
 }
 
 function downloadText(content, filename) {
@@ -1587,13 +1591,26 @@ function updateAnalysisModalMatchStatus() {
 }
 
 function saveAnalysisModal() {
-  const content = state.analysisModalText || els.analysisModalBody.textContent || "";
+  const content = getAnalysisRightPaneText() || state.analysisModalText || els.analysisModalBody.textContent || "";
   if (!content) {
     showToast("没有可保存的分析结果。");
     return;
   }
   const base = state.fileName ? state.fileName.replace(/\.[^.]+$/, "") : "mylogger";
   downloadText(content, `${sanitizeFilename(base)}.analysis.txt`);
+}
+
+function getAnalysisRightPaneText() {
+  const panes = Array.from(els.analysisModalBody.querySelectorAll(".analysis-pane"));
+  const rightPane = panes[1];
+  if (!rightPane) return "";
+  const rows = Array.from(rightPane.querySelectorAll(".analysis-log-match-row"));
+  if (!rows.length) return rightPane.textContent.trim();
+  return rows.map((row) => {
+    const lineNumber = row.querySelector(".analysis-line-number")?.textContent.trim() || "-";
+    const line = row.querySelector(".analysis-log-line")?.textContent || "";
+    return `${lineNumber}: ${line}`;
+  }).join("\n");
 }
 
 function sanitizeFilename(value) {
