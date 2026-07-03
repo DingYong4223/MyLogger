@@ -3308,6 +3308,7 @@
     rows: [],
     visibleRows: [],
     selectedLevels: /* @__PURE__ */ new Set(),
+    tagFilters: [""],
     matches: [],
     searchResultRows: [],
     markedLines: /* @__PURE__ */ new Set(),
@@ -3348,6 +3349,12 @@
     filterCase: document.getElementById("filterCase"),
     levelFilterHeader: document.getElementById("levelFilterHeader"),
     levelFilterPopover: document.getElementById("levelFilterPopover"),
+    tagFilterHeader: document.getElementById("tagFilterHeader"),
+    tagFilterPopover: document.getElementById("tagFilterPopover"),
+    tagFilterInputs: document.getElementById("tagFilterInputs"),
+    addTagFilter: document.getElementById("addTagFilter"),
+    confirmTagFilter: document.getElementById("confirmTagFilter"),
+    clearTagFilter: document.getElementById("clearTagFilter"),
     searchInput: document.getElementById("searchInput"),
     openSearchResults: document.getElementById("openSearchResults"),
     openMarkedRows: document.getElementById("openMarkedRows"),
@@ -3435,6 +3442,9 @@
     state.rawText = text;
     state.rows = text.split(/\r?\n/).map(parseLine);
     state.selectedLevels.clear();
+    state.tagFilters = [""];
+    renderTagFilterInputs();
+    updateTagFilterHeader();
     state.markedLines.clear();
     state.activeMarkedLine = null;
     els.analysisLogPath.textContent = state.filePath;
@@ -3490,9 +3500,11 @@
       caseSensitive: els.filterCase.checked
     });
     const hasLevelFilter = state.selectedLevels.size > 0;
+    const tagNeedles = state.tagFilters.map((value) => value.trim().toLowerCase()).filter(Boolean);
     state.visibleRows = state.rows.filter((row) => {
       if (matcher && !matcher(row.searchable)) return false;
-      return !hasLevelFilter || state.selectedLevels.has(row.level || "");
+      if (hasLevelFilter && !state.selectedLevels.has(row.level || "")) return false;
+      return !tagNeedles.length || tagNeedles.some((tagNeedle) => (row.tag || "").trim().toLowerCase() === tagNeedle);
     });
     if (state.activeMarkedLine != null && !state.visibleRows.some((row) => row.sourceLine === state.activeMarkedLine)) {
       state.activeMarkedLine = null;
@@ -3567,6 +3579,66 @@
   }
   function closeLevelFilterPopover() {
     els.levelFilterPopover.classList.add("hidden");
+  }
+  function updateTagFilterHeader() {
+    const count = getActiveTagFilters().length;
+    els.tagFilterHeader.textContent = count ? `Tag(${count})` : "Tag";
+    els.tagFilterHeader.classList.toggle("active", count > 0);
+  }
+  function toggleTagFilterPopover(event) {
+    event.stopPropagation();
+    if (els.tagFilterPopover.classList.contains("hidden")) {
+      renderTagFilterInputs();
+      positionTagFilterPopover();
+      els.tagFilterPopover.classList.remove("hidden");
+      window.requestAnimationFrame(() => els.tagFilterInputs.querySelector("input")?.focus());
+    } else {
+      closeTagFilterPopover();
+    }
+  }
+  function positionTagFilterPopover() {
+    const rect = els.tagFilterHeader.getBoundingClientRect();
+    els.tagFilterPopover.style.left = `${Math.max(8, rect.left)}px`;
+    els.tagFilterPopover.style.top = `${rect.bottom + 4}px`;
+  }
+  function closeTagFilterPopover() {
+    els.tagFilterPopover.classList.add("hidden");
+  }
+  function getActiveTagFilters() {
+    return state.tagFilters.map((value) => value.trim()).filter(Boolean);
+  }
+  function renderTagFilterInputs() {
+    els.tagFilterInputs.textContent = "";
+    if (!state.tagFilters.length) {
+      state.tagFilters = [""];
+    }
+    state.tagFilters.forEach((value, index) => {
+      const input = document.createElement("input");
+      input.type = "search";
+      input.placeholder = "\u8F93\u5165 Tag";
+      input.value = value;
+      input.addEventListener("input", () => updateTagFilterAt(index, input.value));
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeTagFilterPopover();
+      });
+      els.tagFilterInputs.append(input);
+    });
+  }
+  function updateTagFilterAt(index, value) {
+    state.tagFilters[index] = value;
+    updateTagFilterHeader();
+    applyFilter();
+  }
+  function addTagFilter() {
+    state.tagFilters.push("");
+    renderTagFilterInputs();
+    window.requestAnimationFrame(() => els.tagFilterInputs.querySelector("input:last-child")?.focus());
+  }
+  function clearTagFilter() {
+    state.tagFilters = [""];
+    renderTagFilterInputs();
+    updateTagFilterHeader();
+    applyFilter();
   }
   function scheduleFilter() {
     window.clearTimeout(filterTimer);
@@ -4437,6 +4509,17 @@
   });
   els.levelFilterPopover.addEventListener("click", (event) => event.stopPropagation());
   document.addEventListener("click", closeLevelFilterPopover);
+  els.tagFilterHeader.addEventListener("click", toggleTagFilterPopover);
+  els.tagFilterHeader.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    toggleTagFilterPopover(event);
+  });
+  els.tagFilterPopover.addEventListener("click", (event) => event.stopPropagation());
+  els.addTagFilter.addEventListener("click", addTagFilter);
+  els.confirmTagFilter.addEventListener("click", closeTagFilterPopover);
+  els.clearTagFilter.addEventListener("click", clearTagFilter);
+  document.addEventListener("click", closeTagFilterPopover);
   els.searchInput.addEventListener("input", markSearchDirty);
   els.analysisEndpoint.addEventListener("input", scheduleAnalysisServiceCheck);
   els.analysisStatusButton.addEventListener("click", checkAnalysisService);
@@ -4460,6 +4543,7 @@
   els.nextMarkedLine.addEventListener("click", () => goMarkedLine(1));
   els.tableWrap.addEventListener("scroll", scheduleVirtualRowsRender);
   els.tableWrap.addEventListener("scroll", closeLevelFilterPopover);
+  els.tableWrap.addEventListener("scroll", closeTagFilterPopover);
   els.contextTableWrap.addEventListener("scroll", scheduleContextRowsRender);
   els.scrollToTop.addEventListener("click", () => scrollMainLogTo("top"));
   els.scrollToBottom.addEventListener("click", () => scrollMainLogTo("bottom"));

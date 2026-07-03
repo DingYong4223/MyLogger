@@ -545,6 +545,64 @@ input[type="url"] {
   text-overflow: ellipsis;
 }
 
+.tag-filter-header {
+  cursor: pointer;
+  user-select: none;
+}
+
+.tag-filter-header.active {
+  color: var(--blue);
+}
+
+.tag-filter-popover {
+  position: fixed;
+  z-index: 20;
+  display: grid;
+  gap: 12px;
+  min-width: 320px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: white;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.16);
+}
+
+.tag-filter-popover.hidden {
+  display: none;
+}
+
+.tag-filter-inputs {
+  display: grid;
+  gap: 8px;
+}
+
+.tag-filter-inputs input {
+  min-width: 260px;
+  height: 34px;
+  width: 100%;
+  font-size: 13px;
+}
+
+.tag-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tag-filter-action-spacer {
+  flex: 1 1 auto;
+}
+
+.tag-filter-actions button {
+  min-width: 42px;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  font: 600 12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+
 .message-col {
   min-width: var(--message-col-width);
 }
