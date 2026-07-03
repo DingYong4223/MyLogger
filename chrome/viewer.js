@@ -19,6 +19,8 @@ const state = {
   draftTagFilters: [""],
   timeFilterStart: null,
   timeFilterEnd: null,
+  draftTimeFilterStart: null,
+  draftTimeFilterEnd: null,
   timeFilterPoints: [],
   matches: [],
   searchResultRows: [],
@@ -62,8 +64,8 @@ const els = {
   filterCase: document.getElementById("filterCase"),
   timeFilterHeader: document.getElementById("timeFilterHeader"),
   timeFilterPopover: document.getElementById("timeFilterPopover"),
-  timeFilterStart: document.getElementById("timeFilterStart"),
-  timeFilterEnd: document.getElementById("timeFilterEnd"),
+  timeFilterStartList: document.getElementById("timeFilterStartList"),
+  timeFilterEndList: document.getElementById("timeFilterEndList"),
   confirmTimeFilter: document.getElementById("confirmTimeFilter"),
   clearTimeFilter: document.getElementById("clearTimeFilter"),
   levelFilterHeader: document.getElementById("levelFilterHeader"),
@@ -178,6 +180,8 @@ async function openFile(file) {
   state.draftTagFilters = [""];
   state.timeFilterStart = null;
   state.timeFilterEnd = null;
+  state.draftTimeFilterStart = null;
+  state.draftTimeFilterEnd = null;
   updateTimeFilterOptions();
   updateTimeFilterHeader();
   renderTagFilterInputs();
@@ -335,12 +339,11 @@ function closeLevelFilterPopover() {
 
 function updateTimeFilterOptions() {
   const values = state.rows.map((row) => row.timeValue).filter((value) => Number.isFinite(value));
-  els.timeFilterStart.textContent = "";
-  els.timeFilterEnd.textContent = "";
+  els.timeFilterStartList.textContent = "";
+  els.timeFilterEndList.textContent = "";
   if (!values.length) {
     state.timeFilterPoints = [];
-    appendTimeOption(els.timeFilterStart, "", "无时间");
-    appendTimeOption(els.timeFilterEnd, "", "无时间");
+    renderEmptyTimeFilterLists();
     return;
   }
 
@@ -350,20 +353,49 @@ function updateTimeFilterOptions() {
     return Math.floor(sortedValues[valueIndex] / 1000) * 1000;
   })));
 
-  appendTimeOption(els.timeFilterStart, "", "不限");
-  appendTimeOption(els.timeFilterEnd, "", "不限");
-  for (const value of state.timeFilterPoints) {
-    const label = formatLogTimeValue(value);
-    appendTimeOption(els.timeFilterStart, String(value), label);
-    appendTimeOption(els.timeFilterEnd, String(value), label);
+  renderTimeFilterLists();
+}
+
+function renderEmptyTimeFilterLists() {
+  for (const list of [els.timeFilterStartList, els.timeFilterEndList]) {
+    const empty = document.createElement("div");
+    empty.className = "time-filter-empty";
+    empty.textContent = "无时间";
+    list.append(empty);
   }
 }
 
-function appendTimeOption(select, value, label) {
-  const option = document.createElement("option");
-  option.value = value;
-  option.textContent = label;
-  select.append(option);
+function renderTimeFilterLists() {
+  els.timeFilterStartList.textContent = "";
+  els.timeFilterEndList.textContent = "";
+  renderTimeFilterList(els.timeFilterStartList, "start");
+  renderTimeFilterList(els.timeFilterEndList, "end");
+}
+
+function renderTimeFilterList(list, type) {
+  list.append(createTimeFilterRow("不限", null, type));
+  for (const value of state.timeFilterPoints) {
+    list.append(createTimeFilterRow(formatLogTimeValue(value), value, type));
+  }
+}
+
+function createTimeFilterRow(label, value, type) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "time-filter-row";
+  button.classList.toggle("start-selected", state.draftTimeFilterStart === value && value != null);
+  button.classList.toggle("end-selected", state.draftTimeFilterEnd === value && value != null);
+  button.classList.toggle("unlimited-selected", value == null && (type === "start" ? state.draftTimeFilterStart == null : state.draftTimeFilterEnd == null));
+  button.textContent = formatTimeOptionLabel(value, label);
+  button.addEventListener("click", () => updateDraftTimeFilter(type, value == null ? "" : String(value)));
+  return button;
+}
+
+function formatTimeOptionLabel(value, label) {
+  const markers = [];
+  if (value != null && state.draftTimeFilterStart === value) markers.push("起点");
+  if (value != null && state.draftTimeFilterEnd === value) markers.push("终点");
+  return markers.length ? `✓ ${markers.join("/")} ${label}` : label;
 }
 
 function formatLogTimeValue(value) {
@@ -381,9 +413,9 @@ function updateTimeFilterHeader() {
 function toggleTimeFilterPopover(event) {
   event.stopPropagation();
   if (els.timeFilterPopover.classList.contains("hidden")) {
+    state.draftTimeFilterStart = state.timeFilterStart == null ? null : Math.floor(state.timeFilterStart / 1000) * 1000;
+    state.draftTimeFilterEnd = state.timeFilterEnd == null ? null : Math.floor(state.timeFilterEnd / 1000) * 1000;
     updateTimeFilterOptions();
-    els.timeFilterStart.value = state.timeFilterStart == null ? "" : String(Math.floor(state.timeFilterStart / 1000) * 1000);
-    els.timeFilterEnd.value = state.timeFilterEnd == null ? "" : String(Math.floor(state.timeFilterEnd / 1000) * 1000);
     positionTimeFilterPopover();
     els.timeFilterPopover.classList.remove("hidden");
   } else {
@@ -401,9 +433,27 @@ function closeTimeFilterPopover() {
   els.timeFilterPopover.classList.add("hidden");
 }
 
+function updateDraftTimeFilter(which, value) {
+  const nextValue = value ? Number(value) : null;
+  if (nextValue != null && which === "start" && state.draftTimeFilterEnd === nextValue) {
+    showToast("起点和终点不能选择同一个时间点。");
+    return;
+  }
+  if (nextValue != null && which === "end" && state.draftTimeFilterStart === nextValue) {
+    showToast("起点和终点不能选择同一个时间点。");
+    return;
+  }
+  if (which === "start") {
+    state.draftTimeFilterStart = nextValue;
+  } else {
+    state.draftTimeFilterEnd = nextValue;
+  }
+  renderTimeFilterLists();
+}
+
 function confirmTimeFilter() {
-  const start = els.timeFilterStart.value ? Number(els.timeFilterStart.value) : null;
-  const end = els.timeFilterEnd.value ? Number(els.timeFilterEnd.value) : null;
+  const start = state.draftTimeFilterStart;
+  const end = state.draftTimeFilterEnd;
   state.timeFilterStart = start != null && end != null ? Math.min(start, end) : start;
   const normalizedEnd = start != null && end != null ? Math.max(start, end) : end;
   state.timeFilterEnd = normalizedEnd == null ? null : normalizedEnd + 999;
@@ -415,8 +465,9 @@ function confirmTimeFilter() {
 function clearTimeFilter() {
   state.timeFilterStart = null;
   state.timeFilterEnd = null;
-  els.timeFilterStart.value = "";
-  els.timeFilterEnd.value = "";
+  state.draftTimeFilterStart = null;
+  state.draftTimeFilterEnd = null;
+  updateTimeFilterOptions();
   updateTimeFilterHeader();
   applyFilter();
 }

@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "MyLogger 日志查看器",
+  "name": "MyLogger",
   "description": "打开、过滤、搜索、复制、保存并分析本地日志文件。",
   "version": "0.1.0",
   "action": {
-    "default_title": "MyLogger 日志查看器",
+    "default_title": "MyLogger",
     "default_popup": "popup.html"
   },
   "permissions": ["clipboardWrite", "downloads"],

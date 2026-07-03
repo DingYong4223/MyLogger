@@ -3312,6 +3312,8 @@
     draftTagFilters: [""],
     timeFilterStart: null,
     timeFilterEnd: null,
+    draftTimeFilterStart: null,
+    draftTimeFilterEnd: null,
     timeFilterPoints: [],
     matches: [],
     searchResultRows: [],
@@ -3353,8 +3355,8 @@
     filterCase: document.getElementById("filterCase"),
     timeFilterHeader: document.getElementById("timeFilterHeader"),
     timeFilterPopover: document.getElementById("timeFilterPopover"),
-    timeFilterStart: document.getElementById("timeFilterStart"),
-    timeFilterEnd: document.getElementById("timeFilterEnd"),
+    timeFilterStartList: document.getElementById("timeFilterStartList"),
+    timeFilterEndList: document.getElementById("timeFilterEndList"),
     confirmTimeFilter: document.getElementById("confirmTimeFilter"),
     clearTimeFilter: document.getElementById("clearTimeFilter"),
     levelFilterHeader: document.getElementById("levelFilterHeader"),
@@ -3464,6 +3466,8 @@
     state.draftTagFilters = [""];
     state.timeFilterStart = null;
     state.timeFilterEnd = null;
+    state.draftTimeFilterStart = null;
+    state.draftTimeFilterEnd = null;
     updateTimeFilterOptions();
     updateTimeFilterHeader();
     renderTagFilterInputs();
@@ -3608,12 +3612,11 @@
   }
   function updateTimeFilterOptions() {
     const values = state.rows.map((row) => row.timeValue).filter((value) => Number.isFinite(value));
-    els.timeFilterStart.textContent = "";
-    els.timeFilterEnd.textContent = "";
+    els.timeFilterStartList.textContent = "";
+    els.timeFilterEndList.textContent = "";
     if (!values.length) {
       state.timeFilterPoints = [];
-      appendTimeOption(els.timeFilterStart, "", "\u65E0\u65F6\u95F4");
-      appendTimeOption(els.timeFilterEnd, "", "\u65E0\u65F6\u95F4");
+      renderEmptyTimeFilterLists();
       return;
     }
     const sortedValues = values.slice().sort((left, right) => left - right);
@@ -3621,19 +3624,44 @@
       const valueIndex = Math.round((sortedValues.length - 1) * index / 20);
       return Math.floor(sortedValues[valueIndex] / 1e3) * 1e3;
     })));
-    appendTimeOption(els.timeFilterStart, "", "\u4E0D\u9650");
-    appendTimeOption(els.timeFilterEnd, "", "\u4E0D\u9650");
-    for (const value of state.timeFilterPoints) {
-      const label = formatLogTimeValue(value);
-      appendTimeOption(els.timeFilterStart, String(value), label);
-      appendTimeOption(els.timeFilterEnd, String(value), label);
+    renderTimeFilterLists();
+  }
+  function renderEmptyTimeFilterLists() {
+    for (const list of [els.timeFilterStartList, els.timeFilterEndList]) {
+      const empty = document.createElement("div");
+      empty.className = "time-filter-empty";
+      empty.textContent = "\u65E0\u65F6\u95F4";
+      list.append(empty);
     }
   }
-  function appendTimeOption(select, value, label) {
-    const option = document.createElement("option");
-    option.value = value;
-    option.textContent = label;
-    select.append(option);
+  function renderTimeFilterLists() {
+    els.timeFilterStartList.textContent = "";
+    els.timeFilterEndList.textContent = "";
+    renderTimeFilterList(els.timeFilterStartList, "start");
+    renderTimeFilterList(els.timeFilterEndList, "end");
+  }
+  function renderTimeFilterList(list, type) {
+    list.append(createTimeFilterRow("\u4E0D\u9650", null, type));
+    for (const value of state.timeFilterPoints) {
+      list.append(createTimeFilterRow(formatLogTimeValue(value), value, type));
+    }
+  }
+  function createTimeFilterRow(label, value, type) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "time-filter-row";
+    button.classList.toggle("start-selected", state.draftTimeFilterStart === value && value != null);
+    button.classList.toggle("end-selected", state.draftTimeFilterEnd === value && value != null);
+    button.classList.toggle("unlimited-selected", value == null && (type === "start" ? state.draftTimeFilterStart == null : state.draftTimeFilterEnd == null));
+    button.textContent = formatTimeOptionLabel(value, label);
+    button.addEventListener("click", () => updateDraftTimeFilter(type, value == null ? "" : String(value)));
+    return button;
+  }
+  function formatTimeOptionLabel(value, label) {
+    const markers = [];
+    if (value != null && state.draftTimeFilterStart === value) markers.push("\u8D77\u70B9");
+    if (value != null && state.draftTimeFilterEnd === value) markers.push("\u7EC8\u70B9");
+    return markers.length ? `\u2713 ${markers.join("/")} ${label}` : label;
   }
   function formatLogTimeValue(value) {
     const date = new Date(value);
@@ -3648,9 +3676,9 @@
   function toggleTimeFilterPopover(event) {
     event.stopPropagation();
     if (els.timeFilterPopover.classList.contains("hidden")) {
+      state.draftTimeFilterStart = state.timeFilterStart == null ? null : Math.floor(state.timeFilterStart / 1e3) * 1e3;
+      state.draftTimeFilterEnd = state.timeFilterEnd == null ? null : Math.floor(state.timeFilterEnd / 1e3) * 1e3;
       updateTimeFilterOptions();
-      els.timeFilterStart.value = state.timeFilterStart == null ? "" : String(Math.floor(state.timeFilterStart / 1e3) * 1e3);
-      els.timeFilterEnd.value = state.timeFilterEnd == null ? "" : String(Math.floor(state.timeFilterEnd / 1e3) * 1e3);
       positionTimeFilterPopover();
       els.timeFilterPopover.classList.remove("hidden");
     } else {
@@ -3665,9 +3693,26 @@
   function closeTimeFilterPopover() {
     els.timeFilterPopover.classList.add("hidden");
   }
+  function updateDraftTimeFilter(which, value) {
+    const nextValue = value ? Number(value) : null;
+    if (nextValue != null && which === "start" && state.draftTimeFilterEnd === nextValue) {
+      showToast("\u8D77\u70B9\u548C\u7EC8\u70B9\u4E0D\u80FD\u9009\u62E9\u540C\u4E00\u4E2A\u65F6\u95F4\u70B9\u3002");
+      return;
+    }
+    if (nextValue != null && which === "end" && state.draftTimeFilterStart === nextValue) {
+      showToast("\u8D77\u70B9\u548C\u7EC8\u70B9\u4E0D\u80FD\u9009\u62E9\u540C\u4E00\u4E2A\u65F6\u95F4\u70B9\u3002");
+      return;
+    }
+    if (which === "start") {
+      state.draftTimeFilterStart = nextValue;
+    } else {
+      state.draftTimeFilterEnd = nextValue;
+    }
+    renderTimeFilterLists();
+  }
   function confirmTimeFilter() {
-    const start = els.timeFilterStart.value ? Number(els.timeFilterStart.value) : null;
-    const end = els.timeFilterEnd.value ? Number(els.timeFilterEnd.value) : null;
+    const start = state.draftTimeFilterStart;
+    const end = state.draftTimeFilterEnd;
     state.timeFilterStart = start != null && end != null ? Math.min(start, end) : start;
     const normalizedEnd = start != null && end != null ? Math.max(start, end) : end;
     state.timeFilterEnd = normalizedEnd == null ? null : normalizedEnd + 999;
@@ -3678,8 +3723,9 @@
   function clearTimeFilter() {
     state.timeFilterStart = null;
     state.timeFilterEnd = null;
-    els.timeFilterStart.value = "";
-    els.timeFilterEnd.value = "";
+    state.draftTimeFilterStart = null;
+    state.draftTimeFilterEnd = null;
+    updateTimeFilterOptions();
     updateTimeFilterHeader();
     applyFilter();
   }

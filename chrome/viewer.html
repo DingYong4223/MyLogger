@@ -233,14 +233,16 @@
       </div>
     </div>
     <div id="timeFilterPopover" class="time-filter-popover hidden">
-      <label>
-        起点
-        <select id="timeFilterStart"></select>
-      </label>
-      <label>
-        终点
-        <select id="timeFilterEnd"></select>
-      </label>
+      <div class="time-filter-lists">
+        <section>
+          <h3>起点</h3>
+          <div id="timeFilterStartList" class="time-filter-list"></div>
+        </section>
+        <section>
+          <h3>终点</h3>
+          <div id="timeFilterEndList" class="time-filter-list"></div>
+        </section>
+      </div>
       <div class="time-filter-actions">
         <button id="confirmTimeFilter" type="button">确定</button>
         <button id="clearTimeFilter" type="button">清除</button>
