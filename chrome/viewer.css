@@ -532,6 +532,12 @@ input[type="url"] {
   font: 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
+body.hide-time-col .log-table .time-col,
+body.hide-level-col .log-table .level-col,
+body.hide-tag-col .log-table .tag-col {
+  display: none;
+}
+
 .log-table thead th {
   position: sticky;
   top: 0;
@@ -629,7 +635,7 @@ input[type="url"] {
 }
 
 .time-col {
-  min-width: 136px;
+  min-width: 178px;
   color: var(--time);
 }
 

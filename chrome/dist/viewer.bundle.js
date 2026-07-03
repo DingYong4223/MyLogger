@@ -3298,7 +3298,6 @@
   var LOG_OVERSCAN_ROWS = 30;
   var LOG_CONTEXT_RADIUS = 50;
   var LOG_TEXT_FONT = '12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace';
-  var LOG_FIXED_COLUMNS_WIDTH = 48 + 136 + 58 + 150;
   var TOOLS_PAGE_PATH = "mytools.htm";
   var QRCODE_SCRIPT_PATH = "vendor/qrcode.min.js";
   var LANGUAGE_STORAGE_KEY = "myloggerLanguage";
@@ -3333,12 +3332,14 @@
     modalMatches: [],
     modalActiveMatch: -1,
     modalActiveSearch: "",
-    modalSearchDirty: false,
+    modalFilteredRows: [],
     analysisModalText: "",
     analysisModalData: null,
     analysisModalMatches: [],
     analysisModalActiveMatch: -1,
     analysisModalSearch: "",
+    analysisModalFilteredCount: 0,
+    analysisModalTotalCount: 0,
     virtualStart: 0,
     virtualEnd: 0,
     contextActiveIndex: -1,
@@ -3445,6 +3446,7 @@
       caseSensitive: "\u533A\u5206\u5927\u5C0F\u5199",
       search: "\u641C\u7D22",
       searchPlaceholder: "\u5728\u5F53\u524D\u7ED3\u679C\u4E2D\u67E5\u627E",
+      resultFilterPlaceholder: "\u8FC7\u6EE4\u5F53\u524D\u7ED3\u679C",
       prevMarked: "\u8DF3\u8F6C\u5230\u4E0A\u4E00\u4E2A\u6807\u8BB0",
       nextMarked: "\u8DF3\u8F6C\u5230\u4E0B\u4E00\u4E2A\u6807\u8BB0",
       allMarked: "\u5168\u90E8\u6807\u8BB0",
@@ -3541,6 +3543,7 @@
       caseSensitive: "Case sensitive",
       search: "Search",
       searchPlaceholder: "Search current results",
+      resultFilterPlaceholder: "Filter current results",
       prevMarked: "Previous mark",
       nextMarked: "Next mark",
       allMarked: "All Marks",
@@ -3716,8 +3719,8 @@
       els.searchModalTitle.textContent = state.searchModalMode === "marked" ? t("markedRows") : t("searchResults");
     }
     if (!state.searchResultRows.length) els.searchModalMeta.textContent = t("noResults");
-    setLeadingText("#searchModal .modal-search label", "search");
-    setPlaceholder("#modalSearchInput", "searchPlaceholder");
+    setLeadingText("#searchModal .modal-search label", "filter");
+    setPlaceholder("#modalSearchInput", "resultFilterPlaceholder");
     setText("#modalPrevMatch", "previous");
     setText("#modalNextMatch", "next");
     setText("#clearMarkedRows", "clearMarks");
@@ -3728,8 +3731,8 @@
     setText("#closeContextModal", "close");
     setText("#analysisModalTitle", "analysisResults");
     if (!state.analysisModalText) els.analysisModalMeta.textContent = t("noResults");
-    setLeadingText("#analysisModal .analysis-modal-search label", "search");
-    setPlaceholder("#analysisModalSearchInput", "searchPlaceholder");
+    setLeadingText("#analysisModal .analysis-modal-search label", "filter");
+    setPlaceholder("#analysisModalSearchInput", "resultFilterPlaceholder");
     setText("#analysisModalPrevMatch", "previous");
     setText("#analysisModalNextMatch", "next");
     setText("#saveAnalysisModal", "save");
@@ -3795,8 +3798,8 @@
     const filtered = text.match(/^(\d+):\s*(.*)$/);
     const sourceLine = filtered ? Number(filtered[1]) : index + 1;
     const body = filtered ? filtered[2] : text;
-    const logcat = body.match(/^(\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3})\s+(\d+)\s+(\d+)\s+([VDIWEF])\s+([^:]+?)\s*:\s?(.*)$/);
-    if (!logcat) {
+    const parsed = parseLogBody(body);
+    if (!parsed) {
       return {
         sourceLine,
         time: "",
@@ -3808,25 +3811,77 @@
         searchable: `${sourceLine} ${body}`
       };
     }
-    const [, time, pid, tid, level, tag, message] = logcat;
     return {
       sourceLine,
-      time,
-      level,
-      tag: tag.trim(),
-      message,
-      pid,
-      tid,
+      time: parsed.time,
+      level: parsed.level,
+      tag: parsed.tag,
+      message: parsed.message,
+      pid: parsed.pid,
+      tid: parsed.tid,
+      process: parsed.process,
       raw: body,
-      timeValue: parseLogTimeValue(time),
-      searchable: `${sourceLine} ${time} ${pid} ${tid} ${level} ${tag} ${message}`
+      timeValue: parseLogTimeValue(parsed.time),
+      searchable: `${sourceLine} ${parsed.time} ${parsed.pid} ${parsed.tid} ${parsed.process || ""} ${parsed.level} ${parsed.tag} ${parsed.message}`
+    };
+  }
+  function parseLogBody(body) {
+    const studioMatch = body.match(
+      /^(?<time>\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d{3})?)\s+(?<pid>\d+)-(?<tid>\d+)\s+(?<tag>\S+)\s+(?<process>\S+)\s+(?<level>[VDIWEF])\s+(?<message>.*)$/
+    );
+    if (studioMatch?.groups) {
+      return {
+        time: studioMatch.groups.time,
+        pid: studioMatch.groups.pid || "",
+        tid: studioMatch.groups.tid || "",
+        process: studioMatch.groups.process || "",
+        level: studioMatch.groups.level || "",
+        tag: (studioMatch.groups.tag || "").trim(),
+        message: studioMatch.groups.message || ""
+      };
+    }
+    const timeMatch = body.match(/^(\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d{3})?)\s+(.*)$/);
+    if (!timeMatch) return null;
+    const [, time, rest] = timeMatch;
+    const variants = [
+      /^(?<pid>\d+)\s+(?<tid>\d+)\s+(?<level>[VDIWEF])\s+(?<tag>[^:]+?)\s*:\s?(?<message>.*)$/,
+      /^(?<pid>\d+)\s+(?<tid>\d+)\s+(?<level>[VDIWEF])\/(?<tag>[^:]+?)\s*:\s?(?<message>.*)$/,
+      /^(?<pid>\d+)\s+(?<tid>\d+)\s+(?<level>[VDIWEF])\s+(?<message>.*)$/,
+      /^(?<pid>\d+)\s+(?<tid>\d+)\s+(?<tag>[^:]+?)\s*:\s?(?<message>.*)$/,
+      /^(?<level>[VDIWEF])\/(?<tag>[^:]+?)\s*:\s?(?<message>.*)$/,
+      /^(?<level>[VDIWEF])\s+(?<tag>[^:]+?)\s*:\s?(?<message>.*)$/,
+      /^(?<level>[VDIWEF])\s+(?<message>.*)$/,
+      /^(?<tag>[^:]+?)\s*:\s?(?<message>.*)$/
+    ];
+    for (const variant of variants) {
+      const match = rest.match(variant);
+      if (!match || !match.groups) continue;
+      return {
+        time,
+        pid: match.groups.pid || "",
+        tid: match.groups.tid || "",
+        process: "",
+        level: match.groups.level || "",
+        tag: (match.groups.tag || "").trim(),
+        message: match.groups.message || ""
+      };
+    }
+    return {
+      time,
+      pid: "",
+      tid: "",
+      process: "",
+      level: "",
+      tag: "",
+      message: rest
     };
   }
   function parseLogTimeValue(value) {
-    const match = value.match(/^(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})\.(\d{3})$/);
+    const match = value.match(/^(?:(\d{4})-)?(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})(?:\.(\d{3}))?$/);
     if (!match) return null;
-    const [, month, day, hour, minute, second, millisecond] = match.map(Number);
-    return Date.UTC(2e3, month - 1, day, hour, minute, second, millisecond);
+    const [, year = 2e3, month, day, hour, minute, second, millisecond = 0] = match.map((part) => Number(part || 0));
+    const normalizedYear = year || 2e3;
+    return Date.UTC(normalizedYear, month - 1, day, hour, minute, second, millisecond);
   }
   async function openFile(file) {
     const text = await file.text();
@@ -3842,6 +3897,7 @@
     state.timeFilterEnd = null;
     state.draftTimeFilterStart = null;
     state.draftTimeFilterEnd = null;
+    updateLogColumnVisibility();
     updateTimeFilterOptions();
     updateTimeFilterHeader();
     renderTagFilterInputs();
@@ -3904,6 +3960,11 @@
   }
   function updateBreakpointsMeta() {
     els.breakpointsMeta.textContent = state.breakpointsFilePath ? `${t("breakpointsFile")}\uFF1A${state.breakpointsFilePath}` : "";
+  }
+  function updateLogColumnVisibility() {
+    document.body.classList.toggle("hide-time-col", !state.rows.some((row) => row.time));
+    document.body.classList.toggle("hide-level-col", !state.rows.some((row) => row.level));
+    document.body.classList.toggle("hide-tag-col", !state.rows.some((row) => row.tag));
   }
   function toggleAnalysisPanel() {
     const collapsed = !els.content.classList.contains("analysis-collapsed");
@@ -4380,8 +4441,15 @@
     for (const table of [els.logTable, els.contextLogTable]) {
       if (!table) continue;
       table.style.setProperty("--message-col-width", `${messageWidth}px`);
-      table.style.minWidth = `${LOG_FIXED_COLUMNS_WIDTH + messageWidth + 96}px`;
+      table.style.minWidth = `${getVisibleFixedColumnsWidth() + messageWidth + 96}px`;
     }
+  }
+  function getVisibleFixedColumnsWidth() {
+    let width = 48;
+    if (!document.body.classList.contains("hide-time-col")) width += 178;
+    if (!document.body.classList.contains("hide-level-col")) width += 58;
+    if (!document.body.classList.contains("hide-tag-col")) width += 150;
+    return width;
   }
   function measureLogTextWidth(text) {
     if (!text) return 0;
@@ -4511,11 +4579,7 @@
           return;
         }
       }
-      renderRowsInto(els.searchResultBody, state.searchResultRows, state.modalActiveSearch);
-      state.modalMatches = [];
-      state.modalActiveMatch = -1;
-      state.modalSearchDirty = Boolean(state.modalActiveSearch);
-      updateModalMatchStatus();
+      applyModalFilter();
     }
   }
   function getVisibleMarkedRows() {
@@ -4639,11 +4703,12 @@
     state.modalMatches = [];
     state.modalActiveMatch = -1;
     state.modalActiveSearch = "";
-    state.modalSearchDirty = false;
+    state.modalFilteredRows = rows;
     els.modalSearchInput.value = "";
     els.clearMarkedRows.classList.add("hidden");
     els.searchModalMeta.textContent = state.language === "en" ? `${state.fileName || "log"} \xB7 Search: ${query} \xB7 ${rows.length.toLocaleString()} matches` : `${state.fileName || "log"} \xB7 \u641C\u7D22\uFF1A${query} \xB7 ${rows.length.toLocaleString()} \u4E2A\u5339\u914D`;
     renderRowsInto(els.searchResultBody, rows, query);
+    state.modalFilteredRows = rows;
     updateModalMatchStatus();
     els.searchModal.classList.remove("hidden");
   }
@@ -4661,22 +4726,25 @@
     state.modalMatches = [];
     state.modalActiveMatch = -1;
     state.modalActiveSearch = "";
-    state.modalSearchDirty = false;
+    state.modalFilteredRows = rows;
     els.modalSearchInput.value = "";
     els.clearMarkedRows.classList.remove("hidden");
     renderRowsInto(els.searchResultBody, rows, "");
+    state.modalFilteredRows = rows;
     updateModalMatchStatus();
     els.searchModal.classList.remove("hidden");
   }
   function closeSearchModal() {
     state.searchModalCanOpenContext = false;
     state.searchModalMode = "";
+    state.modalFilteredRows = [];
     els.searchModal.classList.add("hidden");
     els.clearMarkedRows.classList.add("hidden");
   }
   function saveSearchResults() {
     if (!state.searchResultRows.length) return;
-    const content = formatRowsForSave(state.searchResultRows);
+    const rows = state.modalFilteredRows.length || els.modalSearchInput.value.trim() ? state.modalFilteredRows : state.searchResultRows;
+    const content = formatRowsForSave(rows);
     const suffix = state.searchModalMode === "marked" ? "marked" : "search";
     downloadText(content, `${state.fileName || "log"}.${suffix}.txt`);
   }
@@ -4691,11 +4759,15 @@
     updateMarkedLineJumpButtons();
     showToast("\u5DF2\u6E05\u9664\u6807\u8BB0\u884C\u3002");
   }
-  function markModalSearchDirty() {
-    state.modalSearchDirty = true;
+  function applyModalFilter() {
+    const query = els.modalSearchInput.value.trim();
     state.modalMatches = [];
     state.modalActiveMatch = -1;
-    state.modalActiveSearch = "";
+    state.modalActiveSearch = query;
+    const matches = findModalMatchingRows(query);
+    state.modalFilteredRows = query ? matches.map(({ row }) => row) : state.searchResultRows.slice();
+    renderRowsInto(els.searchResultBody, state.modalFilteredRows, query);
+    state.modalMatches = query ? Array.from(els.searchResultBody.querySelectorAll("tr")) : [];
     updateModalMatchStatus();
   }
   function findModalMatchingRows(query) {
@@ -4704,18 +4776,10 @@
     return state.searchResultRows.map((row, index) => ({ row, index })).filter(({ row }) => row.searchable.toLowerCase().includes(lowerQuery));
   }
   function runModalSearch() {
-    const query = els.modalSearchInput.value.trim();
-    state.modalMatches = [];
-    state.modalActiveMatch = -1;
-    state.modalActiveSearch = query;
-    state.modalSearchDirty = false;
-    renderRowsInto(els.searchResultBody, state.searchResultRows, query);
-    const renderedRows = Array.from(els.searchResultBody.querySelectorAll("tr"));
-    state.modalMatches = findModalMatchingRows(query).map(({ index }) => renderedRows[index]);
-    updateModalMatchStatus();
+    applyModalFilter();
   }
   function goModalMatch(direction) {
-    if (state.modalSearchDirty || state.modalActiveSearch !== els.modalSearchInput.value.trim()) {
+    if (state.modalActiveSearch !== els.modalSearchInput.value.trim()) {
       runModalSearch();
     }
     if (!state.modalMatches.length) return;
@@ -4729,17 +4793,14 @@
     updateModalMatchStatus();
   }
   function updateModalMatchStatus() {
-    const visible = state.language === "en" ? `${state.searchResultRows.length.toLocaleString()} rows` : `${state.searchResultRows.length.toLocaleString()} \u884C`;
-    if (state.modalSearchDirty) {
-      els.modalMatchStatus.textContent = state.language === "en" ? `Search pending \xB7 ${visible}` : `\u641C\u7D22\u5F85\u6267\u884C \xB7 ${visible}`;
-      return;
-    }
-    if (!state.modalMatches.length) {
-      els.modalMatchStatus.textContent = state.language === "en" ? `0 matches \xB7 ${visible}` : `0 \u4E2A\u5339\u914D \xB7 ${visible}`;
+    const filteredCount = state.modalFilteredRows.length;
+    const totalCount = state.searchResultRows.length;
+    if (!state.modalActiveSearch) {
+      els.modalMatchStatus.textContent = state.language === "en" ? `${totalCount.toLocaleString()} rows` : `${totalCount.toLocaleString()} \u884C`;
       return;
     }
     const current = state.modalActiveMatch < 0 ? 0 : state.modalActiveMatch + 1;
-    els.modalMatchStatus.textContent = state.language === "en" ? `${current}/${state.modalMatches.length} matches \xB7 ${visible}` : `${current}/${state.modalMatches.length} \u4E2A\u5339\u914D \xB7 ${visible}`;
+    els.modalMatchStatus.textContent = state.language === "en" ? `${current ? `${current}/` : ""}${filteredCount.toLocaleString()} filtered rows \xB7 ${totalCount.toLocaleString()} total` : `${current ? `${current}/` : ""}${filteredCount.toLocaleString()} \u884C\u8FC7\u6EE4 \xB7 \u5171 ${totalCount.toLocaleString()} \u4E2A`;
   }
   async function copyLine(line) {
     await navigator.clipboard.writeText(line);
@@ -4773,6 +4834,8 @@
     state.analysisModalMatches = [];
     state.analysisModalActiveMatch = -1;
     state.analysisModalSearch = "";
+    state.analysisModalFilteredCount = 0;
+    state.analysisModalTotalCount = 0;
     els.analysisModalSearchInput.value = "";
     renderAnalysisModalText("");
     updateAnalysisModalMatchStatus();
@@ -4840,34 +4903,31 @@
   function renderPlainAnalysisText(query) {
     const text = state.analysisModalText || "";
     const trimmedQuery = query.trim();
+    const lines = text.split(/\r?\n/);
+    state.analysisModalTotalCount = lines.length;
     if (!trimmedQuery) {
       els.analysisModalBody.textContent = text;
       state.analysisModalMatches = [];
       state.analysisModalActiveMatch = -1;
       state.analysisModalSearch = "";
+      state.analysisModalFilteredCount = lines.length;
       return;
     }
     const fragment = document.createDocumentFragment();
-    const lowerText = text.toLowerCase();
     const lowerQuery = trimmedQuery.toLowerCase();
     const matches = [];
-    let cursor = 0;
-    while (true) {
-      const index = lowerText.indexOf(lowerQuery, cursor);
-      if (index < 0) break;
-      fragment.append(document.createTextNode(text.slice(cursor, index)));
-      const mark = document.createElement("mark");
-      mark.className = "analysis-modal-match";
-      mark.textContent = text.slice(index, index + trimmedQuery.length);
-      matches.push(mark);
-      fragment.append(mark);
-      cursor = index + trimmedQuery.length;
-    }
-    fragment.append(document.createTextNode(text.slice(cursor)));
+    const filteredLines = lines.filter((line) => line.toLowerCase().includes(lowerQuery));
+    filteredLines.forEach((line, index) => {
+      const row = document.createElement("div");
+      appendHighlightedText(row, line, trimmedQuery, matches);
+      fragment.append(row);
+      if (index < filteredLines.length - 1) fragment.append(document.createTextNode("\n"));
+    });
     els.analysisModalBody.appendChild(fragment);
     state.analysisModalMatches = matches;
     state.analysisModalActiveMatch = -1;
     state.analysisModalSearch = trimmedQuery;
+    state.analysisModalFilteredCount = filteredLines.length;
   }
   function renderBreakpointAnalysis(breakpoints, query) {
     const trimmedQuery = query.trim();
@@ -4882,21 +4942,20 @@
     const totalMatches = matchedLogs.reduce((sum, group) => {
       return sum + (Array.isArray(group.matches) ? group.matches.length : 0);
     }, 0);
+    const hasFilter = Boolean(trimmedQuery);
+    const filteredLogStrings = hasFilter ? logStrings.filter((logString) => analysisTextMatches(logString, trimmedQuery)) : logStrings;
     const split = document.createElement("div");
     split.className = "analysis-split";
-    const leftMeta = state.language === "en" ? `${logStrings.length.toLocaleString()} rules` : `${logStrings.length.toLocaleString()} \u6761`;
-    const rightMeta = state.language === "en" ? `${totalMatches.toLocaleString()} rows` : `${totalMatches.toLocaleString()} \u884C`;
+    const leftMeta = hasFilter ? state.language === "en" ? `${filteredLogStrings.length.toLocaleString()}/${logStrings.length.toLocaleString()} rules` : `${filteredLogStrings.length.toLocaleString()}/${logStrings.length.toLocaleString()} \u6761` : state.language === "en" ? `${logStrings.length.toLocaleString()} rules` : `${logStrings.length.toLocaleString()} \u6761`;
     const left = createAnalysisPane(t("filterLogs"), leftMeta, { collapsible: true });
-    const right = createAnalysisPane(t("relatedLogs"), rightMeta);
     const leftBody = left.querySelector(".analysis-pane-body");
-    const rightBody = right.querySelector(".analysis-pane-body");
-    if (!logStrings.length) {
+    if (!filteredLogStrings.length) {
       const empty = document.createElement("div");
       empty.className = "analysis-empty";
-      empty.textContent = breakpoints.error ? `${breakpoints.error}: ${breakpoints.message || ""}` : t("noBreakpointLogStrings");
+      empty.textContent = logStrings.length ? t("noMatchedRelatedLogs") : breakpoints.error ? `${breakpoints.error}: ${breakpoints.message || ""}` : t("noBreakpointLogStrings");
       leftBody.append(empty);
     } else {
-      logStrings.forEach((logString, index) => {
+      filteredLogStrings.forEach((logString, index) => {
         const row = document.createElement("div");
         row.className = "analysis-log-string";
         const indexEl = document.createElement("span");
@@ -4910,8 +4969,19 @@
         leftBody.append(row);
       });
     }
-    const rightGroups = logStrings.length ? logStrings.map((logString) => ({ logString, matches: matchedByLogString.get(logString) || [] })) : matchedLogs;
+    const sourceRightGroups = logStrings.length ? logStrings.map((logString) => ({ logString, matches: matchedByLogString.get(logString) || [] })) : matchedLogs;
+    const rightGroups = hasFilter ? sourceRightGroups.map((group) => ({
+      logString: group.logString,
+      matches: (Array.isArray(group.matches) ? group.matches : []).filter((item) => analysisTextMatches(item && item.line ? String(item.line) : "", trimmedQuery))
+    })).filter((group) => group.matches.length) : sourceRightGroups;
     let renderedRightRows = 0;
+    for (const group of rightGroups) {
+      renderedRightRows += Array.isArray(group.matches) ? group.matches.length : 0;
+    }
+    const rightMeta = hasFilter ? state.language === "en" ? `${renderedRightRows.toLocaleString()}/${totalMatches.toLocaleString()} rows` : `${renderedRightRows.toLocaleString()}/${totalMatches.toLocaleString()} \u884C` : state.language === "en" ? `${totalMatches.toLocaleString()} rows` : `${totalMatches.toLocaleString()} \u884C`;
+    const right = createAnalysisPane(t("relatedLogs"), rightMeta);
+    const rightBody = right.querySelector(".analysis-pane-body");
+    let appendedRightRows = 0;
     if (!rightGroups.length) {
       const empty = document.createElement("div");
       empty.className = "analysis-empty";
@@ -4944,13 +5014,13 @@
             copyLine(lineText);
           });
           groupEl.append(row);
-          renderedRightRows += 1;
+          appendedRightRows += 1;
         }
         if (groupMatches.length) {
           rightBody.append(groupEl);
         }
       }
-      if (!renderedRightRows) {
+      if (!appendedRightRows) {
         const empty = document.createElement("div");
         empty.className = "analysis-empty";
         empty.textContent = t("noMatchedRelatedLogs");
@@ -4962,6 +5032,12 @@
     state.analysisModalMatches = matches;
     state.analysisModalActiveMatch = -1;
     state.analysisModalSearch = trimmedQuery;
+    state.analysisModalFilteredCount = hasFilter ? renderedRightRows : totalMatches;
+    state.analysisModalTotalCount = totalMatches;
+  }
+  function analysisTextMatches(text, query) {
+    if (!query) return true;
+    return String(text || "").toLowerCase().includes(query.toLowerCase());
   }
   function createAnalysisPane(title, meta, options = {}) {
     const pane = document.createElement("section");
@@ -5068,12 +5144,12 @@
     updateAnalysisModalMatchStatus();
   }
   function updateAnalysisModalMatchStatus() {
-    if (!state.analysisModalMatches.length) {
-      els.analysisModalMatchStatus.textContent = state.language === "en" ? "0 matches" : "0 \u4E2A\u5339\u914D";
+    const query = els.analysisModalSearchInput.value.trim();
+    if (!query) {
+      els.analysisModalMatchStatus.textContent = state.language === "en" ? `${state.analysisModalTotalCount.toLocaleString()} rows` : `${state.analysisModalTotalCount.toLocaleString()} \u884C`;
       return;
     }
-    const current = state.analysisModalActiveMatch < 0 ? 0 : state.analysisModalActiveMatch + 1;
-    els.analysisModalMatchStatus.textContent = state.language === "en" ? `${current}/${state.analysisModalMatches.length} matches` : `${current}/${state.analysisModalMatches.length} \u4E2A\u5339\u914D`;
+    els.analysisModalMatchStatus.textContent = state.language === "en" ? `${state.analysisModalFilteredCount.toLocaleString()} filtered rows \xB7 ${state.analysisModalTotalCount.toLocaleString()} total` : `${state.analysisModalFilteredCount.toLocaleString()} \u884C\u8FC7\u6EE4 \xB7 \u5171 ${state.analysisModalTotalCount.toLocaleString()} \u4E2A`;
   }
   function saveAnalysisModal() {
     const content = getAnalysisRightPaneText() || state.analysisModalText || els.analysisModalBody.textContent || "";
@@ -5214,17 +5290,21 @@
     return resultText;
   }
   function updateMatchStatus() {
-    const visible = state.language === "en" ? `${state.visibleRows.length.toLocaleString()} rows` : `${state.visibleRows.length.toLocaleString()} \u884C`;
+    const totalRows = state.rows.length.toLocaleString();
+    const total = state.language === "en" ? `${totalRows} total rows` : `\u5171 ${totalRows} \u4E2A`;
+    const searchQuery = els.searchInput.value.trim();
     if (state.searchDirty) {
-      els.matchStatus.textContent = state.language === "en" ? `Search pending \xB7 ${visible}` : `\u641C\u7D22\u5F85\u6267\u884C \xB7 ${visible}`;
+      const matchedRows2 = searchQuery ? findMatchingRows(searchQuery).length : 0;
+      els.matchStatus.textContent = state.language === "en" ? `${matchedRows2.toLocaleString()} matched rows \xB7 ${total}` : `${matchedRows2.toLocaleString()} \u884C\u547D\u4E2D \xB7 ${total}`;
       return;
     }
-    if (!state.matches.length) {
-      els.matchStatus.textContent = state.language === "en" ? `0 matches \xB7 ${visible}` : `0 \u4E2A\u5339\u914D \xB7 ${visible}`;
+    if (state.matches.length) {
+      const current = state.activeMatch < 0 ? 0 : state.activeMatch + 1;
+      els.matchStatus.textContent = state.language === "en" ? `${current ? `${current}/` : ""}${state.matches.length.toLocaleString()} matched rows \xB7 ${total}` : `${current ? `${current}/` : ""}${state.matches.length.toLocaleString()} \u884C\u547D\u4E2D \xB7 ${total}`;
       return;
     }
-    const current = state.activeMatch < 0 ? 0 : state.activeMatch + 1;
-    els.matchStatus.textContent = state.language === "en" ? `${current}/${state.matches.length} matches \xB7 ${visible}` : `${current}/${state.matches.length} \u4E2A\u5339\u914D \xB7 ${visible}`;
+    const matchedRows = hasActiveMainFilter() ? state.visibleRows.length : 0;
+    els.matchStatus.textContent = state.language === "en" ? `${matchedRows.toLocaleString()} matched rows \xB7 ${total}` : `${matchedRows.toLocaleString()} \u884C\u547D\u4E2D \xB7 ${total}`;
   }
   function showToast(message) {
     els.toast.textContent = message;
@@ -5350,7 +5430,7 @@
   els.analysisModalNextMatch.addEventListener("click", () => goAnalysisModalMatch(1));
   els.saveSearchResults.addEventListener("click", saveSearchResults);
   els.clearMarkedRows.addEventListener("click", clearMarkedRows);
-  els.modalSearchInput.addEventListener("input", markModalSearchDirty);
+  els.modalSearchInput.addEventListener("input", applyModalFilter);
   els.modalPrevMatch.addEventListener("click", () => goModalMatch(-1));
   els.modalNextMatch.addEventListener("click", () => goModalMatch(1));
   els.prevMarkedLine.addEventListener("click", () => goMarkedLine(-1));

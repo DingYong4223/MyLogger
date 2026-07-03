@@ -4,7 +4,6 @@ const LOG_ROW_HEIGHT = 24;
 const LOG_OVERSCAN_ROWS = 30;
 const LOG_CONTEXT_RADIUS = 50;
 const LOG_TEXT_FONT = '12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace';
-const LOG_FIXED_COLUMNS_WIDTH = 48 + 136 + 58 + 150;
 const TOOLS_PAGE_PATH = "mytools.htm";
 const QRCODE_SCRIPT_PATH = "vendor/qrcode.min.js";
 const LANGUAGE_STORAGE_KEY = "myloggerLanguage";
@@ -40,12 +39,14 @@ const state = {
   modalMatches: [],
   modalActiveMatch: -1,
   modalActiveSearch: "",
-  modalSearchDirty: false,
+  modalFilteredRows: [],
   analysisModalText: "",
   analysisModalData: null,
   analysisModalMatches: [],
   analysisModalActiveMatch: -1,
   analysisModalSearch: "",
+  analysisModalFilteredCount: 0,
+  analysisModalTotalCount: 0,
   virtualStart: 0,
   virtualEnd: 0,
   contextActiveIndex: -1,
@@ -155,6 +156,7 @@ const I18N = {
     caseSensitive: "区分大小写",
     search: "搜索",
     searchPlaceholder: "在当前结果中查找",
+    resultFilterPlaceholder: "过滤当前结果",
     prevMarked: "跳转到上一个标记",
     nextMarked: "跳转到下一个标记",
     allMarked: "全部标记",
@@ -251,6 +253,7 @@ const I18N = {
     caseSensitive: "Case sensitive",
     search: "Search",
     searchPlaceholder: "Search current results",
+    resultFilterPlaceholder: "Filter current results",
     prevMarked: "Previous mark",
     nextMarked: "Next mark",
     allMarked: "All Marks",
@@ -436,8 +439,8 @@ function applyModalLanguage() {
     els.searchModalTitle.textContent = state.searchModalMode === "marked" ? t("markedRows") : t("searchResults");
   }
   if (!state.searchResultRows.length) els.searchModalMeta.textContent = t("noResults");
-  setLeadingText("#searchModal .modal-search label", "search");
-  setPlaceholder("#modalSearchInput", "searchPlaceholder");
+  setLeadingText("#searchModal .modal-search label", "filter");
+  setPlaceholder("#modalSearchInput", "resultFilterPlaceholder");
   setText("#modalPrevMatch", "previous");
   setText("#modalNextMatch", "next");
   setText("#clearMarkedRows", "clearMarks");
@@ -448,8 +451,8 @@ function applyModalLanguage() {
   setText("#closeContextModal", "close");
   setText("#analysisModalTitle", "analysisResults");
   if (!state.analysisModalText) els.analysisModalMeta.textContent = t("noResults");
-  setLeadingText("#analysisModal .analysis-modal-search label", "search");
-  setPlaceholder("#analysisModalSearchInput", "searchPlaceholder");
+  setLeadingText("#analysisModal .analysis-modal-search label", "filter");
+  setPlaceholder("#analysisModalSearchInput", "resultFilterPlaceholder");
   setText("#analysisModalPrevMatch", "previous");
   setText("#analysisModalNextMatch", "next");
   setText("#saveAnalysisModal", "save");
@@ -520,9 +523,9 @@ function parseLine(text, index) {
   const filtered = text.match(/^(\d+):\s*(.*)$/);
   const sourceLine = filtered ? Number(filtered[1]) : index + 1;
   const body = filtered ? filtered[2] : text;
-  const logcat = body.match(/^(\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3})\s+(\d+)\s+(\d+)\s+([VDIWEF])\s+([^:]+?)\s*:\s?(.*)$/);
+  const parsed = parseLogBody(body);
 
-  if (!logcat) {
+  if (!parsed) {
     return {
       sourceLine,
       time: "",
@@ -535,26 +538,83 @@ function parseLine(text, index) {
     };
   }
 
-  const [, time, pid, tid, level, tag, message] = logcat;
   return {
     sourceLine,
-    time,
-    level,
-    tag: tag.trim(),
-    message,
-    pid,
-    tid,
+    time: parsed.time,
+    level: parsed.level,
+    tag: parsed.tag,
+    message: parsed.message,
+    pid: parsed.pid,
+    tid: parsed.tid,
+    process: parsed.process,
     raw: body,
-    timeValue: parseLogTimeValue(time),
-    searchable: `${sourceLine} ${time} ${pid} ${tid} ${level} ${tag} ${message}`,
+    timeValue: parseLogTimeValue(parsed.time),
+    searchable: `${sourceLine} ${parsed.time} ${parsed.pid} ${parsed.tid} ${parsed.process || ""} ${parsed.level} ${parsed.tag} ${parsed.message}`,
+  };
+}
+
+function parseLogBody(body) {
+  const studioMatch = body.match(
+    /^(?<time>\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d{3})?)\s+(?<pid>\d+)-(?<tid>\d+)\s+(?<tag>\S+)\s+(?<process>\S+)\s+(?<level>[VDIWEF])\s+(?<message>.*)$/
+  );
+  if (studioMatch?.groups) {
+    return {
+      time: studioMatch.groups.time,
+      pid: studioMatch.groups.pid || "",
+      tid: studioMatch.groups.tid || "",
+      process: studioMatch.groups.process || "",
+      level: studioMatch.groups.level || "",
+      tag: (studioMatch.groups.tag || "").trim(),
+      message: studioMatch.groups.message || "",
+    };
+  }
+
+  const timeMatch = body.match(/^(\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d{3})?)\s+(.*)$/);
+  if (!timeMatch) return null;
+
+  const [, time, rest] = timeMatch;
+  const variants = [
+    /^(?<pid>\d+)\s+(?<tid>\d+)\s+(?<level>[VDIWEF])\s+(?<tag>[^:]+?)\s*:\s?(?<message>.*)$/,
+    /^(?<pid>\d+)\s+(?<tid>\d+)\s+(?<level>[VDIWEF])\/(?<tag>[^:]+?)\s*:\s?(?<message>.*)$/,
+    /^(?<pid>\d+)\s+(?<tid>\d+)\s+(?<level>[VDIWEF])\s+(?<message>.*)$/,
+    /^(?<pid>\d+)\s+(?<tid>\d+)\s+(?<tag>[^:]+?)\s*:\s?(?<message>.*)$/,
+    /^(?<level>[VDIWEF])\/(?<tag>[^:]+?)\s*:\s?(?<message>.*)$/,
+    /^(?<level>[VDIWEF])\s+(?<tag>[^:]+?)\s*:\s?(?<message>.*)$/,
+    /^(?<level>[VDIWEF])\s+(?<message>.*)$/,
+    /^(?<tag>[^:]+?)\s*:\s?(?<message>.*)$/,
+  ];
+
+  for (const variant of variants) {
+    const match = rest.match(variant);
+    if (!match || !match.groups) continue;
+    return {
+      time,
+      pid: match.groups.pid || "",
+      tid: match.groups.tid || "",
+      process: "",
+      level: match.groups.level || "",
+      tag: (match.groups.tag || "").trim(),
+      message: match.groups.message || "",
+    };
+  }
+
+  return {
+    time,
+    pid: "",
+    tid: "",
+    process: "",
+    level: "",
+    tag: "",
+    message: rest,
   };
 }
 
 function parseLogTimeValue(value) {
-  const match = value.match(/^(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})\.(\d{3})$/);
+  const match = value.match(/^(?:(\d{4})-)?(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})(?:\.(\d{3}))?$/);
   if (!match) return null;
-  const [, month, day, hour, minute, second, millisecond] = match.map(Number);
-  return Date.UTC(2000, month - 1, day, hour, minute, second, millisecond);
+  const [, year = 2000, month, day, hour, minute, second, millisecond = 0] = match.map((part) => Number(part || 0));
+  const normalizedYear = year || 2000;
+  return Date.UTC(normalizedYear, month - 1, day, hour, minute, second, millisecond);
 }
 
 async function openFile(file) {
@@ -571,6 +631,7 @@ async function openFile(file) {
   state.timeFilterEnd = null;
   state.draftTimeFilterStart = null;
   state.draftTimeFilterEnd = null;
+  updateLogColumnVisibility();
   updateTimeFilterOptions();
   updateTimeFilterHeader();
   renderTagFilterInputs();
@@ -644,6 +705,12 @@ function updateBreakpointsMeta() {
   els.breakpointsMeta.textContent = state.breakpointsFilePath
     ? `${t("breakpointsFile")}：${state.breakpointsFilePath}`
     : "";
+}
+
+function updateLogColumnVisibility() {
+  document.body.classList.toggle("hide-time-col", !state.rows.some((row) => row.time));
+  document.body.classList.toggle("hide-level-col", !state.rows.some((row) => row.level));
+  document.body.classList.toggle("hide-tag-col", !state.rows.some((row) => row.tag));
 }
 
 function toggleAnalysisPanel() {
@@ -1191,8 +1258,16 @@ function updateLogTableWidth(rows) {
   for (const table of [els.logTable, els.contextLogTable]) {
     if (!table) continue;
     table.style.setProperty("--message-col-width", `${messageWidth}px`);
-    table.style.minWidth = `${LOG_FIXED_COLUMNS_WIDTH + messageWidth + 96}px`;
+    table.style.minWidth = `${getVisibleFixedColumnsWidth() + messageWidth + 96}px`;
   }
+}
+
+function getVisibleFixedColumnsWidth() {
+  let width = 48;
+  if (!document.body.classList.contains("hide-time-col")) width += 178;
+  if (!document.body.classList.contains("hide-level-col")) width += 58;
+  if (!document.body.classList.contains("hide-tag-col")) width += 150;
+  return width;
 }
 
 function measureLogTextWidth(text) {
@@ -1339,11 +1414,7 @@ function toggleMarkedLine(sourceLine) {
         return;
       }
     }
-    renderRowsInto(els.searchResultBody, state.searchResultRows, state.modalActiveSearch);
-    state.modalMatches = [];
-    state.modalActiveMatch = -1;
-    state.modalSearchDirty = Boolean(state.modalActiveSearch);
-    updateModalMatchStatus();
+    applyModalFilter();
   }
 }
 
@@ -1506,13 +1577,14 @@ async function openSearchResults() {
   state.modalMatches = [];
   state.modalActiveMatch = -1;
   state.modalActiveSearch = "";
-  state.modalSearchDirty = false;
+  state.modalFilteredRows = rows;
   els.modalSearchInput.value = "";
   els.clearMarkedRows.classList.add("hidden");
   els.searchModalMeta.textContent = state.language === "en"
     ? `${state.fileName || "log"} · Search: ${query} · ${rows.length.toLocaleString()} matches`
     : `${state.fileName || "log"} · 搜索：${query} · ${rows.length.toLocaleString()} 个匹配`;
   renderRowsInto(els.searchResultBody, rows, query);
+  state.modalFilteredRows = rows;
   updateModalMatchStatus();
   els.searchModal.classList.remove("hidden");
 }
@@ -1534,10 +1606,11 @@ function openMarkedRows() {
   state.modalMatches = [];
   state.modalActiveMatch = -1;
   state.modalActiveSearch = "";
-  state.modalSearchDirty = false;
+  state.modalFilteredRows = rows;
   els.modalSearchInput.value = "";
   els.clearMarkedRows.classList.remove("hidden");
   renderRowsInto(els.searchResultBody, rows, "");
+  state.modalFilteredRows = rows;
   updateModalMatchStatus();
   els.searchModal.classList.remove("hidden");
 }
@@ -1545,13 +1618,17 @@ function openMarkedRows() {
 function closeSearchModal() {
   state.searchModalCanOpenContext = false;
   state.searchModalMode = "";
+  state.modalFilteredRows = [];
   els.searchModal.classList.add("hidden");
   els.clearMarkedRows.classList.add("hidden");
 }
 
 function saveSearchResults() {
   if (!state.searchResultRows.length) return;
-  const content = formatRowsForSave(state.searchResultRows);
+  const rows = (state.modalFilteredRows.length || els.modalSearchInput.value.trim())
+    ? state.modalFilteredRows
+    : state.searchResultRows;
+  const content = formatRowsForSave(rows);
   const suffix = state.searchModalMode === "marked" ? "marked" : "search";
   downloadText(content, `${state.fileName || "log"}.${suffix}.txt`);
 }
@@ -1569,11 +1646,15 @@ function clearMarkedRows() {
   showToast("已清除标记行。");
 }
 
-function markModalSearchDirty() {
-  state.modalSearchDirty = true;
+function applyModalFilter() {
+  const query = els.modalSearchInput.value.trim();
   state.modalMatches = [];
   state.modalActiveMatch = -1;
-  state.modalActiveSearch = "";
+  state.modalActiveSearch = query;
+  const matches = findModalMatchingRows(query);
+  state.modalFilteredRows = query ? matches.map(({ row }) => row) : state.searchResultRows.slice();
+  renderRowsInto(els.searchResultBody, state.modalFilteredRows, query);
+  state.modalMatches = query ? Array.from(els.searchResultBody.querySelectorAll("tr")) : [];
   updateModalMatchStatus();
 }
 
@@ -1586,20 +1667,11 @@ function findModalMatchingRows(query) {
 }
 
 function runModalSearch() {
-  const query = els.modalSearchInput.value.trim();
-  state.modalMatches = [];
-  state.modalActiveMatch = -1;
-  state.modalActiveSearch = query;
-  state.modalSearchDirty = false;
-  renderRowsInto(els.searchResultBody, state.searchResultRows, query);
-
-  const renderedRows = Array.from(els.searchResultBody.querySelectorAll("tr"));
-  state.modalMatches = findModalMatchingRows(query).map(({ index }) => renderedRows[index]);
-  updateModalMatchStatus();
+  applyModalFilter();
 }
 
 function goModalMatch(direction) {
-  if (state.modalSearchDirty || state.modalActiveSearch !== els.modalSearchInput.value.trim()) {
+  if (state.modalActiveSearch !== els.modalSearchInput.value.trim()) {
     runModalSearch();
   }
   if (!state.modalMatches.length) return;
@@ -1614,21 +1686,18 @@ function goModalMatch(direction) {
 }
 
 function updateModalMatchStatus() {
-  const visible = state.language === "en"
-    ? `${state.searchResultRows.length.toLocaleString()} rows`
-    : `${state.searchResultRows.length.toLocaleString()} 行`;
-  if (state.modalSearchDirty) {
-    els.modalMatchStatus.textContent = state.language === "en" ? `Search pending · ${visible}` : `搜索待执行 · ${visible}`;
-    return;
-  }
-  if (!state.modalMatches.length) {
-    els.modalMatchStatus.textContent = state.language === "en" ? `0 matches · ${visible}` : `0 个匹配 · ${visible}`;
+  const filteredCount = state.modalFilteredRows.length;
+  const totalCount = state.searchResultRows.length;
+  if (!state.modalActiveSearch) {
+    els.modalMatchStatus.textContent = state.language === "en"
+      ? `${totalCount.toLocaleString()} rows`
+      : `${totalCount.toLocaleString()} 行`;
     return;
   }
   const current = state.modalActiveMatch < 0 ? 0 : state.modalActiveMatch + 1;
   els.modalMatchStatus.textContent = state.language === "en"
-    ? `${current}/${state.modalMatches.length} matches · ${visible}`
-    : `${current}/${state.modalMatches.length} 个匹配 · ${visible}`;
+    ? `${current ? `${current}/` : ""}${filteredCount.toLocaleString()} filtered rows · ${totalCount.toLocaleString()} total`
+    : `${current ? `${current}/` : ""}${filteredCount.toLocaleString()} 行过滤 · 共 ${totalCount.toLocaleString()} 个`;
 }
 
 async function copyLine(line) {
@@ -1667,6 +1736,8 @@ function openAnalysisModal(resultText, metaText) {
   state.analysisModalMatches = [];
   state.analysisModalActiveMatch = -1;
   state.analysisModalSearch = "";
+  state.analysisModalFilteredCount = 0;
+  state.analysisModalTotalCount = 0;
   els.analysisModalSearchInput.value = "";
   renderAnalysisModalText("");
   updateAnalysisModalMatchStatus();
@@ -1744,37 +1815,32 @@ function renderAnalysisModalText(query) {
 function renderPlainAnalysisText(query) {
   const text = state.analysisModalText || "";
   const trimmedQuery = query.trim();
+  const lines = text.split(/\r?\n/);
+  state.analysisModalTotalCount = lines.length;
   if (!trimmedQuery) {
     els.analysisModalBody.textContent = text;
     state.analysisModalMatches = [];
     state.analysisModalActiveMatch = -1;
     state.analysisModalSearch = "";
+    state.analysisModalFilteredCount = lines.length;
     return;
   }
 
   const fragment = document.createDocumentFragment();
-  const lowerText = text.toLowerCase();
   const lowerQuery = trimmedQuery.toLowerCase();
   const matches = [];
-  let cursor = 0;
-
-  while (true) {
-    const index = lowerText.indexOf(lowerQuery, cursor);
-    if (index < 0) break;
-    fragment.append(document.createTextNode(text.slice(cursor, index)));
-    const mark = document.createElement("mark");
-    mark.className = "analysis-modal-match";
-    mark.textContent = text.slice(index, index + trimmedQuery.length);
-    matches.push(mark);
-    fragment.append(mark);
-    cursor = index + trimmedQuery.length;
-  }
-
-  fragment.append(document.createTextNode(text.slice(cursor)));
+  const filteredLines = lines.filter((line) => line.toLowerCase().includes(lowerQuery));
+  filteredLines.forEach((line, index) => {
+    const row = document.createElement("div");
+    appendHighlightedText(row, line, trimmedQuery, matches);
+    fragment.append(row);
+    if (index < filteredLines.length - 1) fragment.append(document.createTextNode("\n"));
+  });
   els.analysisModalBody.appendChild(fragment);
   state.analysisModalMatches = matches;
   state.analysisModalActiveMatch = -1;
   state.analysisModalSearch = trimmedQuery;
+  state.analysisModalFilteredCount = filteredLines.length;
 }
 
 function renderBreakpointAnalysis(breakpoints, query) {
@@ -1792,24 +1858,31 @@ function renderBreakpointAnalysis(breakpoints, query) {
   const totalMatches = matchedLogs.reduce((sum, group) => {
     return sum + (Array.isArray(group.matches) ? group.matches.length : 0);
   }, 0);
+  const hasFilter = Boolean(trimmedQuery);
+  const filteredLogStrings = hasFilter
+    ? logStrings.filter((logString) => analysisTextMatches(logString, trimmedQuery))
+    : logStrings;
 
   const split = document.createElement("div");
   split.className = "analysis-split";
-  const leftMeta = state.language === "en" ? `${logStrings.length.toLocaleString()} rules` : `${logStrings.length.toLocaleString()} 条`;
-  const rightMeta = state.language === "en" ? `${totalMatches.toLocaleString()} rows` : `${totalMatches.toLocaleString()} 行`;
+  const leftMeta = hasFilter
+    ? (state.language === "en"
+      ? `${filteredLogStrings.length.toLocaleString()}/${logStrings.length.toLocaleString()} rules`
+      : `${filteredLogStrings.length.toLocaleString()}/${logStrings.length.toLocaleString()} 条`)
+    : (state.language === "en" ? `${logStrings.length.toLocaleString()} rules` : `${logStrings.length.toLocaleString()} 条`);
   const left = createAnalysisPane(t("filterLogs"), leftMeta, { collapsible: true });
-  const right = createAnalysisPane(t("relatedLogs"), rightMeta);
 
   const leftBody = left.querySelector(".analysis-pane-body");
-  const rightBody = right.querySelector(".analysis-pane-body");
 
-  if (!logStrings.length) {
+  if (!filteredLogStrings.length) {
     const empty = document.createElement("div");
     empty.className = "analysis-empty";
-    empty.textContent = breakpoints.error ? `${breakpoints.error}: ${breakpoints.message || ""}` : t("noBreakpointLogStrings");
+    empty.textContent = logStrings.length
+      ? t("noMatchedRelatedLogs")
+      : (breakpoints.error ? `${breakpoints.error}: ${breakpoints.message || ""}` : t("noBreakpointLogStrings"));
     leftBody.append(empty);
   } else {
-    logStrings.forEach((logString, index) => {
+    filteredLogStrings.forEach((logString, index) => {
       const row = document.createElement("div");
       row.className = "analysis-log-string";
       const indexEl = document.createElement("span");
@@ -1824,11 +1897,30 @@ function renderBreakpointAnalysis(breakpoints, query) {
     });
   }
 
-  const rightGroups = logStrings.length
+  const sourceRightGroups = logStrings.length
     ? logStrings.map((logString) => ({ logString, matches: matchedByLogString.get(logString) || [] }))
     : matchedLogs;
+  const rightGroups = hasFilter
+    ? sourceRightGroups.map((group) => ({
+      logString: group.logString,
+      matches: (Array.isArray(group.matches) ? group.matches : [])
+        .filter((item) => analysisTextMatches(item && item.line ? String(item.line) : "", trimmedQuery)),
+    })).filter((group) => group.matches.length)
+    : sourceRightGroups;
 
   let renderedRightRows = 0;
+  for (const group of rightGroups) {
+    renderedRightRows += Array.isArray(group.matches) ? group.matches.length : 0;
+  }
+  const rightMeta = hasFilter
+    ? (state.language === "en"
+      ? `${renderedRightRows.toLocaleString()}/${totalMatches.toLocaleString()} rows`
+      : `${renderedRightRows.toLocaleString()}/${totalMatches.toLocaleString()} 行`)
+    : (state.language === "en" ? `${totalMatches.toLocaleString()} rows` : `${totalMatches.toLocaleString()} 行`);
+  const right = createAnalysisPane(t("relatedLogs"), rightMeta);
+  const rightBody = right.querySelector(".analysis-pane-body");
+
+  let appendedRightRows = 0;
   if (!rightGroups.length) {
     const empty = document.createElement("div");
     empty.className = "analysis-empty";
@@ -1862,7 +1954,7 @@ function renderBreakpointAnalysis(breakpoints, query) {
           copyLine(lineText);
         });
         groupEl.append(row);
-        renderedRightRows += 1;
+        appendedRightRows += 1;
       }
 
       if (groupMatches.length) {
@@ -1870,7 +1962,7 @@ function renderBreakpointAnalysis(breakpoints, query) {
       }
     }
 
-    if (!renderedRightRows) {
+    if (!appendedRightRows) {
       const empty = document.createElement("div");
       empty.className = "analysis-empty";
       empty.textContent = t("noMatchedRelatedLogs");
@@ -1883,6 +1975,13 @@ function renderBreakpointAnalysis(breakpoints, query) {
   state.analysisModalMatches = matches;
   state.analysisModalActiveMatch = -1;
   state.analysisModalSearch = trimmedQuery;
+  state.analysisModalFilteredCount = hasFilter ? renderedRightRows : totalMatches;
+  state.analysisModalTotalCount = totalMatches;
+}
+
+function analysisTextMatches(text, query) {
+  if (!query) return true;
+  return String(text || "").toLowerCase().includes(query.toLowerCase());
 }
 
 function createAnalysisPane(title, meta, options = {}) {
@@ -1997,14 +2096,16 @@ function goAnalysisModalMatch(direction) {
 }
 
 function updateAnalysisModalMatchStatus() {
-  if (!state.analysisModalMatches.length) {
-    els.analysisModalMatchStatus.textContent = state.language === "en" ? "0 matches" : "0 个匹配";
+  const query = els.analysisModalSearchInput.value.trim();
+  if (!query) {
+    els.analysisModalMatchStatus.textContent = state.language === "en"
+      ? `${state.analysisModalTotalCount.toLocaleString()} rows`
+      : `${state.analysisModalTotalCount.toLocaleString()} 行`;
     return;
   }
-  const current = state.analysisModalActiveMatch < 0 ? 0 : state.analysisModalActiveMatch + 1;
   els.analysisModalMatchStatus.textContent = state.language === "en"
-    ? `${current}/${state.analysisModalMatches.length} matches`
-    : `${current}/${state.analysisModalMatches.length} 个匹配`;
+    ? `${state.analysisModalFilteredCount.toLocaleString()} filtered rows · ${state.analysisModalTotalCount.toLocaleString()} total`
+    : `${state.analysisModalFilteredCount.toLocaleString()} 行过滤 · 共 ${state.analysisModalTotalCount.toLocaleString()} 个`;
 }
 
 function saveAnalysisModal() {
@@ -2165,21 +2266,30 @@ function extractBreakpointLogText(resultText) {
 }
 
 function updateMatchStatus() {
-  const visible = state.language === "en"
-    ? `${state.visibleRows.length.toLocaleString()} rows`
-    : `${state.visibleRows.length.toLocaleString()} 行`;
+  const totalRows = state.rows.length.toLocaleString();
+  const total = state.language === "en"
+    ? `${totalRows} total rows`
+    : `共 ${totalRows} 个`;
+  const searchQuery = els.searchInput.value.trim();
   if (state.searchDirty) {
-    els.matchStatus.textContent = state.language === "en" ? `Search pending · ${visible}` : `搜索待执行 · ${visible}`;
+    const matchedRows = searchQuery ? findMatchingRows(searchQuery).length : 0;
+    els.matchStatus.textContent = state.language === "en"
+      ? `${matchedRows.toLocaleString()} matched rows · ${total}`
+      : `${matchedRows.toLocaleString()} 行命中 · ${total}`;
     return;
   }
-  if (!state.matches.length) {
-    els.matchStatus.textContent = state.language === "en" ? `0 matches · ${visible}` : `0 个匹配 · ${visible}`;
+  if (state.matches.length) {
+    const current = state.activeMatch < 0 ? 0 : state.activeMatch + 1;
+    els.matchStatus.textContent = state.language === "en"
+      ? `${current ? `${current}/` : ""}${state.matches.length.toLocaleString()} matched rows · ${total}`
+      : `${current ? `${current}/` : ""}${state.matches.length.toLocaleString()} 行命中 · ${total}`;
     return;
   }
-  const current = state.activeMatch < 0 ? 0 : state.activeMatch + 1;
+
+  const matchedRows = hasActiveMainFilter() ? state.visibleRows.length : 0;
   els.matchStatus.textContent = state.language === "en"
-    ? `${current}/${state.matches.length} matches · ${visible}`
-    : `${current}/${state.matches.length} 个匹配 · ${visible}`;
+    ? `${matchedRows.toLocaleString()} matched rows · ${total}`
+    : `${matchedRows.toLocaleString()} 行命中 · ${total}`;
 }
 
 function showToast(message) {
@@ -2316,7 +2426,7 @@ els.analysisModalPrevMatch.addEventListener("click", () => goAnalysisModalMatch(
 els.analysisModalNextMatch.addEventListener("click", () => goAnalysisModalMatch(1));
 els.saveSearchResults.addEventListener("click", saveSearchResults);
 els.clearMarkedRows.addEventListener("click", clearMarkedRows);
-els.modalSearchInput.addEventListener("input", markModalSearchDirty);
+els.modalSearchInput.addEventListener("input", applyModalFilter);
 els.modalPrevMatch.addEventListener("click", () => goModalMatch(-1));
 els.modalNextMatch.addEventListener("click", () => goModalMatch(1));
 els.prevMarkedLine.addEventListener("click", () => goMarkedLine(-1));
