@@ -3307,6 +3307,7 @@
     rawText: "",
     rows: [],
     visibleRows: [],
+    selectedLevels: /* @__PURE__ */ new Set(),
     matches: [],
     searchResultRows: [],
     markedLines: /* @__PURE__ */ new Set(),
@@ -3345,6 +3346,8 @@
     filterInput: document.getElementById("filterInput"),
     filterRegex: document.getElementById("filterRegex"),
     filterCase: document.getElementById("filterCase"),
+    levelFilterHeader: document.getElementById("levelFilterHeader"),
+    levelFilterPopover: document.getElementById("levelFilterPopover"),
     searchInput: document.getElementById("searchInput"),
     openSearchResults: document.getElementById("openSearchResults"),
     openMarkedRows: document.getElementById("openMarkedRows"),
@@ -3431,12 +3434,14 @@
     state.filePath = file.path || file.name;
     state.rawText = text;
     state.rows = text.split(/\r?\n/).map(parseLine);
+    state.selectedLevels.clear();
     state.markedLines.clear();
     state.activeMarkedLine = null;
     els.analysisLogPath.textContent = state.filePath;
     els.fileMeta.textContent = `${file.name} \xB7 ${state.rows.length.toLocaleString()} \u884C \xB7 ${formatBytes(file.size)}`;
     els.dropZone.classList.add("hidden");
     els.tableWrap.classList.remove("hidden");
+    updateLevelFilterOptions();
     applyFilter();
     els.saveFiltered.disabled = false;
     els.analyzeButton.disabled = false;
@@ -3484,7 +3489,11 @@
       regex: els.filterRegex.checked,
       caseSensitive: els.filterCase.checked
     });
-    state.visibleRows = matcher ? state.rows.filter((row) => matcher(row.searchable)) : state.rows.slice();
+    const hasLevelFilter = state.selectedLevels.size > 0;
+    state.visibleRows = state.rows.filter((row) => {
+      if (matcher && !matcher(row.searchable)) return false;
+      return !hasLevelFilter || state.selectedLevels.has(row.level || "");
+    });
     if (state.activeMarkedLine != null && !state.visibleRows.some((row) => row.sourceLine === state.activeMarkedLine)) {
       state.activeMarkedLine = null;
     }
@@ -3493,6 +3502,71 @@
     clearSearchState();
     renderRows();
     updateMarkedLineJumpButtons();
+  }
+  function updateLevelFilterOptions() {
+    const levels = Array.from(new Set(state.rows.map((row) => row.level || "").filter(Boolean)));
+    const order = ["V", "D", "I", "W", "E", "F"];
+    levels.sort((a, b) => {
+      const left = order.indexOf(a);
+      const right = order.indexOf(b);
+      if (left >= 0 || right >= 0) {
+        return (left >= 0 ? left : order.length) - (right >= 0 ? right : order.length);
+      }
+      return a.localeCompare(b);
+    });
+    els.levelFilterPopover.textContent = "";
+    if (!levels.length) {
+      const empty = document.createElement("div");
+      empty.className = "level-filter-empty";
+      empty.textContent = "\u65E0\u7EA7\u522B";
+      els.levelFilterPopover.append(empty);
+    } else {
+      for (const level of levels) {
+        const label = document.createElement("label");
+        label.className = "level-filter-option";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.value = level;
+        checkbox.checked = state.selectedLevels.has(level);
+        checkbox.addEventListener("change", () => {
+          if (checkbox.checked) {
+            state.selectedLevels.add(level);
+          } else {
+            state.selectedLevels.delete(level);
+          }
+          updateLevelFilterHeader();
+          applyFilter();
+        });
+        const text = document.createElement("span");
+        text.textContent = level;
+        label.append(checkbox, text);
+        els.levelFilterPopover.append(label);
+      }
+    }
+    updateLevelFilterHeader();
+  }
+  function updateLevelFilterHeader() {
+    const count = state.selectedLevels.size;
+    els.levelFilterHeader.textContent = count ? `\u7EA7\u522B(${count})` : "\u7EA7\u522B";
+    els.levelFilterHeader.classList.toggle("active", count > 0);
+  }
+  function toggleLevelFilterPopover(event) {
+    event.stopPropagation();
+    if (els.levelFilterPopover.classList.contains("hidden")) {
+      updateLevelFilterOptions();
+      positionLevelFilterPopover();
+      els.levelFilterPopover.classList.remove("hidden");
+    } else {
+      closeLevelFilterPopover();
+    }
+  }
+  function positionLevelFilterPopover() {
+    const rect = els.levelFilterHeader.getBoundingClientRect();
+    els.levelFilterPopover.style.left = `${Math.max(8, rect.left)}px`;
+    els.levelFilterPopover.style.top = `${rect.bottom + 4}px`;
+  }
+  function closeLevelFilterPopover() {
+    els.levelFilterPopover.classList.add("hidden");
   }
   function scheduleFilter() {
     window.clearTimeout(filterTimer);
@@ -4355,6 +4429,14 @@
   els.filterInput.addEventListener("input", scheduleFilter);
   els.filterRegex.addEventListener("change", applyFilter);
   els.filterCase.addEventListener("change", applyFilter);
+  els.levelFilterHeader.addEventListener("click", toggleLevelFilterPopover);
+  els.levelFilterHeader.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    toggleLevelFilterPopover(event);
+  });
+  els.levelFilterPopover.addEventListener("click", (event) => event.stopPropagation());
+  document.addEventListener("click", closeLevelFilterPopover);
   els.searchInput.addEventListener("input", markSearchDirty);
   els.analysisEndpoint.addEventListener("input", scheduleAnalysisServiceCheck);
   els.analysisStatusButton.addEventListener("click", checkAnalysisService);
@@ -4377,6 +4459,7 @@
   els.prevMarkedLine.addEventListener("click", () => goMarkedLine(-1));
   els.nextMarkedLine.addEventListener("click", () => goMarkedLine(1));
   els.tableWrap.addEventListener("scroll", scheduleVirtualRowsRender);
+  els.tableWrap.addEventListener("scroll", closeLevelFilterPopover);
   els.contextTableWrap.addEventListener("scroll", scheduleContextRowsRender);
   els.scrollToTop.addEventListener("click", () => scrollMainLogTo("top"));
   els.scrollToBottom.addEventListener("click", () => scrollMainLogTo("bottom"));

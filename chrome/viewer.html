@@ -66,7 +66,7 @@
               <label class="path-display path-display-button" for="breakpointsInput">
                 <span id="analysisBreakpointsPath">未选择断点文件。</span>
               </label>
-              <button id="viewBreakpointsFile" class="button compact hidden" type="button">查看</button>
+              <button id="viewBreakpointsFile" class="breakpoints-view-button hidden" type="button">查看</button>
             </div>
             <input id="breakpointsInput" type="file" accept=".json,application/json" hidden />
           </div>
@@ -103,7 +103,7 @@
                 <tr>
                   <th class="line-col">行号</th>
                   <th class="time-col">时间</th>
-                  <th class="level-col">级别</th>
+                  <th id="levelFilterHeader" class="level-col level-filter-header" tabindex="0">级别</th>
                   <th class="tag-col">Tag</th>
                   <th class="message-col">内容</th>
                 </tr>
@@ -222,6 +222,7 @@
       </section>
     </div>
 
+    <div id="levelFilterPopover" class="level-filter-popover hidden"></div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
     <script src="dist/viewer.bundle.js"></script>
   </body>

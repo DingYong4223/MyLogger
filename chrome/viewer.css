@@ -242,24 +242,34 @@ input[type="url"] {
 
 .breakpoints-path-row {
   position: relative;
+  min-height: 30px;
 }
 
 .breakpoints-path-row .path-display {
   padding-right: 54px;
 }
 
-.breakpoints-path-row #viewBreakpointsFile {
+.breakpoints-view-button {
   position: absolute;
-  top: 50%;
+  top: calc(50% - 1px);
   right: 4px;
-  min-height: 20px;
+  z-index: 2;
+  height: 22px;
+  min-height: 0;
   padding: 1px 8px;
   border: 0;
   background: transparent;
+  color: var(--blue);
   box-shadow: none;
   transform: translateY(-50%);
   font-size: 12px;
+  font-weight: 600;
   line-height: 16px;
+  cursor: pointer;
+}
+
+.breakpoints-view-button:hover {
+  color: #1d4ed8;
 }
 
 .analysis-service-row {
@@ -473,6 +483,58 @@ input[type="url"] {
   min-width: 58px;
   text-align: center;
   font-weight: 700;
+}
+
+.level-filter-header {
+  cursor: pointer;
+  user-select: none;
+}
+
+.level-filter-header.active {
+  color: var(--blue);
+}
+
+.level-filter-popover {
+  position: fixed;
+  z-index: 20;
+  display: grid;
+  gap: 2px;
+  min-width: 78px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: white;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.16);
+  color: var(--text);
+  font: 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.level-filter-popover.hidden {
+  display: none;
+}
+
+.level-filter-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.level-filter-option:hover {
+  background: #f1f5f9;
+}
+
+.level-filter-option input {
+  margin: 0;
+}
+
+.level-filter-empty {
+  padding: 4px 6px;
+  color: var(--muted);
+  white-space: nowrap;
 }
 
 .tag-col {
