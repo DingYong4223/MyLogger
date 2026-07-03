@@ -423,10 +423,40 @@ input[type="url"] {
 }
 
 .line-col {
+  position: sticky;
+  left: 0;
+  z-index: 1;
   min-width: 48px;
+  background: white;
   color: var(--line);
   cursor: pointer;
   user-select: none;
+}
+
+.log-table thead .line-col {
+  z-index: 3;
+  background: #f3f6fa;
+}
+
+.log-table tr:hover .line-col {
+  background: #f5faff;
+}
+
+.log-table tr.active-match .line-col {
+  background: #eff6ff;
+}
+
+.log-table tr.marked-row .line-col {
+  background: #fff7d6;
+}
+
+.log-table tr.marked-row:hover .line-col {
+  background: #ffefad;
+}
+
+.log-table tr.context-target-row .line-col,
+.log-table tr.context-target-row:hover .line-col {
+  background: #fef08a;
 }
 
 .marked-row .line-col {
