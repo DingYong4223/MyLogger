@@ -7,10 +7,13 @@ const LOG_TEXT_FONT = '12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consola
 const LOG_FIXED_COLUMNS_WIDTH = 48 + 136 + 58 + 150;
 const TOOLS_PAGE_PATH = "mytools.htm";
 const QRCODE_SCRIPT_PATH = "vendor/qrcode.min.js";
+const LANGUAGE_STORAGE_KEY = "myloggerLanguage";
 
 const state = {
+  language: localStorage.getItem(LANGUAGE_STORAGE_KEY) === "zh" ? "zh" : "en",
   fileName: "",
   filePath: "",
+  fileSize: 0,
   breakpointsFileName: "",
   breakpointsFilePath: "",
   breakpointsContent: "",
@@ -28,6 +31,7 @@ const state = {
   matches: [],
   searchResultRows: [],
   searchModalCanOpenContext: false,
+  searchModalMode: "",
   markedLines: new Set(),
   activeMarkedLine: null,
   activeMatch: -1,
@@ -63,6 +67,8 @@ const els = {
   fileMeta: document.getElementById("fileMeta"),
   breakpointsMeta: document.getElementById("breakpointsMeta"),
   saveFiltered: document.getElementById("saveFiltered"),
+  languageButton: document.getElementById("languageButton"),
+  languagePopover: document.getElementById("languagePopover"),
   filterInput: document.getElementById("filterInput"),
   viewFilterResults: document.getElementById("viewFilterResults"),
   filterRegex: document.getElementById("filterRegex"),
@@ -88,7 +94,6 @@ const els = {
   nextMarkedLine: document.getElementById("nextMarkedLine"),
   matchStatus: document.getElementById("matchStatus"),
   analyzeButton: document.getElementById("analyzeButton"),
-  filterLogsButton: document.getElementById("filterLogsButton"),
   analysisStatusButton: document.getElementById("analysisStatusButton"),
   analysisEndpoint: document.getElementById("analysisEndpoint"),
   openToolsPage: document.getElementById("openToolsPage"),
@@ -138,6 +143,379 @@ const els = {
   toast: document.getElementById("toast"),
 };
 
+const I18N = {
+  zh: {
+    openFile: "打开文本/日志",
+    saveFiltered: "保存过滤结果",
+    help: "帮助",
+    filter: "过滤",
+    filterPlaceholder: "关键字或正则；多行按任意一行命中过滤",
+    view: "查看",
+    regex: "正则",
+    caseSensitive: "区分大小写",
+    search: "搜索",
+    searchPlaceholder: "在当前结果中查找",
+    prevMarked: "跳转到上一个标记",
+    nextMarked: "跳转到下一个标记",
+    allMarked: "全部标记",
+    backendAnalysis: "后台分析",
+    serviceUrl: "服务地址",
+    breakpointsFile: "断点文件",
+    noBreakpointsFile: "未选择断点文件。",
+    logPath: "日志路径",
+    noLogFile: "未选择日志文件。",
+    serviceStatus: "服务状态",
+    serviceAvailable: "后台服务可用",
+    serviceUnavailable: "后台服务不可用",
+    getBreakpointLogs: "获取断点日志",
+    tools: "实用工具",
+    expandAnalysis: "展开后台分析",
+    collapseAnalysis: "收起后台分析",
+    logControls: "日志控制",
+    logTable: "日志表格",
+    quickScroll: "快速滚动",
+    top: "回到顶部",
+    bottom: "回到底部",
+    dropLogFile: "拖拽日志文件到这里",
+    clickOpenFile: "或点击“打开文本/日志”。",
+    lineNumber: "行号",
+    time: "时间",
+    level: "级别",
+    content: "内容",
+    searchResults: "搜索结果",
+    noResults: "暂无结果。",
+    previous: "上一个",
+    next: "下一个",
+    clearMarks: "清除标记",
+    saveResults: "保存结果",
+    close: "关闭",
+    logContext: "日志上下文",
+    noLog: "暂无日志。",
+    analysisResults: "筛查结果",
+    save: "保存",
+    breakpoints: "断点文件",
+    helpTitle: "MyLogger 帮助",
+    helpIntro: "本工具用于本地日志查看、过滤、定位、标记、保存和断点日志筛查。",
+    helpOpenTitle: "打开日志",
+    helpOpenText: "点击右上角“打开文本/日志”，或将日志文件拖拽到主窗口。支持 `.log`、`.txt`、`.json`、`.md` 等常见文本文件。",
+    helpFilterTitle: "过滤与搜索",
+    helpFilterText: "顶部“过滤”会直接影响主窗口展示结果，可输入关键字，也可勾选“正则”和“区分大小写”。“搜索”会基于当前过滤结果打开搜索结果子窗口。",
+    helpTimeTitle: "时间筛选",
+    helpTimeText: "点击表头“时间”打开时间筛选窗口。时间点按当前日志实际分布生成，选择起点和终点后点击“确定”，主窗口只展示对应时间段内的日志。",
+    helpLevelTitle: "级别筛选",
+    helpLevelText: "点击表头“级别”打开级别选择器，可多选日志级别。选择后会立即过滤主窗口日志。",
+    helpTagTitle: "Tag 筛选",
+    helpTagText: "点击表头“Tag”打开 Tag 筛选窗口。输入 Tag 后点击“确定”才会生效。点击“+”可增加多个 Tag，多个 Tag 按“任意一个完全匹配”进行过滤。",
+    helpContextTitle: "查看上下文",
+    helpContextText: "当主窗口存在过滤条件时，单击某一行日志会打开上下文子窗口，展示该日志前后各 50 行，并高亮当前行。",
+    helpMarkTitle: "标记与跳转",
+    helpMarkText: "点击行号可标记或取消标记当前行。右上角“全部标记”可查看标记行。搜索区旁边的上下箭头可在标记行之间跳转。",
+    helpSaveTitle: "复制与保存",
+    helpSaveText: "双击日志行会复制当前行文本。右上角“保存过滤结果”会把当前主窗口展示的过滤结果保存为 `.txt` 文件。各子窗口右上角“保存”也默认保存为 `.txt`。",
+    helpBackendTitle: "后台分析",
+    helpBackendText: "左侧“后台分析”默认收起，点击可展开。选择断点 JSON 文件后，可点击“获取断点日志”从本地后台服务提取断点日志字符串。",
+    helpBreakpointTitle: "断点日志筛查",
+    helpBreakpointText: "顶部“过滤”支持多行输入，每一行都是一条过滤规则，多行之间按“任意一条命中”过滤主窗口日志。勾选“正则”时，每一行会作为独立正则参与匹配。过滤输入框右侧“查看”用于打开左右分屏明细窗口。",
+    helpServiceTitle: "本地服务",
+    helpServiceText: "后台分析服务地址默认为 `http://127.0.0.1:7878/analyze`。服务状态绿灯表示本地服务可用，红灯表示不可用。点击“获取断点日志”时，插件会将断点 JSON 内容传给后台；后台根据 JSON 中的断点信息对比本地源码，找到断点对应源码行中的日志字符串并返回，并自动填入顶部“过滤”刷新主窗口。",
+    helpToolsTitle: "实用工具",
+    helpToolsText: "展开左侧“后台分析”后，点击“实用工具”可打开随插件打包的本地工具页。该页面包含 JSON 格式化、参数处理、二维码生成等常用小工具，可在不离开插件环境的情况下辅助处理日志和调试文本。",
+    confirm: "确定",
+    clear: "清除",
+    start: "起点",
+    end: "终点",
+    unlimited: "不限",
+    noLevel: "无级别",
+    noTime: "无时间",
+    inputTag: "输入 Tag",
+    markedRows: "已标记行",
+    filterLogs: "过滤日志",
+    relatedLogs: "相关日志",
+    expandFilterLogs: "展开过滤日志",
+    collapseFilterLogs: "收起过滤日志",
+    noBreakpointLogStrings: "没有提取到断点日志字符串。",
+    noRelatedLogs: "没有可展示的相关日志。",
+    noMatchedRelatedLogs: "未在日志文件中找到相关日志。",
+    languageLabel: "中",
+    languageZh: "中文",
+    languageEn: "English",
+  },
+  en: {
+    openFile: "Open Text/Log",
+    saveFiltered: "Save Filtered",
+    help: "Help",
+    filter: "Filter",
+    filterPlaceholder: "Keyword or regex; multiple lines match any rule",
+    view: "View",
+    regex: "Regex",
+    caseSensitive: "Case sensitive",
+    search: "Search",
+    searchPlaceholder: "Search current results",
+    prevMarked: "Previous mark",
+    nextMarked: "Next mark",
+    allMarked: "All Marks",
+    backendAnalysis: "Backend Analysis",
+    serviceUrl: "Service URL",
+    breakpointsFile: "Breakpoints File",
+    noBreakpointsFile: "No breakpoints file selected.",
+    logPath: "Log Path",
+    noLogFile: "No log file selected.",
+    serviceStatus: "Service Status",
+    serviceAvailable: "Backend service available",
+    serviceUnavailable: "Backend service unavailable",
+    getBreakpointLogs: "Get Breakpoint Logs",
+    tools: "Tools",
+    expandAnalysis: "Expand backend analysis",
+    collapseAnalysis: "Collapse backend analysis",
+    logControls: "Log controls",
+    logTable: "Log table",
+    quickScroll: "Quick scroll",
+    top: "Scroll to top",
+    bottom: "Scroll to bottom",
+    dropLogFile: "Drop a log file here",
+    clickOpenFile: "or click \"Open Text/Log\".",
+    lineNumber: "Line",
+    time: "Time",
+    level: "Level",
+    content: "Content",
+    searchResults: "Search Results",
+    noResults: "No results.",
+    previous: "Previous",
+    next: "Next",
+    clearMarks: "Clear Marks",
+    saveResults: "Save Results",
+    close: "Close",
+    logContext: "Log Context",
+    noLog: "No log.",
+    analysisResults: "Screening Results",
+    save: "Save",
+    breakpoints: "Breakpoints File",
+    helpTitle: "MyLogger Help",
+    helpIntro: "Use this tool to view, filter, locate, mark, save, and screen local logs with breakpoint data.",
+    helpOpenTitle: "Open Logs",
+    helpOpenText: "Click \"Open Text/Log\" in the top-right area, or drop a log file into the main window. Common text files such as `.log`, `.txt`, `.json`, and `.md` are supported.",
+    helpFilterTitle: "Filter And Search",
+    helpFilterText: "The top Filter field directly changes the main log view. Enter keywords, or enable Regex and Case sensitive. Search opens a result window based on the current filtered logs.",
+    helpTimeTitle: "Time Filter",
+    helpTimeText: "Click the Time header to open time filtering. Time points are generated from the loaded logs. Select a start and end time, then click Confirm.",
+    helpLevelTitle: "Level Filter",
+    helpLevelText: "Click the Level header to open the level selector. Multiple log levels can be selected and applied immediately.",
+    helpTagTitle: "Tag Filter",
+    helpTagText: "Click the Tag header to open tag filtering. Enter tags and click Confirm. Use + to add multiple tags. Tags match exactly and any selected tag can match.",
+    helpContextTitle: "View Context",
+    helpContextText: "When filters are active, click a log row to open a context window showing 50 lines before and after it, with the selected row highlighted.",
+    helpMarkTitle: "Marks And Jump",
+    helpMarkText: "Click a line number to mark or unmark that row. All Marks shows marked rows. The up/down arrows near Search jump between marked rows.",
+    helpSaveTitle: "Copy And Save",
+    helpSaveText: "Double-click a log row to copy it. Save Filtered saves the current main view as a `.txt` file. Save buttons in subwindows also save `.txt` files by default.",
+    helpBackendTitle: "Backend Analysis",
+    helpBackendText: "The left Backend Analysis panel is collapsed by default. Expand it, choose a breakpoint JSON file, then click Get Breakpoint Logs to extract log strings through the local backend service.",
+    helpBreakpointTitle: "Breakpoint Log Screening",
+    helpBreakpointText: "The top Filter field supports multiple lines. Each line is a rule, and rows matching any rule are shown. With Regex enabled, every line is treated as an independent regex. The View button on the filter field opens a split detail window.",
+    helpServiceTitle: "Local Service",
+    helpServiceText: "The backend service URL defaults to `http://127.0.0.1:7878/analyze`. A green status light means available, red means unavailable. Get Breakpoint Logs sends breakpoint JSON to the backend; the backend compares it with local source code, extracts log strings, returns them, and fills the top Filter field.",
+    helpToolsTitle: "Tools",
+    helpToolsText: "Expand Backend Analysis and click Tools to open the bundled local tools page. It includes JSON formatting, parameter handling, QR code generation, and other helpers for logs and debugging text.",
+    confirm: "Confirm",
+    clear: "Clear",
+    start: "Start",
+    end: "End",
+    unlimited: "Any",
+    noLevel: "No levels",
+    noTime: "No time",
+    inputTag: "Enter Tag",
+    markedRows: "Marked Rows",
+    filterLogs: "Filter Logs",
+    relatedLogs: "Related Logs",
+    expandFilterLogs: "Expand filter logs",
+    collapseFilterLogs: "Collapse filter logs",
+    noBreakpointLogStrings: "No breakpoint log strings extracted.",
+    noRelatedLogs: "No related logs to display.",
+    noMatchedRelatedLogs: "No related logs found in the log file.",
+    languageLabel: "EN",
+    languageZh: "中文",
+    languageEn: "English",
+  },
+};
+
+function t(key, params = {}) {
+  let value = (I18N[state.language] && I18N[state.language][key]) || I18N.zh[key] || key;
+  for (const [name, replacement] of Object.entries(params)) {
+    value = value.replaceAll(`{${name}}`, replacement);
+  }
+  return value;
+}
+
+function applyLanguage() {
+  document.documentElement.lang = state.language === "en" ? "en" : "zh-CN";
+  els.languageButton.textContent = t("languageLabel");
+  els.languageButton.classList.toggle("active", !els.languagePopover.classList.contains("hidden"));
+  els.languageButton.setAttribute("aria-label", state.language === "en" ? "Language" : "语言");
+  els.openHelpModal.title = t("help");
+  els.openHelpModal.setAttribute("aria-label", t("help"));
+
+  setLeadingText(".header-actions-left label.button.primary", "openFile");
+  setText("#saveFiltered", "saveFiltered");
+  setLeadingText(".toolbar > label:nth-of-type(1)", "filter");
+  setPlaceholder("#filterInput", "filterPlaceholder");
+  setText("#viewFilterResults", "view");
+  setLeadingText(".toolbar label.checkbox:nth-of-type(2)", "regex");
+  setLeadingText(".toolbar label.checkbox:nth-of-type(3)", "caseSensitive");
+  setLeadingText(".toolbar > label:nth-of-type(4)", "search");
+  setPlaceholder("#searchInput", "searchPlaceholder");
+  setText("#openSearchResults", "search");
+  setText("#openMarkedRows", "allMarked");
+  els.prevMarkedLine.title = t("prevMarked");
+  els.nextMarkedLine.title = t("nextMarked");
+
+  setText(".analysis-panel h2", "backendAnalysis");
+  setLeadingText(".analysis-panel label:nth-of-type(1)", "serviceUrl");
+  setText(".analysis-path-field:nth-of-type(1) > span", "breakpointsFile");
+  setText("#viewBreakpointsFile", "view");
+  setAnalysisPathFallbacks();
+  setAnalysisServiceStatusText();
+  setText("#analyzeButton", "getBreakpointLogs");
+  setText("#openToolsPage", "tools");
+  updateAnalysisToggleText();
+  document.querySelector(".toolbar")?.setAttribute("aria-label", t("logControls"));
+  document.querySelector(".log-panel")?.setAttribute("aria-label", t("logTable"));
+  document.querySelector(".quick-scroll")?.setAttribute("aria-label", t("quickScroll"));
+  els.scrollToTop.title = t("top");
+  els.scrollToTop.setAttribute("aria-label", t("top"));
+  els.scrollToBottom.title = t("bottom");
+  els.scrollToBottom.setAttribute("aria-label", t("bottom"));
+  setText("#dropZone strong", "dropLogFile");
+  setText("#dropZone span", "clickOpenFile");
+  setTableHeaders();
+
+  applyModalLanguage();
+  updateLevelFilterHeader();
+  updateTimeFilterHeader();
+  updateTagFilterHeader();
+  updateMarkedLineJumpButtons();
+  updateMatchStatus();
+  updateModalMatchStatus();
+  updateAnalysisModalMatchStatus();
+  setLanguagePopoverState();
+  updateFileMeta();
+  updateBreakpointsMeta();
+}
+
+function setText(selector, key) {
+  const el = document.querySelector(selector);
+  if (el) el.textContent = t(key);
+}
+
+function setPlaceholder(selector, key) {
+  const el = document.querySelector(selector);
+  if (el) el.placeholder = t(key);
+}
+
+function setLeadingText(selector, key) {
+  const el = document.querySelector(selector);
+  if (!el) return;
+  const textNode = Array.from(el.childNodes).find((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
+  if (textNode) textNode.textContent = `${t(key)} `;
+}
+
+function setTableHeaders() {
+  for (const header of document.querySelectorAll("th.line-col")) header.textContent = t("lineNumber");
+  for (const header of document.querySelectorAll("th.time-col")) {
+    if (header.id !== "timeFilterHeader") header.textContent = t("time");
+  }
+  for (const header of document.querySelectorAll("th.level-col")) {
+    if (header.id !== "levelFilterHeader") header.textContent = t("level");
+  }
+  for (const header of document.querySelectorAll("th.message-col")) header.textContent = t("content");
+}
+
+function applyModalLanguage() {
+  if (!state.searchModalMode) {
+    setText("#searchModalTitle", "searchResults");
+  } else {
+    els.searchModalTitle.textContent = state.searchModalMode === "marked" ? t("markedRows") : t("searchResults");
+  }
+  if (!state.searchResultRows.length) els.searchModalMeta.textContent = t("noResults");
+  setLeadingText("#searchModal .modal-search label", "search");
+  setPlaceholder("#modalSearchInput", "searchPlaceholder");
+  setText("#modalPrevMatch", "previous");
+  setText("#modalNextMatch", "next");
+  setText("#clearMarkedRows", "clearMarks");
+  setText("#saveSearchResults", "saveResults");
+  setText("#closeSearchModal", "close");
+  setText("#contextModalTitle", "logContext");
+  if (!state.rows.length) els.contextModalMeta.textContent = t("noLog");
+  setText("#closeContextModal", "close");
+  setText("#analysisModalTitle", "analysisResults");
+  if (!state.analysisModalText) els.analysisModalMeta.textContent = t("noResults");
+  setLeadingText("#analysisModal .analysis-modal-search label", "search");
+  setPlaceholder("#analysisModalSearchInput", "searchPlaceholder");
+  setText("#analysisModalPrevMatch", "previous");
+  setText("#analysisModalNextMatch", "next");
+  setText("#saveAnalysisModal", "save");
+  setText("#closeAnalysisModal", "close");
+  setText("#breakpointsModalTitle", "breakpoints");
+  setText("#closeBreakpointsModal", "close");
+  setText("#helpModalTitle", "helpTitle");
+  setText("#helpModal .modal-header p", "helpIntro");
+  setText("#closeHelpModal", "close");
+
+  const helpSections = [
+    ["helpOpenTitle", "helpOpenText"],
+    ["helpFilterTitle", "helpFilterText"],
+    ["helpTimeTitle", "helpTimeText"],
+    ["helpLevelTitle", "helpLevelText"],
+    ["helpTagTitle", "helpTagText"],
+    ["helpContextTitle", "helpContextText"],
+    ["helpMarkTitle", "helpMarkText"],
+    ["helpSaveTitle", "helpSaveText"],
+    ["helpBackendTitle", "helpBackendText"],
+    ["helpBreakpointTitle", "helpBreakpointText"],
+    ["helpServiceTitle", "helpServiceText"],
+    ["helpToolsTitle", "helpToolsText"],
+  ];
+  const sections = Array.from(document.querySelectorAll(".help-modal-body section"));
+  helpSections.forEach(([titleKey, textKey], index) => {
+    const section = sections[index];
+    if (!section) return;
+    section.querySelector("h3").textContent = t(titleKey);
+    section.querySelector("p").textContent = t(textKey);
+  });
+  setText("#confirmTagFilter", "confirm");
+  setText("#clearTagFilter", "clear");
+  setText("#confirmTimeFilter", "confirm");
+  setText("#clearTimeFilter", "clear");
+  const timeTitles = document.querySelectorAll(".time-filter-lists h3");
+  if (timeTitles[0]) timeTitles[0].textContent = t("start");
+  if (timeTitles[1]) timeTitles[1].textContent = t("end");
+}
+
+function setAnalysisPathFallbacks() {
+  if (!state.breakpointsContent) {
+    els.analysisBreakpointsPath.textContent = t("noBreakpointsFile");
+    els.breakpointsModalMeta.textContent = t("noBreakpointsFile");
+  }
+  if (!state.filePath) {
+    els.analysisLogPath.textContent = t("noLogFile");
+  }
+}
+
+function setAnalysisServiceStatusText() {
+  document.querySelector(".analysis-service-row span").textContent = t("serviceStatus");
+  const available = els.analysisStatusButton.classList.contains("available");
+  const label = available ? t("serviceAvailable") : t("serviceUnavailable");
+  els.analysisStatusButton.title = label;
+  els.analysisStatusButton.setAttribute("aria-label", label);
+}
+
+function setLanguagePopoverState() {
+  for (const button of els.languagePopover.querySelectorAll("button[data-language]")) {
+    const language = button.dataset.language;
+    button.textContent = language === "en" ? t("languageEn") : t("languageZh");
+    button.classList.toggle("active", language === state.language);
+  }
+}
+
 function parseLine(text, index) {
   const filtered = text.match(/^(\d+):\s*(.*)$/);
   const sourceLine = filtered ? Number(filtered[1]) : index + 1;
@@ -183,6 +561,7 @@ async function openFile(file) {
   const text = await file.text();
   state.fileName = file.name;
   state.filePath = file.path || file.name;
+  state.fileSize = file.size;
   state.rawText = text;
   state.rows = text.split(/\r?\n/).map(parseLine);
   state.selectedLevels.clear();
@@ -199,7 +578,7 @@ async function openFile(file) {
   state.markedLines.clear();
   state.activeMarkedLine = null;
   els.analysisLogPath.textContent = state.filePath;
-  els.fileMeta.textContent = `${file.name} · ${state.rows.length.toLocaleString()} 行 · ${formatBytes(file.size)}`;
+  updateFileMeta();
   els.dropZone.classList.add("hidden");
   els.tableWrap.classList.remove("hidden");
   updateLevelFilterOptions();
@@ -228,7 +607,7 @@ async function openBreakpointsFile(file) {
   state.breakpointsFileName = file.name;
   state.breakpointsFilePath = file.path || file.name;
   state.breakpointsContent = text;
-  els.breakpointsMeta.textContent = `断点文件：${state.breakpointsFilePath}`;
+  updateBreakpointsMeta();
   els.analysisBreakpointsPath.textContent = state.breakpointsFilePath;
   updateAnalyzeButtonState();
   els.viewBreakpointsFile.classList.remove("hidden");
@@ -239,7 +618,7 @@ function clearBreakpointsFile() {
   state.breakpointsFileName = "";
   state.breakpointsFilePath = "";
   state.breakpointsContent = "";
-  els.breakpointsMeta.textContent = "";
+  updateBreakpointsMeta();
   els.analysisBreakpointsPath.textContent = "未选择断点文件。";
   els.breakpointsModalMeta.textContent = "未选择断点文件。";
   els.breakpointsModalBody.textContent = "";
@@ -251,14 +630,35 @@ function updateAnalyzeButtonState() {
   els.analyzeButton.disabled = !state.breakpointsContent;
 }
 
+function updateFileMeta() {
+  if (!state.fileName) {
+    els.fileMeta.textContent = "";
+    return;
+  }
+  els.fileMeta.textContent = state.language === "en"
+    ? `${state.fileName} · ${state.rows.length.toLocaleString()} rows · ${formatBytes(state.fileSize)}`
+    : `${state.fileName} · ${state.rows.length.toLocaleString()} 行 · ${formatBytes(state.fileSize)}`;
+}
+
+function updateBreakpointsMeta() {
+  els.breakpointsMeta.textContent = state.breakpointsFilePath
+    ? `${t("breakpointsFile")}：${state.breakpointsFilePath}`
+    : "";
+}
+
 function toggleAnalysisPanel() {
   const collapsed = !els.content.classList.contains("analysis-collapsed");
   els.content.classList.toggle("analysis-collapsed", collapsed);
-  els.toggleAnalysisPanel.setAttribute("aria-expanded", collapsed ? "false" : "true");
-  els.toggleAnalysisPanel.setAttribute("aria-label", collapsed ? "展开后台分析" : "收起后台分析");
-  els.toggleAnalysisPanel.title = collapsed ? "展开后台分析" : "收起后台分析";
-  els.toggleAnalysisPanel.textContent = collapsed ? ">" : "<";
+  updateAnalysisToggleText();
   scheduleVirtualRowsRender();
+}
+
+function updateAnalysisToggleText() {
+  const collapsed = els.content.classList.contains("analysis-collapsed");
+  els.toggleAnalysisPanel.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  els.toggleAnalysisPanel.setAttribute("aria-label", collapsed ? t("expandAnalysis") : t("collapseAnalysis"));
+  els.toggleAnalysisPanel.title = collapsed ? t("expandAnalysis") : t("collapseAnalysis");
+  els.toggleAnalysisPanel.textContent = collapsed ? ">" : "<";
 }
 
 function applyFilter() {
@@ -320,7 +720,7 @@ function updateLevelFilterOptions() {
   if (!levels.length) {
     const empty = document.createElement("div");
     empty.className = "level-filter-empty";
-    empty.textContent = "无级别";
+    empty.textContent = t("noLevel");
     els.levelFilterPopover.append(empty);
   } else {
     for (const level of levels) {
@@ -350,7 +750,7 @@ function updateLevelFilterOptions() {
 
 function updateLevelFilterHeader() {
   const count = state.selectedLevels.size;
-  els.levelFilterHeader.textContent = count ? `级别(${count})` : "级别";
+  els.levelFilterHeader.textContent = count ? `${t("level")}(${count})` : t("level");
   els.levelFilterHeader.classList.toggle("active", count > 0);
 }
 
@@ -398,7 +798,7 @@ function renderEmptyTimeFilterLists() {
   for (const list of [els.timeFilterStartList, els.timeFilterEndList]) {
     const empty = document.createElement("div");
     empty.className = "time-filter-empty";
-    empty.textContent = "无时间";
+    empty.textContent = t("noTime");
     list.append(empty);
   }
 }
@@ -411,7 +811,7 @@ function renderTimeFilterLists() {
 }
 
 function renderTimeFilterList(list, type) {
-  list.append(createTimeFilterRow("不限", null, type));
+  list.append(createTimeFilterRow(t("unlimited"), null, type));
   for (const value of state.timeFilterPoints) {
     list.append(createTimeFilterRow(formatLogTimeValue(value), value, type));
   }
@@ -431,8 +831,8 @@ function createTimeFilterRow(label, value, type) {
 
 function formatTimeOptionLabel(value, label) {
   const markers = [];
-  if (value != null && state.draftTimeFilterStart === value) markers.push("起点");
-  if (value != null && state.draftTimeFilterEnd === value) markers.push("终点");
+  if (value != null && state.draftTimeFilterStart === value) markers.push(t("start"));
+  if (value != null && state.draftTimeFilterEnd === value) markers.push(t("end"));
   return markers.length ? `✓ ${markers.join("/")} ${label}` : label;
 }
 
@@ -444,7 +844,7 @@ function formatLogTimeValue(value) {
 
 function updateTimeFilterHeader() {
   const active = state.timeFilterStart != null || state.timeFilterEnd != null;
-  els.timeFilterHeader.textContent = active ? "时间(1)" : "时间";
+  els.timeFilterHeader.textContent = active ? `${t("time")}(1)` : t("time");
   els.timeFilterHeader.classList.toggle("active", active);
 }
 
@@ -552,7 +952,7 @@ function renderTagFilterInputs() {
   state.draftTagFilters.forEach((value, index) => {
     const input = document.createElement("input");
     input.type = "search";
-    input.placeholder = "输入 Tag";
+    input.placeholder = t("inputTag");
     input.value = value;
     input.addEventListener("input", () => updateTagFilterAt(index, input.value));
     input.addEventListener("keydown", (event) => {
@@ -931,9 +1331,9 @@ function toggleMarkedLine(sourceLine) {
     renderRows();
   }
   if (!els.searchModal.classList.contains("hidden")) {
-    if (els.searchModalTitle.textContent === "已标记行") {
+    if (state.searchModalMode === "marked") {
       state.searchResultRows = state.rows.filter((row) => state.markedLines.has(row.sourceLine));
-      els.searchModalMeta.textContent = `${state.fileName || "log"} · ${state.searchResultRows.length.toLocaleString()} 行已标记`;
+      els.searchModalMeta.textContent = `${state.fileName || "log"} · ${state.searchResultRows.length.toLocaleString()} ${state.language === "en" ? "marked rows" : "行已标记"}`;
       if (!state.searchResultRows.length) {
         closeSearchModal();
         return;
@@ -1013,7 +1413,9 @@ function openLogContext(row) {
   if (!state.rows.length) return;
   const index = state.rows.indexOf(row);
   state.contextActiveIndex = index >= 0 ? index : Math.max(0, Math.min(state.rows.length - 1, row.sourceLine - 1));
-  els.contextModalMeta.textContent = `${state.fileName || "日志"} · 第 ${row.sourceLine} 行 · 前后 ${LOG_CONTEXT_RADIUS} 行`;
+  els.contextModalMeta.textContent = state.language === "en"
+    ? `${state.fileName || "Log"} · Line ${row.sourceLine} · +/- ${LOG_CONTEXT_RADIUS} lines`
+    : `${state.fileName || "日志"} · 第 ${row.sourceLine} 行 · 前后 ${LOG_CONTEXT_RADIUS} 行`;
   els.contextLogBody.textContent = "";
   els.contextModal.classList.remove("hidden");
   window.requestAnimationFrame(prepareContextRowsForCentering);
@@ -1099,14 +1501,17 @@ async function openSearchResults() {
 
   state.searchResultRows = rows;
   state.searchModalCanOpenContext = true;
-  els.searchModalTitle.textContent = "搜索结果";
+  state.searchModalMode = "search";
+  els.searchModalTitle.textContent = t("searchResults");
   state.modalMatches = [];
   state.modalActiveMatch = -1;
   state.modalActiveSearch = "";
   state.modalSearchDirty = false;
   els.modalSearchInput.value = "";
   els.clearMarkedRows.classList.add("hidden");
-  els.searchModalMeta.textContent = `${state.fileName || "log"} · 搜索：${query} · ${rows.length.toLocaleString()} 个匹配`;
+  els.searchModalMeta.textContent = state.language === "en"
+    ? `${state.fileName || "log"} · Search: ${query} · ${rows.length.toLocaleString()} matches`
+    : `${state.fileName || "log"} · 搜索：${query} · ${rows.length.toLocaleString()} 个匹配`;
   renderRowsInto(els.searchResultBody, rows, query);
   updateModalMatchStatus();
   els.searchModal.classList.remove("hidden");
@@ -1121,8 +1526,11 @@ function openMarkedRows() {
 
   state.searchResultRows = rows;
   state.searchModalCanOpenContext = false;
-  els.searchModalTitle.textContent = "已标记行";
-  els.searchModalMeta.textContent = `${state.fileName || "log"} · ${rows.length.toLocaleString()} 行已标记`;
+  state.searchModalMode = "marked";
+  els.searchModalTitle.textContent = t("markedRows");
+  els.searchModalMeta.textContent = state.language === "en"
+    ? `${state.fileName || "log"} · ${rows.length.toLocaleString()} marked rows`
+    : `${state.fileName || "log"} · ${rows.length.toLocaleString()} 行已标记`;
   state.modalMatches = [];
   state.modalActiveMatch = -1;
   state.modalActiveSearch = "";
@@ -1136,6 +1544,7 @@ function openMarkedRows() {
 
 function closeSearchModal() {
   state.searchModalCanOpenContext = false;
+  state.searchModalMode = "";
   els.searchModal.classList.add("hidden");
   els.clearMarkedRows.classList.add("hidden");
 }
@@ -1143,7 +1552,7 @@ function closeSearchModal() {
 function saveSearchResults() {
   if (!state.searchResultRows.length) return;
   const content = formatRowsForSave(state.searchResultRows);
-  const suffix = els.searchModalTitle.textContent === "已标记行" ? "marked" : "search";
+  const suffix = state.searchModalMode === "marked" ? "marked" : "search";
   downloadText(content, `${state.fileName || "log"}.${suffix}.txt`);
 }
 
@@ -1205,17 +1614,21 @@ function goModalMatch(direction) {
 }
 
 function updateModalMatchStatus() {
-  const visible = `${state.searchResultRows.length.toLocaleString()} 行`;
+  const visible = state.language === "en"
+    ? `${state.searchResultRows.length.toLocaleString()} rows`
+    : `${state.searchResultRows.length.toLocaleString()} 行`;
   if (state.modalSearchDirty) {
-    els.modalMatchStatus.textContent = `搜索待执行 · ${visible}`;
+    els.modalMatchStatus.textContent = state.language === "en" ? `Search pending · ${visible}` : `搜索待执行 · ${visible}`;
     return;
   }
   if (!state.modalMatches.length) {
-    els.modalMatchStatus.textContent = `0 个匹配 · ${visible}`;
+    els.modalMatchStatus.textContent = state.language === "en" ? `0 matches · ${visible}` : `0 个匹配 · ${visible}`;
     return;
   }
   const current = state.modalActiveMatch < 0 ? 0 : state.modalActiveMatch + 1;
-  els.modalMatchStatus.textContent = `${current}/${state.modalMatches.length} 个匹配 · ${visible}`;
+  els.modalMatchStatus.textContent = state.language === "en"
+    ? `${current}/${state.modalMatches.length} matches · ${visible}`
+    : `${current}/${state.modalMatches.length} 个匹配 · ${visible}`;
 }
 
 async function copyLine(line) {
@@ -1382,8 +1795,10 @@ function renderBreakpointAnalysis(breakpoints, query) {
 
   const split = document.createElement("div");
   split.className = "analysis-split";
-  const left = createAnalysisPane("过滤日志", `${logStrings.length.toLocaleString()} 条`, { collapsible: true });
-  const right = createAnalysisPane("相关日志", `${totalMatches.toLocaleString()} 行`);
+  const leftMeta = state.language === "en" ? `${logStrings.length.toLocaleString()} rules` : `${logStrings.length.toLocaleString()} 条`;
+  const rightMeta = state.language === "en" ? `${totalMatches.toLocaleString()} rows` : `${totalMatches.toLocaleString()} 行`;
+  const left = createAnalysisPane(t("filterLogs"), leftMeta, { collapsible: true });
+  const right = createAnalysisPane(t("relatedLogs"), rightMeta);
 
   const leftBody = left.querySelector(".analysis-pane-body");
   const rightBody = right.querySelector(".analysis-pane-body");
@@ -1391,7 +1806,7 @@ function renderBreakpointAnalysis(breakpoints, query) {
   if (!logStrings.length) {
     const empty = document.createElement("div");
     empty.className = "analysis-empty";
-    empty.textContent = breakpoints.error ? `${breakpoints.error}: ${breakpoints.message || ""}` : "没有提取到断点日志字符串。";
+    empty.textContent = breakpoints.error ? `${breakpoints.error}: ${breakpoints.message || ""}` : t("noBreakpointLogStrings");
     leftBody.append(empty);
   } else {
     logStrings.forEach((logString, index) => {
@@ -1417,7 +1832,7 @@ function renderBreakpointAnalysis(breakpoints, query) {
   if (!rightGroups.length) {
     const empty = document.createElement("div");
     empty.className = "analysis-empty";
-    empty.textContent = "没有可展示的相关日志。";
+    empty.textContent = t("noRelatedLogs");
     rightBody.append(empty);
   } else {
     for (const group of rightGroups) {
@@ -1458,7 +1873,7 @@ function renderBreakpointAnalysis(breakpoints, query) {
     if (!renderedRightRows) {
       const empty = document.createElement("div");
       empty.className = "analysis-empty";
-      empty.textContent = "未在日志文件中找到相关日志。";
+      empty.textContent = t("noMatchedRelatedLogs");
       rightBody.append(empty);
     }
   }
@@ -1487,8 +1902,8 @@ function createAnalysisPane(title, meta, options = {}) {
     const toggle = document.createElement("button");
     toggle.className = "analysis-pane-toggle";
     toggle.type = "button";
-    toggle.title = "收起过滤日志";
-    toggle.setAttribute("aria-label", "收起过滤日志");
+    toggle.title = t("collapseFilterLogs");
+    toggle.setAttribute("aria-label", t("collapseFilterLogs"));
     toggle.setAttribute("aria-expanded", "true");
     toggle.textContent = "<";
     toggle.addEventListener("click", () => toggleAnalysisResultPane(pane, toggle));
@@ -1505,8 +1920,8 @@ function toggleAnalysisResultPane(pane, toggle) {
   const collapsed = !split.classList.contains("analysis-left-collapsed");
   split.classList.toggle("analysis-left-collapsed", collapsed);
   toggle.textContent = collapsed ? ">" : "<";
-  toggle.title = collapsed ? "展开过滤日志" : "收起过滤日志";
-  toggle.setAttribute("aria-label", collapsed ? "展开过滤日志" : "收起过滤日志");
+  toggle.title = collapsed ? t("expandFilterLogs") : t("collapseFilterLogs");
+  toggle.setAttribute("aria-label", collapsed ? t("expandFilterLogs") : t("collapseFilterLogs"));
   toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
 }
 
@@ -1583,11 +1998,13 @@ function goAnalysisModalMatch(direction) {
 
 function updateAnalysisModalMatchStatus() {
   if (!state.analysisModalMatches.length) {
-    els.analysisModalMatchStatus.textContent = "0 个匹配";
+    els.analysisModalMatchStatus.textContent = state.language === "en" ? "0 matches" : "0 个匹配";
     return;
   }
   const current = state.analysisModalActiveMatch < 0 ? 0 : state.analysisModalActiveMatch + 1;
-  els.analysisModalMatchStatus.textContent = `${current}/${state.analysisModalMatches.length} 个匹配`;
+  els.analysisModalMatchStatus.textContent = state.language === "en"
+    ? `${current}/${state.analysisModalMatches.length} matches`
+    : `${current}/${state.analysisModalMatches.length} 个匹配`;
 }
 
 function saveAnalysisModal() {
@@ -1620,7 +2037,7 @@ function sanitizeFilename(value) {
 function setAnalysisServiceStatus(available) {
   els.analysisStatusButton.classList.toggle("available", available);
   els.analysisStatusButton.classList.toggle("unavailable", !available);
-  const label = available ? "后台服务可用" : "后台服务不可用";
+  const label = available ? t("serviceAvailable") : t("serviceUnavailable");
   els.analysisStatusButton.title = label;
   els.analysisStatusButton.setAttribute("aria-label", label);
 }
@@ -1748,17 +2165,21 @@ function extractBreakpointLogText(resultText) {
 }
 
 function updateMatchStatus() {
-  const visible = `${state.visibleRows.length.toLocaleString()} 行`;
+  const visible = state.language === "en"
+    ? `${state.visibleRows.length.toLocaleString()} rows`
+    : `${state.visibleRows.length.toLocaleString()} 行`;
   if (state.searchDirty) {
-    els.matchStatus.textContent = `搜索待执行 · ${visible}`;
+    els.matchStatus.textContent = state.language === "en" ? `Search pending · ${visible}` : `搜索待执行 · ${visible}`;
     return;
   }
   if (!state.matches.length) {
-    els.matchStatus.textContent = `0 个匹配 · ${visible}`;
+    els.matchStatus.textContent = state.language === "en" ? `0 matches · ${visible}` : `0 个匹配 · ${visible}`;
     return;
   }
   const current = state.activeMatch < 0 ? 0 : state.activeMatch + 1;
-  els.matchStatus.textContent = `${current}/${state.matches.length} 个匹配 · ${visible}`;
+  els.matchStatus.textContent = state.language === "en"
+    ? `${current}/${state.matches.length} matches · ${visible}`
+    : `${current}/${state.matches.length} 个匹配 · ${visible}`;
 }
 
 function showToast(message) {
@@ -1793,6 +2214,33 @@ function scheduleContextRowsRender() {
     contextVirtualScrollFrame = 0;
     renderContextRows();
   });
+}
+
+function toggleLanguagePopover(event) {
+  event.stopPropagation();
+  const hidden = els.languagePopover.classList.contains("hidden");
+  els.languagePopover.classList.toggle("hidden", !hidden);
+  els.languageButton.setAttribute("aria-expanded", hidden ? "true" : "false");
+  els.languageButton.classList.toggle("active", hidden);
+  setLanguagePopoverState();
+}
+
+function closeLanguagePopover() {
+  els.languagePopover.classList.add("hidden");
+  els.languageButton.setAttribute("aria-expanded", "false");
+  els.languageButton.classList.remove("active");
+}
+
+function setLanguage(language) {
+  if (language !== "zh" && language !== "en") return;
+  state.language = language;
+  localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+  closeLanguagePopover();
+  applyLanguage();
+  if (!els.analysisModal.classList.contains("hidden")) {
+    renderAnalysisModalText(els.analysisModalSearchInput.value);
+    updateAnalysisModalMatchStatus();
+  }
 }
 
 els.fileInput.addEventListener("change", (event) => {
@@ -1840,9 +2288,15 @@ els.confirmTagFilter.addEventListener("click", confirmTagFilter);
 els.clearTagFilter.addEventListener("click", clearTagFilter);
 document.addEventListener("click", closeTagFilterPopover);
 els.searchInput.addEventListener("input", markSearchDirty);
+els.languageButton.addEventListener("click", toggleLanguagePopover);
+els.languagePopover.addEventListener("click", (event) => {
+  event.stopPropagation();
+  const button = event.target.closest("button[data-language]");
+  if (button) setLanguage(button.dataset.language);
+});
+document.addEventListener("click", closeLanguagePopover);
 els.analysisEndpoint.addEventListener("input", scheduleAnalysisServiceCheck);
 els.analysisStatusButton.addEventListener("click", checkAnalysisService);
-els.filterLogsButton.addEventListener("click", filterLogsByBreakpointText);
 els.viewFilterResults.addEventListener("click", filterLogsByBreakpointText);
 els.openToolsPage.addEventListener("click", openToolsPage);
 els.openSearchResults.addEventListener("click", openSearchResults);
@@ -1877,6 +2331,7 @@ els.scrollToBottom.addEventListener("click", () => scrollMainLogTo("bottom"));
 els.saveFiltered.addEventListener("click", saveFiltered);
 els.analyzeButton.addEventListener("click", analyzeVisible);
 
+applyLanguage();
 checkAnalysisService();
 window.setInterval(checkAnalysisService, 5000);
 

@@ -27,6 +27,13 @@
         </div>
       </div>
       <div class="header-actions header-actions-right">
+        <div class="language-switcher">
+          <button id="languageButton" class="language-button" type="button" aria-haspopup="true" aria-expanded="false">中</button>
+          <div id="languagePopover" class="language-popover hidden">
+            <button type="button" data-language="zh">中文</button>
+            <button type="button" data-language="en">English</button>
+          </div>
+        </div>
         <button id="openHelpModal" class="help-button" type="button" title="帮助" aria-label="帮助">?</button>
       </div>
     </header>
@@ -88,7 +95,6 @@
             </div>
             <div class="analysis-actions">
               <button id="analyzeButton" class="button primary" type="button" disabled>获取断点日志</button>
-              <button id="filterLogsButton" class="button" type="button">查看筛查结果</button>
             </div>
             <button id="openToolsPage" class="analysis-tools-title" type="button">实用工具</button>
           </div>
@@ -279,7 +285,7 @@
           </section>
           <section>
             <h3>断点日志筛查</h3>
-            <p>顶部“过滤”支持多行输入，每一行都是一条过滤规则，多行之间按“任意一条命中”过滤主窗口日志。勾选“正则”时，每一行会作为独立正则参与匹配。“查看筛查结果”用于打开左右分屏明细窗口。</p>
+            <p>顶部“过滤”支持多行输入，每一行都是一条过滤规则，多行之间按“任意一条命中”过滤主窗口日志。勾选“正则”时，每一行会作为独立正则参与匹配。过滤输入框右侧“查看”用于打开左右分屏明细窗口。</p>
           </section>
           <section>
             <h3>本地服务</h3>

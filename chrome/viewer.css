@@ -187,6 +187,66 @@ input[type="url"] {
   color: #92400e;
 }
 
+.language-switcher {
+  position: relative;
+}
+
+.language-button {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: white;
+  color: var(--text);
+  font: 700 13px/1 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+
+.language-button:hover,
+.language-button.active {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: #eff6ff;
+}
+
+.language-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  gap: 2px;
+  min-width: 112px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: white;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.16);
+}
+
+.language-popover.hidden {
+  display: none;
+}
+
+.language-popover button {
+  border: 0;
+  border-radius: 4px;
+  padding: 7px 8px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: 13px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+
+.language-popover button:hover,
+.language-popover button.active {
+  background: #eff6ff;
+  color: var(--blue);
+}
+
 .help-button {
   display: inline-grid;
   place-items: center;

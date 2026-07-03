@@ -1013,11 +1013,11 @@
           codeUnitLength = 2;
         }
       }
-      const t = classifyCodePoint(codePoint);
-      if (t === "R" || t === "AL" || t === "AN")
+      const t2 = classifyCodePoint(codePoint);
+      if (t2 === "R" || t2 === "AL" || t2 === "AN")
         sawBidi = true;
       for (let j = 0; j < codeUnitLength; j++) {
-        types[i + j] = t;
+        types[i + j] = t2;
       }
       i += codeUnitLength;
     }
@@ -1025,12 +1025,12 @@
       return null;
     let startLevel = 0;
     for (let i = 0; i < len; i++) {
-      const t = types[i];
-      if (t === "L") {
+      const t2 = types[i];
+      if (t2 === "L") {
         startLevel = 0;
         break;
       }
-      if (t === "R" || t === "AL") {
+      if (t2 === "R" || t2 === "AL") {
         startLevel = 1;
         break;
       }
@@ -1049,11 +1049,11 @@
     }
     lastType = sor;
     for (let i = 0; i < len; i++) {
-      const t = types[i];
-      if (t === "EN")
+      const t2 = types[i];
+      if (t2 === "EN")
         types[i] = lastType === "AL" ? "AN" : "EN";
-      else if (t === "R" || t === "L" || t === "AL")
-        lastType = t;
+      else if (t2 === "R" || t2 === "L" || t2 === "AL")
+        lastType = t2;
     }
     for (let i = 0; i < len; i++) {
       if (types[i] === "AL")
@@ -1077,17 +1077,17 @@
         types[j] = "EN";
     }
     for (let i = 0; i < len; i++) {
-      const t = types[i];
-      if (t === "WS" || t === "ES" || t === "ET" || t === "CS")
+      const t2 = types[i];
+      if (t2 === "WS" || t2 === "ES" || t2 === "ET" || t2 === "CS")
         types[i] = "ON";
     }
     lastType = sor;
     for (let i = 0; i < len; i++) {
-      const t = types[i];
-      if (t === "EN")
+      const t2 = types[i];
+      if (t2 === "EN")
         types[i] = lastType === "L" ? "L" : "EN";
-      else if (t === "R" || t === "L")
-        lastType = t;
+      else if (t2 === "R" || t2 === "L")
+        lastType = t2;
     }
     for (let i = 0; i < len; i++) {
       if (types[i] !== "ON")
@@ -1110,13 +1110,13 @@
         types[i] = e;
     }
     for (let i = 0; i < len; i++) {
-      const t = types[i];
+      const t2 = types[i];
       if ((levels[i] & 1) === 0) {
-        if (t === "R")
+        if (t2 === "R")
           levels[i]++;
-        else if (t === "AN" || t === "EN")
+        else if (t2 === "AN" || t2 === "EN")
           levels[i] += 2;
-      } else if (t === "L" || t === "AN" || t === "EN") {
+      } else if (t2 === "L" || t2 === "AN" || t2 === "EN") {
         levels[i]++;
       }
     }
@@ -3301,9 +3301,12 @@
   var LOG_FIXED_COLUMNS_WIDTH = 48 + 136 + 58 + 150;
   var TOOLS_PAGE_PATH = "mytools.htm";
   var QRCODE_SCRIPT_PATH = "vendor/qrcode.min.js";
+  var LANGUAGE_STORAGE_KEY = "myloggerLanguage";
   var state = {
+    language: localStorage.getItem(LANGUAGE_STORAGE_KEY) === "zh" ? "zh" : "en",
     fileName: "",
     filePath: "",
+    fileSize: 0,
     breakpointsFileName: "",
     breakpointsFilePath: "",
     breakpointsContent: "",
@@ -3321,6 +3324,7 @@
     matches: [],
     searchResultRows: [],
     searchModalCanOpenContext: false,
+    searchModalMode: "",
     markedLines: /* @__PURE__ */ new Set(),
     activeMarkedLine: null,
     activeMatch: -1,
@@ -3354,6 +3358,8 @@
     fileMeta: document.getElementById("fileMeta"),
     breakpointsMeta: document.getElementById("breakpointsMeta"),
     saveFiltered: document.getElementById("saveFiltered"),
+    languageButton: document.getElementById("languageButton"),
+    languagePopover: document.getElementById("languagePopover"),
     filterInput: document.getElementById("filterInput"),
     viewFilterResults: document.getElementById("viewFilterResults"),
     filterRegex: document.getElementById("filterRegex"),
@@ -3379,7 +3385,6 @@
     nextMarkedLine: document.getElementById("nextMarkedLine"),
     matchStatus: document.getElementById("matchStatus"),
     analyzeButton: document.getElementById("analyzeButton"),
-    filterLogsButton: document.getElementById("filterLogsButton"),
     analysisStatusButton: document.getElementById("analysisStatusButton"),
     analysisEndpoint: document.getElementById("analysisEndpoint"),
     openToolsPage: document.getElementById("openToolsPage"),
@@ -3428,6 +3433,364 @@
     closeHelpModal: document.getElementById("closeHelpModal"),
     toast: document.getElementById("toast")
   };
+  var I18N = {
+    zh: {
+      openFile: "\u6253\u5F00\u6587\u672C/\u65E5\u5FD7",
+      saveFiltered: "\u4FDD\u5B58\u8FC7\u6EE4\u7ED3\u679C",
+      help: "\u5E2E\u52A9",
+      filter: "\u8FC7\u6EE4",
+      filterPlaceholder: "\u5173\u952E\u5B57\u6216\u6B63\u5219\uFF1B\u591A\u884C\u6309\u4EFB\u610F\u4E00\u884C\u547D\u4E2D\u8FC7\u6EE4",
+      view: "\u67E5\u770B",
+      regex: "\u6B63\u5219",
+      caseSensitive: "\u533A\u5206\u5927\u5C0F\u5199",
+      search: "\u641C\u7D22",
+      searchPlaceholder: "\u5728\u5F53\u524D\u7ED3\u679C\u4E2D\u67E5\u627E",
+      prevMarked: "\u8DF3\u8F6C\u5230\u4E0A\u4E00\u4E2A\u6807\u8BB0",
+      nextMarked: "\u8DF3\u8F6C\u5230\u4E0B\u4E00\u4E2A\u6807\u8BB0",
+      allMarked: "\u5168\u90E8\u6807\u8BB0",
+      backendAnalysis: "\u540E\u53F0\u5206\u6790",
+      serviceUrl: "\u670D\u52A1\u5730\u5740",
+      breakpointsFile: "\u65AD\u70B9\u6587\u4EF6",
+      noBreakpointsFile: "\u672A\u9009\u62E9\u65AD\u70B9\u6587\u4EF6\u3002",
+      logPath: "\u65E5\u5FD7\u8DEF\u5F84",
+      noLogFile: "\u672A\u9009\u62E9\u65E5\u5FD7\u6587\u4EF6\u3002",
+      serviceStatus: "\u670D\u52A1\u72B6\u6001",
+      serviceAvailable: "\u540E\u53F0\u670D\u52A1\u53EF\u7528",
+      serviceUnavailable: "\u540E\u53F0\u670D\u52A1\u4E0D\u53EF\u7528",
+      getBreakpointLogs: "\u83B7\u53D6\u65AD\u70B9\u65E5\u5FD7",
+      tools: "\u5B9E\u7528\u5DE5\u5177",
+      expandAnalysis: "\u5C55\u5F00\u540E\u53F0\u5206\u6790",
+      collapseAnalysis: "\u6536\u8D77\u540E\u53F0\u5206\u6790",
+      logControls: "\u65E5\u5FD7\u63A7\u5236",
+      logTable: "\u65E5\u5FD7\u8868\u683C",
+      quickScroll: "\u5FEB\u901F\u6EDA\u52A8",
+      top: "\u56DE\u5230\u9876\u90E8",
+      bottom: "\u56DE\u5230\u5E95\u90E8",
+      dropLogFile: "\u62D6\u62FD\u65E5\u5FD7\u6587\u4EF6\u5230\u8FD9\u91CC",
+      clickOpenFile: "\u6216\u70B9\u51FB\u201C\u6253\u5F00\u6587\u672C/\u65E5\u5FD7\u201D\u3002",
+      lineNumber: "\u884C\u53F7",
+      time: "\u65F6\u95F4",
+      level: "\u7EA7\u522B",
+      content: "\u5185\u5BB9",
+      searchResults: "\u641C\u7D22\u7ED3\u679C",
+      noResults: "\u6682\u65E0\u7ED3\u679C\u3002",
+      previous: "\u4E0A\u4E00\u4E2A",
+      next: "\u4E0B\u4E00\u4E2A",
+      clearMarks: "\u6E05\u9664\u6807\u8BB0",
+      saveResults: "\u4FDD\u5B58\u7ED3\u679C",
+      close: "\u5173\u95ED",
+      logContext: "\u65E5\u5FD7\u4E0A\u4E0B\u6587",
+      noLog: "\u6682\u65E0\u65E5\u5FD7\u3002",
+      analysisResults: "\u7B5B\u67E5\u7ED3\u679C",
+      save: "\u4FDD\u5B58",
+      breakpoints: "\u65AD\u70B9\u6587\u4EF6",
+      helpTitle: "MyLogger \u5E2E\u52A9",
+      helpIntro: "\u672C\u5DE5\u5177\u7528\u4E8E\u672C\u5730\u65E5\u5FD7\u67E5\u770B\u3001\u8FC7\u6EE4\u3001\u5B9A\u4F4D\u3001\u6807\u8BB0\u3001\u4FDD\u5B58\u548C\u65AD\u70B9\u65E5\u5FD7\u7B5B\u67E5\u3002",
+      helpOpenTitle: "\u6253\u5F00\u65E5\u5FD7",
+      helpOpenText: "\u70B9\u51FB\u53F3\u4E0A\u89D2\u201C\u6253\u5F00\u6587\u672C/\u65E5\u5FD7\u201D\uFF0C\u6216\u5C06\u65E5\u5FD7\u6587\u4EF6\u62D6\u62FD\u5230\u4E3B\u7A97\u53E3\u3002\u652F\u6301 `.log`\u3001`.txt`\u3001`.json`\u3001`.md` \u7B49\u5E38\u89C1\u6587\u672C\u6587\u4EF6\u3002",
+      helpFilterTitle: "\u8FC7\u6EE4\u4E0E\u641C\u7D22",
+      helpFilterText: "\u9876\u90E8\u201C\u8FC7\u6EE4\u201D\u4F1A\u76F4\u63A5\u5F71\u54CD\u4E3B\u7A97\u53E3\u5C55\u793A\u7ED3\u679C\uFF0C\u53EF\u8F93\u5165\u5173\u952E\u5B57\uFF0C\u4E5F\u53EF\u52FE\u9009\u201C\u6B63\u5219\u201D\u548C\u201C\u533A\u5206\u5927\u5C0F\u5199\u201D\u3002\u201C\u641C\u7D22\u201D\u4F1A\u57FA\u4E8E\u5F53\u524D\u8FC7\u6EE4\u7ED3\u679C\u6253\u5F00\u641C\u7D22\u7ED3\u679C\u5B50\u7A97\u53E3\u3002",
+      helpTimeTitle: "\u65F6\u95F4\u7B5B\u9009",
+      helpTimeText: "\u70B9\u51FB\u8868\u5934\u201C\u65F6\u95F4\u201D\u6253\u5F00\u65F6\u95F4\u7B5B\u9009\u7A97\u53E3\u3002\u65F6\u95F4\u70B9\u6309\u5F53\u524D\u65E5\u5FD7\u5B9E\u9645\u5206\u5E03\u751F\u6210\uFF0C\u9009\u62E9\u8D77\u70B9\u548C\u7EC8\u70B9\u540E\u70B9\u51FB\u201C\u786E\u5B9A\u201D\uFF0C\u4E3B\u7A97\u53E3\u53EA\u5C55\u793A\u5BF9\u5E94\u65F6\u95F4\u6BB5\u5185\u7684\u65E5\u5FD7\u3002",
+      helpLevelTitle: "\u7EA7\u522B\u7B5B\u9009",
+      helpLevelText: "\u70B9\u51FB\u8868\u5934\u201C\u7EA7\u522B\u201D\u6253\u5F00\u7EA7\u522B\u9009\u62E9\u5668\uFF0C\u53EF\u591A\u9009\u65E5\u5FD7\u7EA7\u522B\u3002\u9009\u62E9\u540E\u4F1A\u7ACB\u5373\u8FC7\u6EE4\u4E3B\u7A97\u53E3\u65E5\u5FD7\u3002",
+      helpTagTitle: "Tag \u7B5B\u9009",
+      helpTagText: "\u70B9\u51FB\u8868\u5934\u201CTag\u201D\u6253\u5F00 Tag \u7B5B\u9009\u7A97\u53E3\u3002\u8F93\u5165 Tag \u540E\u70B9\u51FB\u201C\u786E\u5B9A\u201D\u624D\u4F1A\u751F\u6548\u3002\u70B9\u51FB\u201C+\u201D\u53EF\u589E\u52A0\u591A\u4E2A Tag\uFF0C\u591A\u4E2A Tag \u6309\u201C\u4EFB\u610F\u4E00\u4E2A\u5B8C\u5168\u5339\u914D\u201D\u8FDB\u884C\u8FC7\u6EE4\u3002",
+      helpContextTitle: "\u67E5\u770B\u4E0A\u4E0B\u6587",
+      helpContextText: "\u5F53\u4E3B\u7A97\u53E3\u5B58\u5728\u8FC7\u6EE4\u6761\u4EF6\u65F6\uFF0C\u5355\u51FB\u67D0\u4E00\u884C\u65E5\u5FD7\u4F1A\u6253\u5F00\u4E0A\u4E0B\u6587\u5B50\u7A97\u53E3\uFF0C\u5C55\u793A\u8BE5\u65E5\u5FD7\u524D\u540E\u5404 50 \u884C\uFF0C\u5E76\u9AD8\u4EAE\u5F53\u524D\u884C\u3002",
+      helpMarkTitle: "\u6807\u8BB0\u4E0E\u8DF3\u8F6C",
+      helpMarkText: "\u70B9\u51FB\u884C\u53F7\u53EF\u6807\u8BB0\u6216\u53D6\u6D88\u6807\u8BB0\u5F53\u524D\u884C\u3002\u53F3\u4E0A\u89D2\u201C\u5168\u90E8\u6807\u8BB0\u201D\u53EF\u67E5\u770B\u6807\u8BB0\u884C\u3002\u641C\u7D22\u533A\u65C1\u8FB9\u7684\u4E0A\u4E0B\u7BAD\u5934\u53EF\u5728\u6807\u8BB0\u884C\u4E4B\u95F4\u8DF3\u8F6C\u3002",
+      helpSaveTitle: "\u590D\u5236\u4E0E\u4FDD\u5B58",
+      helpSaveText: "\u53CC\u51FB\u65E5\u5FD7\u884C\u4F1A\u590D\u5236\u5F53\u524D\u884C\u6587\u672C\u3002\u53F3\u4E0A\u89D2\u201C\u4FDD\u5B58\u8FC7\u6EE4\u7ED3\u679C\u201D\u4F1A\u628A\u5F53\u524D\u4E3B\u7A97\u53E3\u5C55\u793A\u7684\u8FC7\u6EE4\u7ED3\u679C\u4FDD\u5B58\u4E3A `.txt` \u6587\u4EF6\u3002\u5404\u5B50\u7A97\u53E3\u53F3\u4E0A\u89D2\u201C\u4FDD\u5B58\u201D\u4E5F\u9ED8\u8BA4\u4FDD\u5B58\u4E3A `.txt`\u3002",
+      helpBackendTitle: "\u540E\u53F0\u5206\u6790",
+      helpBackendText: "\u5DE6\u4FA7\u201C\u540E\u53F0\u5206\u6790\u201D\u9ED8\u8BA4\u6536\u8D77\uFF0C\u70B9\u51FB\u53EF\u5C55\u5F00\u3002\u9009\u62E9\u65AD\u70B9 JSON \u6587\u4EF6\u540E\uFF0C\u53EF\u70B9\u51FB\u201C\u83B7\u53D6\u65AD\u70B9\u65E5\u5FD7\u201D\u4ECE\u672C\u5730\u540E\u53F0\u670D\u52A1\u63D0\u53D6\u65AD\u70B9\u65E5\u5FD7\u5B57\u7B26\u4E32\u3002",
+      helpBreakpointTitle: "\u65AD\u70B9\u65E5\u5FD7\u7B5B\u67E5",
+      helpBreakpointText: "\u9876\u90E8\u201C\u8FC7\u6EE4\u201D\u652F\u6301\u591A\u884C\u8F93\u5165\uFF0C\u6BCF\u4E00\u884C\u90FD\u662F\u4E00\u6761\u8FC7\u6EE4\u89C4\u5219\uFF0C\u591A\u884C\u4E4B\u95F4\u6309\u201C\u4EFB\u610F\u4E00\u6761\u547D\u4E2D\u201D\u8FC7\u6EE4\u4E3B\u7A97\u53E3\u65E5\u5FD7\u3002\u52FE\u9009\u201C\u6B63\u5219\u201D\u65F6\uFF0C\u6BCF\u4E00\u884C\u4F1A\u4F5C\u4E3A\u72EC\u7ACB\u6B63\u5219\u53C2\u4E0E\u5339\u914D\u3002\u8FC7\u6EE4\u8F93\u5165\u6846\u53F3\u4FA7\u201C\u67E5\u770B\u201D\u7528\u4E8E\u6253\u5F00\u5DE6\u53F3\u5206\u5C4F\u660E\u7EC6\u7A97\u53E3\u3002",
+      helpServiceTitle: "\u672C\u5730\u670D\u52A1",
+      helpServiceText: "\u540E\u53F0\u5206\u6790\u670D\u52A1\u5730\u5740\u9ED8\u8BA4\u4E3A `http://127.0.0.1:7878/analyze`\u3002\u670D\u52A1\u72B6\u6001\u7EFF\u706F\u8868\u793A\u672C\u5730\u670D\u52A1\u53EF\u7528\uFF0C\u7EA2\u706F\u8868\u793A\u4E0D\u53EF\u7528\u3002\u70B9\u51FB\u201C\u83B7\u53D6\u65AD\u70B9\u65E5\u5FD7\u201D\u65F6\uFF0C\u63D2\u4EF6\u4F1A\u5C06\u65AD\u70B9 JSON \u5185\u5BB9\u4F20\u7ED9\u540E\u53F0\uFF1B\u540E\u53F0\u6839\u636E JSON \u4E2D\u7684\u65AD\u70B9\u4FE1\u606F\u5BF9\u6BD4\u672C\u5730\u6E90\u7801\uFF0C\u627E\u5230\u65AD\u70B9\u5BF9\u5E94\u6E90\u7801\u884C\u4E2D\u7684\u65E5\u5FD7\u5B57\u7B26\u4E32\u5E76\u8FD4\u56DE\uFF0C\u5E76\u81EA\u52A8\u586B\u5165\u9876\u90E8\u201C\u8FC7\u6EE4\u201D\u5237\u65B0\u4E3B\u7A97\u53E3\u3002",
+      helpToolsTitle: "\u5B9E\u7528\u5DE5\u5177",
+      helpToolsText: "\u5C55\u5F00\u5DE6\u4FA7\u201C\u540E\u53F0\u5206\u6790\u201D\u540E\uFF0C\u70B9\u51FB\u201C\u5B9E\u7528\u5DE5\u5177\u201D\u53EF\u6253\u5F00\u968F\u63D2\u4EF6\u6253\u5305\u7684\u672C\u5730\u5DE5\u5177\u9875\u3002\u8BE5\u9875\u9762\u5305\u542B JSON \u683C\u5F0F\u5316\u3001\u53C2\u6570\u5904\u7406\u3001\u4E8C\u7EF4\u7801\u751F\u6210\u7B49\u5E38\u7528\u5C0F\u5DE5\u5177\uFF0C\u53EF\u5728\u4E0D\u79BB\u5F00\u63D2\u4EF6\u73AF\u5883\u7684\u60C5\u51B5\u4E0B\u8F85\u52A9\u5904\u7406\u65E5\u5FD7\u548C\u8C03\u8BD5\u6587\u672C\u3002",
+      confirm: "\u786E\u5B9A",
+      clear: "\u6E05\u9664",
+      start: "\u8D77\u70B9",
+      end: "\u7EC8\u70B9",
+      unlimited: "\u4E0D\u9650",
+      noLevel: "\u65E0\u7EA7\u522B",
+      noTime: "\u65E0\u65F6\u95F4",
+      inputTag: "\u8F93\u5165 Tag",
+      markedRows: "\u5DF2\u6807\u8BB0\u884C",
+      filterLogs: "\u8FC7\u6EE4\u65E5\u5FD7",
+      relatedLogs: "\u76F8\u5173\u65E5\u5FD7",
+      expandFilterLogs: "\u5C55\u5F00\u8FC7\u6EE4\u65E5\u5FD7",
+      collapseFilterLogs: "\u6536\u8D77\u8FC7\u6EE4\u65E5\u5FD7",
+      noBreakpointLogStrings: "\u6CA1\u6709\u63D0\u53D6\u5230\u65AD\u70B9\u65E5\u5FD7\u5B57\u7B26\u4E32\u3002",
+      noRelatedLogs: "\u6CA1\u6709\u53EF\u5C55\u793A\u7684\u76F8\u5173\u65E5\u5FD7\u3002",
+      noMatchedRelatedLogs: "\u672A\u5728\u65E5\u5FD7\u6587\u4EF6\u4E2D\u627E\u5230\u76F8\u5173\u65E5\u5FD7\u3002",
+      languageLabel: "\u4E2D",
+      languageZh: "\u4E2D\u6587",
+      languageEn: "English"
+    },
+    en: {
+      openFile: "Open Text/Log",
+      saveFiltered: "Save Filtered",
+      help: "Help",
+      filter: "Filter",
+      filterPlaceholder: "Keyword or regex; multiple lines match any rule",
+      view: "View",
+      regex: "Regex",
+      caseSensitive: "Case sensitive",
+      search: "Search",
+      searchPlaceholder: "Search current results",
+      prevMarked: "Previous mark",
+      nextMarked: "Next mark",
+      allMarked: "All Marks",
+      backendAnalysis: "Backend Analysis",
+      serviceUrl: "Service URL",
+      breakpointsFile: "Breakpoints File",
+      noBreakpointsFile: "No breakpoints file selected.",
+      logPath: "Log Path",
+      noLogFile: "No log file selected.",
+      serviceStatus: "Service Status",
+      serviceAvailable: "Backend service available",
+      serviceUnavailable: "Backend service unavailable",
+      getBreakpointLogs: "Get Breakpoint Logs",
+      tools: "Tools",
+      expandAnalysis: "Expand backend analysis",
+      collapseAnalysis: "Collapse backend analysis",
+      logControls: "Log controls",
+      logTable: "Log table",
+      quickScroll: "Quick scroll",
+      top: "Scroll to top",
+      bottom: "Scroll to bottom",
+      dropLogFile: "Drop a log file here",
+      clickOpenFile: 'or click "Open Text/Log".',
+      lineNumber: "Line",
+      time: "Time",
+      level: "Level",
+      content: "Content",
+      searchResults: "Search Results",
+      noResults: "No results.",
+      previous: "Previous",
+      next: "Next",
+      clearMarks: "Clear Marks",
+      saveResults: "Save Results",
+      close: "Close",
+      logContext: "Log Context",
+      noLog: "No log.",
+      analysisResults: "Screening Results",
+      save: "Save",
+      breakpoints: "Breakpoints File",
+      helpTitle: "MyLogger Help",
+      helpIntro: "Use this tool to view, filter, locate, mark, save, and screen local logs with breakpoint data.",
+      helpOpenTitle: "Open Logs",
+      helpOpenText: 'Click "Open Text/Log" in the top-right area, or drop a log file into the main window. Common text files such as `.log`, `.txt`, `.json`, and `.md` are supported.',
+      helpFilterTitle: "Filter And Search",
+      helpFilterText: "The top Filter field directly changes the main log view. Enter keywords, or enable Regex and Case sensitive. Search opens a result window based on the current filtered logs.",
+      helpTimeTitle: "Time Filter",
+      helpTimeText: "Click the Time header to open time filtering. Time points are generated from the loaded logs. Select a start and end time, then click Confirm.",
+      helpLevelTitle: "Level Filter",
+      helpLevelText: "Click the Level header to open the level selector. Multiple log levels can be selected and applied immediately.",
+      helpTagTitle: "Tag Filter",
+      helpTagText: "Click the Tag header to open tag filtering. Enter tags and click Confirm. Use + to add multiple tags. Tags match exactly and any selected tag can match.",
+      helpContextTitle: "View Context",
+      helpContextText: "When filters are active, click a log row to open a context window showing 50 lines before and after it, with the selected row highlighted.",
+      helpMarkTitle: "Marks And Jump",
+      helpMarkText: "Click a line number to mark or unmark that row. All Marks shows marked rows. The up/down arrows near Search jump between marked rows.",
+      helpSaveTitle: "Copy And Save",
+      helpSaveText: "Double-click a log row to copy it. Save Filtered saves the current main view as a `.txt` file. Save buttons in subwindows also save `.txt` files by default.",
+      helpBackendTitle: "Backend Analysis",
+      helpBackendText: "The left Backend Analysis panel is collapsed by default. Expand it, choose a breakpoint JSON file, then click Get Breakpoint Logs to extract log strings through the local backend service.",
+      helpBreakpointTitle: "Breakpoint Log Screening",
+      helpBreakpointText: "The top Filter field supports multiple lines. Each line is a rule, and rows matching any rule are shown. With Regex enabled, every line is treated as an independent regex. The View button on the filter field opens a split detail window.",
+      helpServiceTitle: "Local Service",
+      helpServiceText: "The backend service URL defaults to `http://127.0.0.1:7878/analyze`. A green status light means available, red means unavailable. Get Breakpoint Logs sends breakpoint JSON to the backend; the backend compares it with local source code, extracts log strings, returns them, and fills the top Filter field.",
+      helpToolsTitle: "Tools",
+      helpToolsText: "Expand Backend Analysis and click Tools to open the bundled local tools page. It includes JSON formatting, parameter handling, QR code generation, and other helpers for logs and debugging text.",
+      confirm: "Confirm",
+      clear: "Clear",
+      start: "Start",
+      end: "End",
+      unlimited: "Any",
+      noLevel: "No levels",
+      noTime: "No time",
+      inputTag: "Enter Tag",
+      markedRows: "Marked Rows",
+      filterLogs: "Filter Logs",
+      relatedLogs: "Related Logs",
+      expandFilterLogs: "Expand filter logs",
+      collapseFilterLogs: "Collapse filter logs",
+      noBreakpointLogStrings: "No breakpoint log strings extracted.",
+      noRelatedLogs: "No related logs to display.",
+      noMatchedRelatedLogs: "No related logs found in the log file.",
+      languageLabel: "EN",
+      languageZh: "\u4E2D\u6587",
+      languageEn: "English"
+    }
+  };
+  function t(key, params = {}) {
+    let value = I18N[state.language] && I18N[state.language][key] || I18N.zh[key] || key;
+    for (const [name, replacement] of Object.entries(params)) {
+      value = value.replaceAll(`{${name}}`, replacement);
+    }
+    return value;
+  }
+  function applyLanguage() {
+    document.documentElement.lang = state.language === "en" ? "en" : "zh-CN";
+    els.languageButton.textContent = t("languageLabel");
+    els.languageButton.classList.toggle("active", !els.languagePopover.classList.contains("hidden"));
+    els.languageButton.setAttribute("aria-label", state.language === "en" ? "Language" : "\u8BED\u8A00");
+    els.openHelpModal.title = t("help");
+    els.openHelpModal.setAttribute("aria-label", t("help"));
+    setLeadingText(".header-actions-left label.button.primary", "openFile");
+    setText("#saveFiltered", "saveFiltered");
+    setLeadingText(".toolbar > label:nth-of-type(1)", "filter");
+    setPlaceholder("#filterInput", "filterPlaceholder");
+    setText("#viewFilterResults", "view");
+    setLeadingText(".toolbar label.checkbox:nth-of-type(2)", "regex");
+    setLeadingText(".toolbar label.checkbox:nth-of-type(3)", "caseSensitive");
+    setLeadingText(".toolbar > label:nth-of-type(4)", "search");
+    setPlaceholder("#searchInput", "searchPlaceholder");
+    setText("#openSearchResults", "search");
+    setText("#openMarkedRows", "allMarked");
+    els.prevMarkedLine.title = t("prevMarked");
+    els.nextMarkedLine.title = t("nextMarked");
+    setText(".analysis-panel h2", "backendAnalysis");
+    setLeadingText(".analysis-panel label:nth-of-type(1)", "serviceUrl");
+    setText(".analysis-path-field:nth-of-type(1) > span", "breakpointsFile");
+    setText("#viewBreakpointsFile", "view");
+    setAnalysisPathFallbacks();
+    setAnalysisServiceStatusText();
+    setText("#analyzeButton", "getBreakpointLogs");
+    setText("#openToolsPage", "tools");
+    updateAnalysisToggleText();
+    document.querySelector(".toolbar")?.setAttribute("aria-label", t("logControls"));
+    document.querySelector(".log-panel")?.setAttribute("aria-label", t("logTable"));
+    document.querySelector(".quick-scroll")?.setAttribute("aria-label", t("quickScroll"));
+    els.scrollToTop.title = t("top");
+    els.scrollToTop.setAttribute("aria-label", t("top"));
+    els.scrollToBottom.title = t("bottom");
+    els.scrollToBottom.setAttribute("aria-label", t("bottom"));
+    setText("#dropZone strong", "dropLogFile");
+    setText("#dropZone span", "clickOpenFile");
+    setTableHeaders();
+    applyModalLanguage();
+    updateLevelFilterHeader();
+    updateTimeFilterHeader();
+    updateTagFilterHeader();
+    updateMarkedLineJumpButtons();
+    updateMatchStatus();
+    updateModalMatchStatus();
+    updateAnalysisModalMatchStatus();
+    setLanguagePopoverState();
+    updateFileMeta();
+    updateBreakpointsMeta();
+  }
+  function setText(selector, key) {
+    const el = document.querySelector(selector);
+    if (el) el.textContent = t(key);
+  }
+  function setPlaceholder(selector, key) {
+    const el = document.querySelector(selector);
+    if (el) el.placeholder = t(key);
+  }
+  function setLeadingText(selector, key) {
+    const el = document.querySelector(selector);
+    if (!el) return;
+    const textNode = Array.from(el.childNodes).find((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
+    if (textNode) textNode.textContent = `${t(key)} `;
+  }
+  function setTableHeaders() {
+    for (const header of document.querySelectorAll("th.line-col")) header.textContent = t("lineNumber");
+    for (const header of document.querySelectorAll("th.time-col")) {
+      if (header.id !== "timeFilterHeader") header.textContent = t("time");
+    }
+    for (const header of document.querySelectorAll("th.level-col")) {
+      if (header.id !== "levelFilterHeader") header.textContent = t("level");
+    }
+    for (const header of document.querySelectorAll("th.message-col")) header.textContent = t("content");
+  }
+  function applyModalLanguage() {
+    if (!state.searchModalMode) {
+      setText("#searchModalTitle", "searchResults");
+    } else {
+      els.searchModalTitle.textContent = state.searchModalMode === "marked" ? t("markedRows") : t("searchResults");
+    }
+    if (!state.searchResultRows.length) els.searchModalMeta.textContent = t("noResults");
+    setLeadingText("#searchModal .modal-search label", "search");
+    setPlaceholder("#modalSearchInput", "searchPlaceholder");
+    setText("#modalPrevMatch", "previous");
+    setText("#modalNextMatch", "next");
+    setText("#clearMarkedRows", "clearMarks");
+    setText("#saveSearchResults", "saveResults");
+    setText("#closeSearchModal", "close");
+    setText("#contextModalTitle", "logContext");
+    if (!state.rows.length) els.contextModalMeta.textContent = t("noLog");
+    setText("#closeContextModal", "close");
+    setText("#analysisModalTitle", "analysisResults");
+    if (!state.analysisModalText) els.analysisModalMeta.textContent = t("noResults");
+    setLeadingText("#analysisModal .analysis-modal-search label", "search");
+    setPlaceholder("#analysisModalSearchInput", "searchPlaceholder");
+    setText("#analysisModalPrevMatch", "previous");
+    setText("#analysisModalNextMatch", "next");
+    setText("#saveAnalysisModal", "save");
+    setText("#closeAnalysisModal", "close");
+    setText("#breakpointsModalTitle", "breakpoints");
+    setText("#closeBreakpointsModal", "close");
+    setText("#helpModalTitle", "helpTitle");
+    setText("#helpModal .modal-header p", "helpIntro");
+    setText("#closeHelpModal", "close");
+    const helpSections = [
+      ["helpOpenTitle", "helpOpenText"],
+      ["helpFilterTitle", "helpFilterText"],
+      ["helpTimeTitle", "helpTimeText"],
+      ["helpLevelTitle", "helpLevelText"],
+      ["helpTagTitle", "helpTagText"],
+      ["helpContextTitle", "helpContextText"],
+      ["helpMarkTitle", "helpMarkText"],
+      ["helpSaveTitle", "helpSaveText"],
+      ["helpBackendTitle", "helpBackendText"],
+      ["helpBreakpointTitle", "helpBreakpointText"],
+      ["helpServiceTitle", "helpServiceText"],
+      ["helpToolsTitle", "helpToolsText"]
+    ];
+    const sections = Array.from(document.querySelectorAll(".help-modal-body section"));
+    helpSections.forEach(([titleKey, textKey], index) => {
+      const section = sections[index];
+      if (!section) return;
+      section.querySelector("h3").textContent = t(titleKey);
+      section.querySelector("p").textContent = t(textKey);
+    });
+    setText("#confirmTagFilter", "confirm");
+    setText("#clearTagFilter", "clear");
+    setText("#confirmTimeFilter", "confirm");
+    setText("#clearTimeFilter", "clear");
+    const timeTitles = document.querySelectorAll(".time-filter-lists h3");
+    if (timeTitles[0]) timeTitles[0].textContent = t("start");
+    if (timeTitles[1]) timeTitles[1].textContent = t("end");
+  }
+  function setAnalysisPathFallbacks() {
+    if (!state.breakpointsContent) {
+      els.analysisBreakpointsPath.textContent = t("noBreakpointsFile");
+      els.breakpointsModalMeta.textContent = t("noBreakpointsFile");
+    }
+    if (!state.filePath) {
+      els.analysisLogPath.textContent = t("noLogFile");
+    }
+  }
+  function setAnalysisServiceStatusText() {
+    document.querySelector(".analysis-service-row span").textContent = t("serviceStatus");
+    const available = els.analysisStatusButton.classList.contains("available");
+    const label = available ? t("serviceAvailable") : t("serviceUnavailable");
+    els.analysisStatusButton.title = label;
+    els.analysisStatusButton.setAttribute("aria-label", label);
+  }
+  function setLanguagePopoverState() {
+    for (const button of els.languagePopover.querySelectorAll("button[data-language]")) {
+      const language = button.dataset.language;
+      button.textContent = language === "en" ? t("languageEn") : t("languageZh");
+      button.classList.toggle("active", language === state.language);
+    }
+  }
   function parseLine(text, index) {
     const filtered = text.match(/^(\d+):\s*(.*)$/);
     const sourceLine = filtered ? Number(filtered[1]) : index + 1;
@@ -3469,6 +3832,7 @@
     const text = await file.text();
     state.fileName = file.name;
     state.filePath = file.path || file.name;
+    state.fileSize = file.size;
     state.rawText = text;
     state.rows = text.split(/\r?\n/).map(parseLine);
     state.selectedLevels.clear();
@@ -3485,7 +3849,7 @@
     state.markedLines.clear();
     state.activeMarkedLine = null;
     els.analysisLogPath.textContent = state.filePath;
-    els.fileMeta.textContent = `${file.name} \xB7 ${state.rows.length.toLocaleString()} \u884C \xB7 ${formatBytes(file.size)}`;
+    updateFileMeta();
     els.dropZone.classList.add("hidden");
     els.tableWrap.classList.remove("hidden");
     updateLevelFilterOptions();
@@ -3511,7 +3875,7 @@
     state.breakpointsFileName = file.name;
     state.breakpointsFilePath = file.path || file.name;
     state.breakpointsContent = text;
-    els.breakpointsMeta.textContent = `\u65AD\u70B9\u6587\u4EF6\uFF1A${state.breakpointsFilePath}`;
+    updateBreakpointsMeta();
     els.analysisBreakpointsPath.textContent = state.breakpointsFilePath;
     updateAnalyzeButtonState();
     els.viewBreakpointsFile.classList.remove("hidden");
@@ -3521,7 +3885,7 @@
     state.breakpointsFileName = "";
     state.breakpointsFilePath = "";
     state.breakpointsContent = "";
-    els.breakpointsMeta.textContent = "";
+    updateBreakpointsMeta();
     els.analysisBreakpointsPath.textContent = "\u672A\u9009\u62E9\u65AD\u70B9\u6587\u4EF6\u3002";
     els.breakpointsModalMeta.textContent = "\u672A\u9009\u62E9\u65AD\u70B9\u6587\u4EF6\u3002";
     els.breakpointsModalBody.textContent = "";
@@ -3531,14 +3895,28 @@
   function updateAnalyzeButtonState() {
     els.analyzeButton.disabled = !state.breakpointsContent;
   }
+  function updateFileMeta() {
+    if (!state.fileName) {
+      els.fileMeta.textContent = "";
+      return;
+    }
+    els.fileMeta.textContent = state.language === "en" ? `${state.fileName} \xB7 ${state.rows.length.toLocaleString()} rows \xB7 ${formatBytes(state.fileSize)}` : `${state.fileName} \xB7 ${state.rows.length.toLocaleString()} \u884C \xB7 ${formatBytes(state.fileSize)}`;
+  }
+  function updateBreakpointsMeta() {
+    els.breakpointsMeta.textContent = state.breakpointsFilePath ? `${t("breakpointsFile")}\uFF1A${state.breakpointsFilePath}` : "";
+  }
   function toggleAnalysisPanel() {
     const collapsed = !els.content.classList.contains("analysis-collapsed");
     els.content.classList.toggle("analysis-collapsed", collapsed);
-    els.toggleAnalysisPanel.setAttribute("aria-expanded", collapsed ? "false" : "true");
-    els.toggleAnalysisPanel.setAttribute("aria-label", collapsed ? "\u5C55\u5F00\u540E\u53F0\u5206\u6790" : "\u6536\u8D77\u540E\u53F0\u5206\u6790");
-    els.toggleAnalysisPanel.title = collapsed ? "\u5C55\u5F00\u540E\u53F0\u5206\u6790" : "\u6536\u8D77\u540E\u53F0\u5206\u6790";
-    els.toggleAnalysisPanel.textContent = collapsed ? ">" : "<";
+    updateAnalysisToggleText();
     scheduleVirtualRowsRender();
+  }
+  function updateAnalysisToggleText() {
+    const collapsed = els.content.classList.contains("analysis-collapsed");
+    els.toggleAnalysisPanel.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    els.toggleAnalysisPanel.setAttribute("aria-label", collapsed ? t("expandAnalysis") : t("collapseAnalysis"));
+    els.toggleAnalysisPanel.title = collapsed ? t("expandAnalysis") : t("collapseAnalysis");
+    els.toggleAnalysisPanel.textContent = collapsed ? ">" : "<";
   }
   function applyFilter() {
     window.clearTimeout(filterTimer);
@@ -3590,7 +3968,7 @@
     if (!levels.length) {
       const empty = document.createElement("div");
       empty.className = "level-filter-empty";
-      empty.textContent = "\u65E0\u7EA7\u522B";
+      empty.textContent = t("noLevel");
       els.levelFilterPopover.append(empty);
     } else {
       for (const level of levels) {
@@ -3619,7 +3997,7 @@
   }
   function updateLevelFilterHeader() {
     const count = state.selectedLevels.size;
-    els.levelFilterHeader.textContent = count ? `\u7EA7\u522B(${count})` : "\u7EA7\u522B";
+    els.levelFilterHeader.textContent = count ? `${t("level")}(${count})` : t("level");
     els.levelFilterHeader.classList.toggle("active", count > 0);
   }
   function toggleLevelFilterPopover(event) {
@@ -3660,7 +4038,7 @@
     for (const list of [els.timeFilterStartList, els.timeFilterEndList]) {
       const empty = document.createElement("div");
       empty.className = "time-filter-empty";
-      empty.textContent = "\u65E0\u65F6\u95F4";
+      empty.textContent = t("noTime");
       list.append(empty);
     }
   }
@@ -3671,7 +4049,7 @@
     renderTimeFilterList(els.timeFilterEndList, "end");
   }
   function renderTimeFilterList(list, type) {
-    list.append(createTimeFilterRow("\u4E0D\u9650", null, type));
+    list.append(createTimeFilterRow(t("unlimited"), null, type));
     for (const value of state.timeFilterPoints) {
       list.append(createTimeFilterRow(formatLogTimeValue(value), value, type));
     }
@@ -3689,8 +4067,8 @@
   }
   function formatTimeOptionLabel(value, label) {
     const markers = [];
-    if (value != null && state.draftTimeFilterStart === value) markers.push("\u8D77\u70B9");
-    if (value != null && state.draftTimeFilterEnd === value) markers.push("\u7EC8\u70B9");
+    if (value != null && state.draftTimeFilterStart === value) markers.push(t("start"));
+    if (value != null && state.draftTimeFilterEnd === value) markers.push(t("end"));
     return markers.length ? `\u2713 ${markers.join("/")} ${label}` : label;
   }
   function formatLogTimeValue(value) {
@@ -3700,7 +4078,7 @@
   }
   function updateTimeFilterHeader() {
     const active = state.timeFilterStart != null || state.timeFilterEnd != null;
-    els.timeFilterHeader.textContent = active ? "\u65F6\u95F4(1)" : "\u65F6\u95F4";
+    els.timeFilterHeader.textContent = active ? `${t("time")}(1)` : t("time");
     els.timeFilterHeader.classList.toggle("active", active);
   }
   function toggleTimeFilterPopover(event) {
@@ -3795,7 +4173,7 @@
     state.draftTagFilters.forEach((value, index) => {
       const input = document.createElement("input");
       input.type = "search";
-      input.placeholder = "\u8F93\u5165 Tag";
+      input.placeholder = t("inputTag");
       input.value = value;
       input.addEventListener("input", () => updateTagFilterAt(index, input.value));
       input.addEventListener("keydown", (event) => {
@@ -4125,9 +4503,9 @@
       renderRows();
     }
     if (!els.searchModal.classList.contains("hidden")) {
-      if (els.searchModalTitle.textContent === "\u5DF2\u6807\u8BB0\u884C") {
+      if (state.searchModalMode === "marked") {
         state.searchResultRows = state.rows.filter((row) => state.markedLines.has(row.sourceLine));
-        els.searchModalMeta.textContent = `${state.fileName || "log"} \xB7 ${state.searchResultRows.length.toLocaleString()} \u884C\u5DF2\u6807\u8BB0`;
+        els.searchModalMeta.textContent = `${state.fileName || "log"} \xB7 ${state.searchResultRows.length.toLocaleString()} ${state.language === "en" ? "marked rows" : "\u884C\u5DF2\u6807\u8BB0"}`;
         if (!state.searchResultRows.length) {
           closeSearchModal();
           return;
@@ -4184,7 +4562,7 @@
     if (!state.rows.length) return;
     const index = state.rows.indexOf(row);
     state.contextActiveIndex = index >= 0 ? index : Math.max(0, Math.min(state.rows.length - 1, row.sourceLine - 1));
-    els.contextModalMeta.textContent = `${state.fileName || "\u65E5\u5FD7"} \xB7 \u7B2C ${row.sourceLine} \u884C \xB7 \u524D\u540E ${LOG_CONTEXT_RADIUS} \u884C`;
+    els.contextModalMeta.textContent = state.language === "en" ? `${state.fileName || "Log"} \xB7 Line ${row.sourceLine} \xB7 +/- ${LOG_CONTEXT_RADIUS} lines` : `${state.fileName || "\u65E5\u5FD7"} \xB7 \u7B2C ${row.sourceLine} \u884C \xB7 \u524D\u540E ${LOG_CONTEXT_RADIUS} \u884C`;
     els.contextLogBody.textContent = "";
     els.contextModal.classList.remove("hidden");
     window.requestAnimationFrame(prepareContextRowsForCentering);
@@ -4256,14 +4634,15 @@
     }
     state.searchResultRows = rows;
     state.searchModalCanOpenContext = true;
-    els.searchModalTitle.textContent = "\u641C\u7D22\u7ED3\u679C";
+    state.searchModalMode = "search";
+    els.searchModalTitle.textContent = t("searchResults");
     state.modalMatches = [];
     state.modalActiveMatch = -1;
     state.modalActiveSearch = "";
     state.modalSearchDirty = false;
     els.modalSearchInput.value = "";
     els.clearMarkedRows.classList.add("hidden");
-    els.searchModalMeta.textContent = `${state.fileName || "log"} \xB7 \u641C\u7D22\uFF1A${query} \xB7 ${rows.length.toLocaleString()} \u4E2A\u5339\u914D`;
+    els.searchModalMeta.textContent = state.language === "en" ? `${state.fileName || "log"} \xB7 Search: ${query} \xB7 ${rows.length.toLocaleString()} matches` : `${state.fileName || "log"} \xB7 \u641C\u7D22\uFF1A${query} \xB7 ${rows.length.toLocaleString()} \u4E2A\u5339\u914D`;
     renderRowsInto(els.searchResultBody, rows, query);
     updateModalMatchStatus();
     els.searchModal.classList.remove("hidden");
@@ -4276,8 +4655,9 @@
     }
     state.searchResultRows = rows;
     state.searchModalCanOpenContext = false;
-    els.searchModalTitle.textContent = "\u5DF2\u6807\u8BB0\u884C";
-    els.searchModalMeta.textContent = `${state.fileName || "log"} \xB7 ${rows.length.toLocaleString()} \u884C\u5DF2\u6807\u8BB0`;
+    state.searchModalMode = "marked";
+    els.searchModalTitle.textContent = t("markedRows");
+    els.searchModalMeta.textContent = state.language === "en" ? `${state.fileName || "log"} \xB7 ${rows.length.toLocaleString()} marked rows` : `${state.fileName || "log"} \xB7 ${rows.length.toLocaleString()} \u884C\u5DF2\u6807\u8BB0`;
     state.modalMatches = [];
     state.modalActiveMatch = -1;
     state.modalActiveSearch = "";
@@ -4290,13 +4670,14 @@
   }
   function closeSearchModal() {
     state.searchModalCanOpenContext = false;
+    state.searchModalMode = "";
     els.searchModal.classList.add("hidden");
     els.clearMarkedRows.classList.add("hidden");
   }
   function saveSearchResults() {
     if (!state.searchResultRows.length) return;
     const content = formatRowsForSave(state.searchResultRows);
-    const suffix = els.searchModalTitle.textContent === "\u5DF2\u6807\u8BB0\u884C" ? "marked" : "search";
+    const suffix = state.searchModalMode === "marked" ? "marked" : "search";
     downloadText(content, `${state.fileName || "log"}.${suffix}.txt`);
   }
   function clearMarkedRows() {
@@ -4348,17 +4729,17 @@
     updateModalMatchStatus();
   }
   function updateModalMatchStatus() {
-    const visible = `${state.searchResultRows.length.toLocaleString()} \u884C`;
+    const visible = state.language === "en" ? `${state.searchResultRows.length.toLocaleString()} rows` : `${state.searchResultRows.length.toLocaleString()} \u884C`;
     if (state.modalSearchDirty) {
-      els.modalMatchStatus.textContent = `\u641C\u7D22\u5F85\u6267\u884C \xB7 ${visible}`;
+      els.modalMatchStatus.textContent = state.language === "en" ? `Search pending \xB7 ${visible}` : `\u641C\u7D22\u5F85\u6267\u884C \xB7 ${visible}`;
       return;
     }
     if (!state.modalMatches.length) {
-      els.modalMatchStatus.textContent = `0 \u4E2A\u5339\u914D \xB7 ${visible}`;
+      els.modalMatchStatus.textContent = state.language === "en" ? `0 matches \xB7 ${visible}` : `0 \u4E2A\u5339\u914D \xB7 ${visible}`;
       return;
     }
     const current = state.modalActiveMatch < 0 ? 0 : state.modalActiveMatch + 1;
-    els.modalMatchStatus.textContent = `${current}/${state.modalMatches.length} \u4E2A\u5339\u914D \xB7 ${visible}`;
+    els.modalMatchStatus.textContent = state.language === "en" ? `${current}/${state.modalMatches.length} matches \xB7 ${visible}` : `${current}/${state.modalMatches.length} \u4E2A\u5339\u914D \xB7 ${visible}`;
   }
   async function copyLine(line) {
     await navigator.clipboard.writeText(line);
@@ -4503,14 +4884,16 @@
     }, 0);
     const split = document.createElement("div");
     split.className = "analysis-split";
-    const left = createAnalysisPane("\u8FC7\u6EE4\u65E5\u5FD7", `${logStrings.length.toLocaleString()} \u6761`, { collapsible: true });
-    const right = createAnalysisPane("\u76F8\u5173\u65E5\u5FD7", `${totalMatches.toLocaleString()} \u884C`);
+    const leftMeta = state.language === "en" ? `${logStrings.length.toLocaleString()} rules` : `${logStrings.length.toLocaleString()} \u6761`;
+    const rightMeta = state.language === "en" ? `${totalMatches.toLocaleString()} rows` : `${totalMatches.toLocaleString()} \u884C`;
+    const left = createAnalysisPane(t("filterLogs"), leftMeta, { collapsible: true });
+    const right = createAnalysisPane(t("relatedLogs"), rightMeta);
     const leftBody = left.querySelector(".analysis-pane-body");
     const rightBody = right.querySelector(".analysis-pane-body");
     if (!logStrings.length) {
       const empty = document.createElement("div");
       empty.className = "analysis-empty";
-      empty.textContent = breakpoints.error ? `${breakpoints.error}: ${breakpoints.message || ""}` : "\u6CA1\u6709\u63D0\u53D6\u5230\u65AD\u70B9\u65E5\u5FD7\u5B57\u7B26\u4E32\u3002";
+      empty.textContent = breakpoints.error ? `${breakpoints.error}: ${breakpoints.message || ""}` : t("noBreakpointLogStrings");
       leftBody.append(empty);
     } else {
       logStrings.forEach((logString, index) => {
@@ -4532,7 +4915,7 @@
     if (!rightGroups.length) {
       const empty = document.createElement("div");
       empty.className = "analysis-empty";
-      empty.textContent = "\u6CA1\u6709\u53EF\u5C55\u793A\u7684\u76F8\u5173\u65E5\u5FD7\u3002";
+      empty.textContent = t("noRelatedLogs");
       rightBody.append(empty);
     } else {
       for (const group of rightGroups) {
@@ -4570,7 +4953,7 @@
       if (!renderedRightRows) {
         const empty = document.createElement("div");
         empty.className = "analysis-empty";
-        empty.textContent = "\u672A\u5728\u65E5\u5FD7\u6587\u4EF6\u4E2D\u627E\u5230\u76F8\u5173\u65E5\u5FD7\u3002";
+        empty.textContent = t("noMatchedRelatedLogs");
         rightBody.append(empty);
       }
     }
@@ -4597,8 +4980,8 @@
       const toggle = document.createElement("button");
       toggle.className = "analysis-pane-toggle";
       toggle.type = "button";
-      toggle.title = "\u6536\u8D77\u8FC7\u6EE4\u65E5\u5FD7";
-      toggle.setAttribute("aria-label", "\u6536\u8D77\u8FC7\u6EE4\u65E5\u5FD7");
+      toggle.title = t("collapseFilterLogs");
+      toggle.setAttribute("aria-label", t("collapseFilterLogs"));
       toggle.setAttribute("aria-expanded", "true");
       toggle.textContent = "<";
       toggle.addEventListener("click", () => toggleAnalysisResultPane(pane, toggle));
@@ -4614,8 +4997,8 @@
     const collapsed = !split.classList.contains("analysis-left-collapsed");
     split.classList.toggle("analysis-left-collapsed", collapsed);
     toggle.textContent = collapsed ? ">" : "<";
-    toggle.title = collapsed ? "\u5C55\u5F00\u8FC7\u6EE4\u65E5\u5FD7" : "\u6536\u8D77\u8FC7\u6EE4\u65E5\u5FD7";
-    toggle.setAttribute("aria-label", collapsed ? "\u5C55\u5F00\u8FC7\u6EE4\u65E5\u5FD7" : "\u6536\u8D77\u8FC7\u6EE4\u65E5\u5FD7");
+    toggle.title = collapsed ? t("expandFilterLogs") : t("collapseFilterLogs");
+    toggle.setAttribute("aria-label", collapsed ? t("expandFilterLogs") : t("collapseFilterLogs"));
     toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
   }
   function appendHighlightedText(target, text, query, matches, options = {}) {
@@ -4686,11 +5069,11 @@
   }
   function updateAnalysisModalMatchStatus() {
     if (!state.analysisModalMatches.length) {
-      els.analysisModalMatchStatus.textContent = "0 \u4E2A\u5339\u914D";
+      els.analysisModalMatchStatus.textContent = state.language === "en" ? "0 matches" : "0 \u4E2A\u5339\u914D";
       return;
     }
     const current = state.analysisModalActiveMatch < 0 ? 0 : state.analysisModalActiveMatch + 1;
-    els.analysisModalMatchStatus.textContent = `${current}/${state.analysisModalMatches.length} \u4E2A\u5339\u914D`;
+    els.analysisModalMatchStatus.textContent = state.language === "en" ? `${current}/${state.analysisModalMatches.length} matches` : `${current}/${state.analysisModalMatches.length} \u4E2A\u5339\u914D`;
   }
   function saveAnalysisModal() {
     const content = getAnalysisRightPaneText() || state.analysisModalText || els.analysisModalBody.textContent || "";
@@ -4719,7 +5102,7 @@
   function setAnalysisServiceStatus(available) {
     els.analysisStatusButton.classList.toggle("available", available);
     els.analysisStatusButton.classList.toggle("unavailable", !available);
-    const label = available ? "\u540E\u53F0\u670D\u52A1\u53EF\u7528" : "\u540E\u53F0\u670D\u52A1\u4E0D\u53EF\u7528";
+    const label = available ? t("serviceAvailable") : t("serviceUnavailable");
     els.analysisStatusButton.title = label;
     els.analysisStatusButton.setAttribute("aria-label", label);
   }
@@ -4831,17 +5214,17 @@
     return resultText;
   }
   function updateMatchStatus() {
-    const visible = `${state.visibleRows.length.toLocaleString()} \u884C`;
+    const visible = state.language === "en" ? `${state.visibleRows.length.toLocaleString()} rows` : `${state.visibleRows.length.toLocaleString()} \u884C`;
     if (state.searchDirty) {
-      els.matchStatus.textContent = `\u641C\u7D22\u5F85\u6267\u884C \xB7 ${visible}`;
+      els.matchStatus.textContent = state.language === "en" ? `Search pending \xB7 ${visible}` : `\u641C\u7D22\u5F85\u6267\u884C \xB7 ${visible}`;
       return;
     }
     if (!state.matches.length) {
-      els.matchStatus.textContent = `0 \u4E2A\u5339\u914D \xB7 ${visible}`;
+      els.matchStatus.textContent = state.language === "en" ? `0 matches \xB7 ${visible}` : `0 \u4E2A\u5339\u914D \xB7 ${visible}`;
       return;
     }
     const current = state.activeMatch < 0 ? 0 : state.activeMatch + 1;
-    els.matchStatus.textContent = `${current}/${state.matches.length} \u4E2A\u5339\u914D \xB7 ${visible}`;
+    els.matchStatus.textContent = state.language === "en" ? `${current}/${state.matches.length} matches \xB7 ${visible}` : `${current}/${state.matches.length} \u4E2A\u5339\u914D \xB7 ${visible}`;
   }
   function showToast(message) {
     els.toast.textContent = message;
@@ -4871,6 +5254,30 @@
       contextVirtualScrollFrame = 0;
       renderContextRows();
     });
+  }
+  function toggleLanguagePopover(event) {
+    event.stopPropagation();
+    const hidden = els.languagePopover.classList.contains("hidden");
+    els.languagePopover.classList.toggle("hidden", !hidden);
+    els.languageButton.setAttribute("aria-expanded", hidden ? "true" : "false");
+    els.languageButton.classList.toggle("active", hidden);
+    setLanguagePopoverState();
+  }
+  function closeLanguagePopover() {
+    els.languagePopover.classList.add("hidden");
+    els.languageButton.setAttribute("aria-expanded", "false");
+    els.languageButton.classList.remove("active");
+  }
+  function setLanguage(language) {
+    if (language !== "zh" && language !== "en") return;
+    state.language = language;
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+    closeLanguagePopover();
+    applyLanguage();
+    if (!els.analysisModal.classList.contains("hidden")) {
+      renderAnalysisModalText(els.analysisModalSearchInput.value);
+      updateAnalysisModalMatchStatus();
+    }
   }
   els.fileInput.addEventListener("change", (event) => {
     const file = event.target.files && event.target.files[0];
@@ -4915,9 +5322,15 @@
   els.clearTagFilter.addEventListener("click", clearTagFilter);
   document.addEventListener("click", closeTagFilterPopover);
   els.searchInput.addEventListener("input", markSearchDirty);
+  els.languageButton.addEventListener("click", toggleLanguagePopover);
+  els.languagePopover.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const button = event.target.closest("button[data-language]");
+    if (button) setLanguage(button.dataset.language);
+  });
+  document.addEventListener("click", closeLanguagePopover);
   els.analysisEndpoint.addEventListener("input", scheduleAnalysisServiceCheck);
   els.analysisStatusButton.addEventListener("click", checkAnalysisService);
-  els.filterLogsButton.addEventListener("click", filterLogsByBreakpointText);
   els.viewFilterResults.addEventListener("click", filterLogsByBreakpointText);
   els.openToolsPage.addEventListener("click", openToolsPage);
   els.openSearchResults.addEventListener("click", openSearchResults);
@@ -4951,6 +5364,7 @@
   els.scrollToBottom.addEventListener("click", () => scrollMainLogTo("bottom"));
   els.saveFiltered.addEventListener("click", saveFiltered);
   els.analyzeButton.addEventListener("click", analyzeVisible);
+  applyLanguage();
   checkAnalysisService();
   window.setInterval(checkAnalysisService, 5e3);
   for (const target of [document.body, els.dropZone]) {
