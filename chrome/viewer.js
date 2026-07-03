@@ -4,6 +4,8 @@ const LOG_ROW_HEIGHT = 24;
 const LOG_OVERSCAN_ROWS = 30;
 const LOG_TEXT_FONT = '12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace';
 const LOG_FIXED_COLUMNS_WIDTH = 48 + 136 + 58 + 150;
+const TOOLS_PAGE_PATH = "mytools.htm";
+const QRCODE_SCRIPT_PATH = "vendor/qrcode.min.js";
 
 const state = {
   fileName: "",
@@ -87,8 +89,11 @@ const els = {
   analysisStatusButton: document.getElementById("analysisStatusButton"),
   analysisEndpoint: document.getElementById("analysisEndpoint"),
   analysisResultText: document.getElementById("analysisResultText"),
+  openToolsPage: document.getElementById("openToolsPage"),
   analysisBreakpointsPath: document.getElementById("analysisBreakpointsPath"),
   analysisLogPath: document.getElementById("analysisLogPath"),
+  content: document.getElementById("content"),
+  toggleAnalysisPanel: document.getElementById("toggleAnalysisPanel"),
   dropZone: document.getElementById("dropZone"),
   tableWrap: document.getElementById("tableWrap"),
   logTable: document.querySelector("#tableWrap .log-table"),
@@ -125,6 +130,9 @@ const els = {
   breakpointsModalMeta: document.getElementById("breakpointsModalMeta"),
   breakpointsModalBody: document.getElementById("breakpointsModalBody"),
   closeBreakpointsModal: document.getElementById("closeBreakpointsModal"),
+  openHelpModal: document.getElementById("openHelpModal"),
+  helpModal: document.getElementById("helpModal"),
+  closeHelpModal: document.getElementById("closeHelpModal"),
   toast: document.getElementById("toast"),
 };
 
@@ -194,7 +202,6 @@ async function openFile(file) {
   els.tableWrap.classList.remove("hidden");
   updateLevelFilterOptions();
   applyFilter();
-  els.saveFiltered.disabled = false;
   els.analyzeButton.disabled = false;
 }
 
@@ -230,12 +237,22 @@ function clearBreakpointsFile() {
   state.breakpointsFileName = "";
   state.breakpointsFilePath = "";
   state.breakpointsContent = "";
-  els.breakpointsMeta.textContent = "未选择断点文件。";
+  els.breakpointsMeta.textContent = "";
   els.analysisBreakpointsPath.textContent = "未选择断点文件。";
   els.breakpointsModalMeta.textContent = "未选择断点文件。";
   els.breakpointsModalBody.textContent = "";
   els.analyzeButton.disabled = !state.filePath;
   els.viewBreakpointsFile.classList.add("hidden");
+}
+
+function toggleAnalysisPanel() {
+  const collapsed = !els.content.classList.contains("analysis-collapsed");
+  els.content.classList.toggle("analysis-collapsed", collapsed);
+  els.toggleAnalysisPanel.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  els.toggleAnalysisPanel.setAttribute("aria-label", collapsed ? "展开后台分析" : "收起后台分析");
+  els.toggleAnalysisPanel.title = collapsed ? "展开后台分析" : "收起后台分析";
+  els.toggleAnalysisPanel.textContent = collapsed ? ">" : "<";
+  scheduleVirtualRowsRender();
 }
 
 function applyFilter() {
@@ -264,6 +281,21 @@ function applyFilter() {
   clearSearchState();
   renderRows();
   updateMarkedLineJumpButtons();
+  updateSaveFilteredButton();
+}
+
+function hasActiveMainFilter() {
+  return Boolean(
+    els.filterInput.value.trim() ||
+      state.selectedLevels.size > 0 ||
+      getActiveTagFilters().length > 0 ||
+      state.timeFilterStart != null ||
+      state.timeFilterEnd != null
+  );
+}
+
+function updateSaveFilteredButton() {
+  els.saveFiltered.disabled = !state.rows.length || !hasActiveMainFilter();
 }
 
 function updateLevelFilterOptions() {
@@ -1145,6 +1177,44 @@ function closeBreakpointsModal() {
   els.breakpointsModal.classList.add("hidden");
 }
 
+function openHelpModal() {
+  els.helpModal.classList.remove("hidden");
+}
+
+function closeHelpModal() {
+  els.helpModal.classList.add("hidden");
+}
+
+async function openToolsPage() {
+  try {
+    const [toolsResponse, qrcodeResponse] = await Promise.all([
+      fetch(chrome.runtime.getURL(TOOLS_PAGE_PATH)),
+      fetch(chrome.runtime.getURL(QRCODE_SCRIPT_PATH)),
+    ]);
+    if (!toolsResponse.ok) throw new Error(`读取工具页失败：${toolsResponse.status}`);
+    if (!qrcodeResponse.ok) throw new Error(`读取二维码脚本失败：${qrcodeResponse.status}`);
+
+    const [toolsHtml, qrcodeScript] = await Promise.all([toolsResponse.text(), qrcodeResponse.text()]);
+    const packagedHtml = toolsHtml
+      .replace(
+        "<!-- MYLOGGER_QRCODE_SCRIPT -->",
+        `<script>${qrcodeScript}\n<\/script>`
+      );
+    const toolsUrl = URL.createObjectURL(new Blob([packagedHtml], { type: "text/html;charset=utf-8" }));
+    if (chrome.tabs?.create) {
+      chrome.tabs.create({ url: toolsUrl }, () => {
+        if (chrome.runtime.lastError) window.open(toolsUrl, "_blank", "noopener");
+        window.setTimeout(() => URL.revokeObjectURL(toolsUrl), 60_000);
+      });
+      return;
+    }
+    window.open(toolsUrl, "_blank", "noopener");
+    window.setTimeout(() => URL.revokeObjectURL(toolsUrl), 60_000);
+  } catch (error) {
+    showToast(error.message || "打开实用工具失败。");
+  }
+}
+
 function renderAnalysisModalText(query) {
   els.analysisModalBody.textContent = "";
   const data = state.analysisModalData;
@@ -1556,6 +1626,7 @@ els.breakpointsInput.addEventListener("change", (event) => {
 });
 
 els.viewBreakpointsFile.addEventListener("click", openBreakpointsModal);
+els.toggleAnalysisPanel.addEventListener("click", toggleAnalysisPanel);
 els.filterInput.addEventListener("input", scheduleFilter);
 els.filterRegex.addEventListener("change", applyFilter);
 els.filterCase.addEventListener("change", applyFilter);
@@ -1592,12 +1663,15 @@ els.searchInput.addEventListener("input", markSearchDirty);
 els.analysisEndpoint.addEventListener("input", scheduleAnalysisServiceCheck);
 els.analysisStatusButton.addEventListener("click", checkAnalysisService);
 els.filterLogsButton.addEventListener("click", filterLogsByBreakpointText);
+els.openToolsPage.addEventListener("click", openToolsPage);
 els.openSearchResults.addEventListener("click", openSearchResults);
 els.openMarkedRows.addEventListener("click", openMarkedRows);
 els.closeSearchModal.addEventListener("click", closeSearchModal);
 els.closeContextModal.addEventListener("click", closeContextModal);
 els.closeAnalysisModal.addEventListener("click", closeAnalysisModal);
 els.closeBreakpointsModal.addEventListener("click", closeBreakpointsModal);
+els.openHelpModal.addEventListener("click", openHelpModal);
+els.closeHelpModal.addEventListener("click", closeHelpModal);
 els.saveAnalysisModal.addEventListener("click", saveAnalysisModal);
 els.analysisModalSearchInput.addEventListener("input", runAnalysisModalSearch);
 els.analysisModalPrevMatch.addEventListener("click", () => goAnalysisModalMatch(-1));
@@ -1648,5 +1722,8 @@ document.addEventListener("keydown", (event) => {
   }
   if (event.key === "Escape" && !els.breakpointsModal.classList.contains("hidden")) {
     closeBreakpointsModal();
+  }
+  if (event.key === "Escape" && !els.helpModal.classList.contains("hidden")) {
+    closeHelpModal();
   }
 });

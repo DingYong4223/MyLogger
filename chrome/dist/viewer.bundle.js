@@ -3298,6 +3298,8 @@
   var LOG_OVERSCAN_ROWS = 30;
   var LOG_TEXT_FONT = '12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace';
   var LOG_FIXED_COLUMNS_WIDTH = 48 + 136 + 58 + 150;
+  var TOOLS_PAGE_PATH = "mytools.htm";
+  var QRCODE_SCRIPT_PATH = "vendor/qrcode.min.js";
   var state = {
     fileName: "",
     filePath: "",
@@ -3378,8 +3380,11 @@
     analysisStatusButton: document.getElementById("analysisStatusButton"),
     analysisEndpoint: document.getElementById("analysisEndpoint"),
     analysisResultText: document.getElementById("analysisResultText"),
+    openToolsPage: document.getElementById("openToolsPage"),
     analysisBreakpointsPath: document.getElementById("analysisBreakpointsPath"),
     analysisLogPath: document.getElementById("analysisLogPath"),
+    content: document.getElementById("content"),
+    toggleAnalysisPanel: document.getElementById("toggleAnalysisPanel"),
     dropZone: document.getElementById("dropZone"),
     tableWrap: document.getElementById("tableWrap"),
     logTable: document.querySelector("#tableWrap .log-table"),
@@ -3416,6 +3421,9 @@
     breakpointsModalMeta: document.getElementById("breakpointsModalMeta"),
     breakpointsModalBody: document.getElementById("breakpointsModalBody"),
     closeBreakpointsModal: document.getElementById("closeBreakpointsModal"),
+    openHelpModal: document.getElementById("openHelpModal"),
+    helpModal: document.getElementById("helpModal"),
+    closeHelpModal: document.getElementById("closeHelpModal"),
     toast: document.getElementById("toast")
   };
   function parseLine(text, index) {
@@ -3480,7 +3488,6 @@
     els.tableWrap.classList.remove("hidden");
     updateLevelFilterOptions();
     applyFilter();
-    els.saveFiltered.disabled = false;
     els.analyzeButton.disabled = false;
   }
   async function openBreakpointsFile(file) {
@@ -3512,12 +3519,21 @@
     state.breakpointsFileName = "";
     state.breakpointsFilePath = "";
     state.breakpointsContent = "";
-    els.breakpointsMeta.textContent = "\u672A\u9009\u62E9\u65AD\u70B9\u6587\u4EF6\u3002";
+    els.breakpointsMeta.textContent = "";
     els.analysisBreakpointsPath.textContent = "\u672A\u9009\u62E9\u65AD\u70B9\u6587\u4EF6\u3002";
     els.breakpointsModalMeta.textContent = "\u672A\u9009\u62E9\u65AD\u70B9\u6587\u4EF6\u3002";
     els.breakpointsModalBody.textContent = "";
     els.analyzeButton.disabled = !state.filePath;
     els.viewBreakpointsFile.classList.add("hidden");
+  }
+  function toggleAnalysisPanel() {
+    const collapsed = !els.content.classList.contains("analysis-collapsed");
+    els.content.classList.toggle("analysis-collapsed", collapsed);
+    els.toggleAnalysisPanel.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    els.toggleAnalysisPanel.setAttribute("aria-label", collapsed ? "\u5C55\u5F00\u540E\u53F0\u5206\u6790" : "\u6536\u8D77\u540E\u53F0\u5206\u6790");
+    els.toggleAnalysisPanel.title = collapsed ? "\u5C55\u5F00\u540E\u53F0\u5206\u6790" : "\u6536\u8D77\u540E\u53F0\u5206\u6790";
+    els.toggleAnalysisPanel.textContent = collapsed ? ">" : "<";
+    scheduleVirtualRowsRender();
   }
   function applyFilter() {
     window.clearTimeout(filterTimer);
@@ -3544,6 +3560,15 @@
     clearSearchState();
     renderRows();
     updateMarkedLineJumpButtons();
+    updateSaveFilteredButton();
+  }
+  function hasActiveMainFilter() {
+    return Boolean(
+      els.filterInput.value.trim() || state.selectedLevels.size > 0 || getActiveTagFilters().length > 0 || state.timeFilterStart != null || state.timeFilterEnd != null
+    );
+  }
+  function updateSaveFilteredButton() {
+    els.saveFiltered.disabled = !state.rows.length || !hasActiveMainFilter();
   }
   function updateLevelFilterOptions() {
     const levels = Array.from(new Set(state.rows.map((row) => row.level || "").filter(Boolean)));
@@ -4297,6 +4322,40 @@
   function closeBreakpointsModal() {
     els.breakpointsModal.classList.add("hidden");
   }
+  function openHelpModal() {
+    els.helpModal.classList.remove("hidden");
+  }
+  function closeHelpModal() {
+    els.helpModal.classList.add("hidden");
+  }
+  async function openToolsPage() {
+    try {
+      const [toolsResponse, qrcodeResponse] = await Promise.all([
+        fetch(chrome.runtime.getURL(TOOLS_PAGE_PATH)),
+        fetch(chrome.runtime.getURL(QRCODE_SCRIPT_PATH))
+      ]);
+      if (!toolsResponse.ok) throw new Error(`\u8BFB\u53D6\u5DE5\u5177\u9875\u5931\u8D25\uFF1A${toolsResponse.status}`);
+      if (!qrcodeResponse.ok) throw new Error(`\u8BFB\u53D6\u4E8C\u7EF4\u7801\u811A\u672C\u5931\u8D25\uFF1A${qrcodeResponse.status}`);
+      const [toolsHtml, qrcodeScript] = await Promise.all([toolsResponse.text(), qrcodeResponse.text()]);
+      const packagedHtml = toolsHtml.replace(
+        "<!-- MYLOGGER_QRCODE_SCRIPT -->",
+        `<script>${qrcodeScript}
+<\/script>`
+      );
+      const toolsUrl = URL.createObjectURL(new Blob([packagedHtml], { type: "text/html;charset=utf-8" }));
+      if (chrome.tabs?.create) {
+        chrome.tabs.create({ url: toolsUrl }, () => {
+          if (chrome.runtime.lastError) window.open(toolsUrl, "_blank", "noopener");
+          window.setTimeout(() => URL.revokeObjectURL(toolsUrl), 6e4);
+        });
+        return;
+      }
+      window.open(toolsUrl, "_blank", "noopener");
+      window.setTimeout(() => URL.revokeObjectURL(toolsUrl), 6e4);
+    } catch (error) {
+      showToast(error.message || "\u6253\u5F00\u5B9E\u7528\u5DE5\u5177\u5931\u8D25\u3002");
+    }
+  }
   function renderAnalysisModalText(query) {
     els.analysisModalBody.textContent = "";
     const data = state.analysisModalData;
@@ -4653,6 +4712,7 @@
     if (file) openBreakpointsFile(file);
   });
   els.viewBreakpointsFile.addEventListener("click", openBreakpointsModal);
+  els.toggleAnalysisPanel.addEventListener("click", toggleAnalysisPanel);
   els.filterInput.addEventListener("input", scheduleFilter);
   els.filterRegex.addEventListener("change", applyFilter);
   els.filterCase.addEventListener("change", applyFilter);
@@ -4689,12 +4749,15 @@
   els.analysisEndpoint.addEventListener("input", scheduleAnalysisServiceCheck);
   els.analysisStatusButton.addEventListener("click", checkAnalysisService);
   els.filterLogsButton.addEventListener("click", filterLogsByBreakpointText);
+  els.openToolsPage.addEventListener("click", openToolsPage);
   els.openSearchResults.addEventListener("click", openSearchResults);
   els.openMarkedRows.addEventListener("click", openMarkedRows);
   els.closeSearchModal.addEventListener("click", closeSearchModal);
   els.closeContextModal.addEventListener("click", closeContextModal);
   els.closeAnalysisModal.addEventListener("click", closeAnalysisModal);
   els.closeBreakpointsModal.addEventListener("click", closeBreakpointsModal);
+  els.openHelpModal.addEventListener("click", openHelpModal);
+  els.closeHelpModal.addEventListener("click", closeHelpModal);
   els.saveAnalysisModal.addEventListener("click", saveAnalysisModal);
   els.analysisModalSearchInput.addEventListener("input", runAnalysisModalSearch);
   els.analysisModalPrevMatch.addEventListener("click", () => goAnalysisModalMatch(-1));
@@ -4742,6 +4805,9 @@
     }
     if (event.key === "Escape" && !els.breakpointsModal.classList.contains("hidden")) {
       closeBreakpointsModal();
+    }
+    if (event.key === "Escape" && !els.helpModal.classList.contains("hidden")) {
+      closeHelpModal();
     }
   });
 })();

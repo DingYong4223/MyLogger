@@ -35,8 +35,7 @@ body {
   height: 82px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 20px;
+  gap: 16px;
   padding: 12px 18px;
   border-bottom: 1px solid var(--border);
   background: var(--panel);
@@ -50,6 +49,7 @@ p {
 
 h1 {
   font-size: 18px;
+  white-space: nowrap;
 }
 
 h2 {
@@ -58,12 +58,10 @@ h2 {
 }
 
 #fileMeta {
-  margin-top: 4px;
   color: var(--muted);
 }
 
 #breakpointsMeta {
-  margin-top: 2px;
   color: var(--muted);
   font-size: 12px;
 }
@@ -73,6 +71,40 @@ h2 {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.header-actions-left {
+  flex: 0 0 auto;
+}
+
+.header-title-row {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.header-meta {
+  min-width: 0;
+  max-width: min(720px, 62vw);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  text-align: right;
+  line-height: 1.35;
+}
+
+.header-meta p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-actions-right {
+  flex: 0 0 auto;
 }
 
 .layout {
@@ -155,6 +187,24 @@ input[type="url"] {
   color: #92400e;
 }
 
+.help-button {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: white;
+  color: var(--blue);
+  font: 700 16px/1 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+
+.help-button:hover {
+  border-color: var(--blue);
+  background: #eff6ff;
+}
+
 .button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -173,11 +223,53 @@ input[type="url"] {
   grid-template-columns: 300px minmax(0, 1fr);
 }
 
+.content.analysis-collapsed {
+  grid-template-columns: 42px minmax(0, 1fr);
+}
+
 .analysis-panel {
-  overflow: auto;
+  min-width: 0;
+  position: relative;
+  overflow: visible;
   padding: 14px;
   border-right: 1px solid var(--border);
   background: var(--panel);
+}
+
+.content.analysis-collapsed .analysis-panel {
+  overflow: hidden;
+  padding: 8px 5px;
+}
+
+.analysis-toggle {
+  display: grid;
+  place-items: center;
+  position: absolute;
+  top: 12px;
+  right: -13px;
+  z-index: 4;
+  width: 26px;
+  height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: white;
+  color: var(--text);
+  font: 800 18px/1 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+
+.content.analysis-collapsed .analysis-toggle {
+  top: 12px;
+  right: 7px;
+}
+
+.content.analysis-collapsed .analysis-panel-body {
+  display: none;
+}
+
+.analysis-panel-body {
+  height: 100%;
+  overflow: auto;
 }
 
 .analysis-panel label {
@@ -203,6 +295,23 @@ input[type="url"] {
   color: #dbeafe;
   font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   white-space: pre;
+}
+
+.analysis-tools-title {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  font: 700 14px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+
+.analysis-tools-title:hover {
+  color: var(--blue);
 }
 
 .analysis-path-field {
@@ -816,6 +925,12 @@ mark {
   min-width: 760px;
 }
 
+.modal-panel.help-modal-panel {
+  width: min(920px, calc(100vw - 56px));
+  height: min(720px, calc(100vh - 56px));
+  min-width: 680px;
+}
+
 .modal-header {
   display: flex;
   align-items: center;
@@ -987,6 +1102,36 @@ mark {
   color: #dbeafe;
   font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   white-space: pre;
+}
+
+.help-modal-body {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 22px 24px;
+  background: white;
+  color: var(--text);
+}
+
+.help-modal-body section {
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.28);
+}
+
+.help-modal-body section:last-child {
+  border-bottom: 0;
+}
+
+.help-modal-body h3 {
+  margin: 0 0 6px;
+  color: #1f2937;
+  font: 700 15px/1.35 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.help-modal-body p {
+  margin: 0;
+  color: #4b5563;
+  font: 13px/1.6 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .analysis-modal-match.active-analysis-match {
