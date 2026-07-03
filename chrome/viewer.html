@@ -44,7 +44,7 @@
           过滤
           <div class="filter-input-row">
             <textarea id="filterInput" class="filter-input" rows="2" spellcheck="false" placeholder="关键字或正则；多行按任意一行命中过滤"></textarea>
-            <button id="viewFilterResults" class="filter-view-button" type="button">查看</button>
+            <button id="viewFilterResults" class="filter-view-button hidden" type="button">查看</button>
           </div>
         </label>
         <label class="checkbox">
@@ -62,6 +62,7 @@
         <button id="openSearchResults" class="button compact" type="button">搜索</button>
         <button id="prevMarkedLine" class="button compact mark-jump" type="button" disabled title="跳转到上一个标记">↑</button>
         <button id="nextMarkedLine" class="button compact mark-jump" type="button" disabled title="跳转到下一个标记">↓</button>
+        <button id="jumpLineButton" class="button compact" type="button" title="跳转到指定行">Jump</button>
         <span id="matchStatus" class="status">0 个匹配</span>
         <span class="toolbar-spacer"></span>
         <button id="openMarkedRows" class="button compact" type="button" disabled>全部标记</button>
@@ -70,33 +71,14 @@
       <section id="content" class="content analysis-collapsed">
         <aside class="analysis-panel">
           <div class="analysis-panel-body">
-            <h2>后台分析</h2>
-            <label>
-              服务地址
-              <input id="analysisEndpoint" type="url" value="http://127.0.0.1:7878/analyze" />
-            </label>
-            <div class="analysis-path-field">
-              <span>断点文件</span>
-              <div class="breakpoints-path-row">
-                <label class="path-display path-display-button" for="breakpointsInput">
-                  <span id="analysisBreakpointsPath">未选择断点文件。</span>
-                </label>
-                <button id="viewBreakpointsFile" class="breakpoints-view-button hidden" type="button">查看</button>
-              </div>
-              <input id="breakpointsInput" type="file" accept=".json,application/json" hidden />
-            </div>
-            <div class="analysis-path-field">
-              日志路径
-              <div id="analysisLogPath" class="path-display">未选择日志文件。</div>
-            </div>
-            <div class="analysis-service-row">
-              <span>服务状态</span>
-              <button id="analysisStatusButton" class="service-status unavailable" type="button" title="后台服务不可用" aria-label="后台服务不可用"></button>
-            </div>
-            <div class="analysis-actions">
-              <button id="analyzeButton" class="button primary" type="button" disabled>获取断点日志</button>
-            </div>
             <button id="openToolsPage" class="analysis-tools-title" type="button">实用工具</button>
+            <section class="common-filter-section">
+              <div class="common-filter-header">
+                <h3>常用过滤</h3>
+                <button id="addCommonFilter" type="button" title="添加常用过滤" aria-label="添加常用过滤">+</button>
+              </div>
+              <div id="commonFilterList" class="common-filter-list"></div>
+            </section>
           </div>
           <button id="toggleAnalysisPanel" class="analysis-toggle" type="button" aria-expanded="false" title="展开后台分析" aria-label="展开后台分析">&gt;</button>
         </aside>
@@ -220,6 +202,77 @@
       </section>
     </div>
 
+    <div id="importModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="importModalTitle">
+      <section class="modal-panel import-modal-panel">
+        <header class="modal-header">
+          <div>
+            <h2 id="importModalTitle">导入</h2>
+            <p id="importModalMeta">选择断点 JSON，并从本地服务获取过滤日志。</p>
+          </div>
+          <div class="header-actions">
+            <button id="closeImportModal" class="button" type="button">关闭</button>
+          </div>
+        </header>
+        <div class="import-modal-body">
+          <div class="analysis-actions import-local-actions">
+            <button id="importFilterLogFile" class="button" type="button">导入本地过滤日志</button>
+            <button id="openFilterHistory" class="button icon-button" type="button" title="历史过滤记录" aria-label="历史过滤记录">↺</button>
+            <input id="filterLogFileInput" type="file" accept=".json,.txt,.log,application/json,text/plain" hidden />
+          </div>
+          <label>
+            服务地址
+            <input id="analysisEndpoint" type="url" value="http://127.0.0.1:7878/analyze" />
+          </label>
+          <div class="analysis-path-field">
+            <span>断点文件</span>
+            <div class="breakpoints-path-row">
+              <label class="path-display path-display-button" for="breakpointsInput">
+                <span id="analysisBreakpointsPath">未选择断点文件。</span>
+              </label>
+              <button id="viewBreakpointsFile" class="breakpoints-view-button hidden" type="button">查看</button>
+            </div>
+            <input id="breakpointsInput" type="file" accept=".json,application/json" hidden />
+          </div>
+          <div class="analysis-service-row">
+            <span>服务状态</span>
+            <button id="analysisStatusButton" class="service-status unavailable" type="button" title="后台服务不可用" aria-label="后台服务不可用"></button>
+          </div>
+          <div class="analysis-actions">
+            <button id="analyzeButton" class="button primary" type="button" disabled>获取断点日志</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div id="commonFilterModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="commonFilterModalTitle">
+      <section class="modal-panel common-filter-modal-panel">
+        <header class="modal-header">
+          <div>
+            <h2 id="commonFilterModalTitle">添加常用过滤</h2>
+            <p id="commonFilterModalMeta">添加标题和过滤词，过滤词规则与顶部 Filter 一致。</p>
+          </div>
+          <div class="header-actions">
+            <button id="closeCommonFilterModal" class="button" type="button">关闭</button>
+          </div>
+        </header>
+        <div class="common-filter-modal-body">
+          <label>
+            标题
+            <input id="commonFilterTitleInput" type="text" spellcheck="false" />
+          </label>
+          <label>
+            过滤词
+            <textarea id="commonFilterTextInput" rows="7" spellcheck="false"></textarea>
+          </label>
+          <div class="common-filter-modal-actions">
+            <button id="saveCommonFilter" class="button primary" type="button">保存</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div id="filterHistoryPopover" class="filter-history-popover hidden"></div>
+
     <div id="breakpointsModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="breakpointsModalTitle">
       <section class="modal-panel breakpoints-modal-panel">
         <header class="modal-header">
@@ -323,6 +376,15 @@
       <div class="time-filter-actions">
         <button id="confirmTimeFilter" type="button">确定</button>
         <button id="clearTimeFilter" type="button">清除</button>
+      </div>
+    </div>
+    <div id="jumpLinePopover" class="jump-line-popover hidden">
+      <label>
+        行号
+        <input id="jumpLineInput" type="number" min="1" step="1" placeholder="输入行号" />
+      </label>
+      <div class="jump-line-actions">
+        <button id="confirmJumpLine" type="button">确定</button>
       </div>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>

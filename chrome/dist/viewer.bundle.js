@@ -3302,8 +3302,12 @@
   var TOOLS_PAGE_PATH = "mytools.htm";
   var QRCODE_SCRIPT_PATH = "vendor/qrcode.min.js";
   var LANGUAGE_STORAGE_KEY = "myloggerLanguage";
+  var COMMON_FILTERS_STORAGE_KEY = "myloggerCommonFilters";
+  var FILTER_HISTORY_STORAGE_KEY = "myloggerFilterHistory";
   var state = {
     language: localStorage.getItem(LANGUAGE_STORAGE_KEY) === "zh" ? "zh" : "en",
+    commonFilters: loadCommonFilters(),
+    filterHistory: loadFilterHistory(),
     fileName: "",
     filePath: "",
     fileSize: 0,
@@ -3366,6 +3370,7 @@
     fileInput: document.getElementById("fileInput"),
     breakpointsInput: document.getElementById("breakpointsInput"),
     viewBreakpointsFile: document.getElementById("viewBreakpointsFile"),
+    filterLogFileInput: document.getElementById("filterLogFileInput"),
     fileMeta: document.getElementById("fileMeta"),
     breakpointsMeta: document.getElementById("breakpointsMeta"),
     saveFiltered: document.getElementById("saveFiltered"),
@@ -3394,13 +3399,30 @@
     openMarkedRows: document.getElementById("openMarkedRows"),
     prevMarkedLine: document.getElementById("prevMarkedLine"),
     nextMarkedLine: document.getElementById("nextMarkedLine"),
+    jumpLineButton: document.getElementById("jumpLineButton"),
+    jumpLinePopover: document.getElementById("jumpLinePopover"),
+    jumpLineInput: document.getElementById("jumpLineInput"),
+    confirmJumpLine: document.getElementById("confirmJumpLine"),
     matchStatus: document.getElementById("matchStatus"),
     analyzeButton: document.getElementById("analyzeButton"),
     analysisStatusButton: document.getElementById("analysisStatusButton"),
     analysisEndpoint: document.getElementById("analysisEndpoint"),
     openToolsPage: document.getElementById("openToolsPage"),
+    addCommonFilter: document.getElementById("addCommonFilter"),
+    commonFilterList: document.getElementById("commonFilterList"),
+    commonFilterModal: document.getElementById("commonFilterModal"),
+    commonFilterModalMeta: document.getElementById("commonFilterModalMeta"),
+    closeCommonFilterModal: document.getElementById("closeCommonFilterModal"),
+    commonFilterTitleInput: document.getElementById("commonFilterTitleInput"),
+    commonFilterTextInput: document.getElementById("commonFilterTextInput"),
+    saveCommonFilter: document.getElementById("saveCommonFilter"),
     analysisBreakpointsPath: document.getElementById("analysisBreakpointsPath"),
-    analysisLogPath: document.getElementById("analysisLogPath"),
+    importModal: document.getElementById("importModal"),
+    importModalMeta: document.getElementById("importModalMeta"),
+    importFilterLogFile: document.getElementById("importFilterLogFile"),
+    openFilterHistory: document.getElementById("openFilterHistory"),
+    filterHistoryPopover: document.getElementById("filterHistoryPopover"),
+    closeImportModal: document.getElementById("closeImportModal"),
     content: document.getElementById("content"),
     toggleAnalysisPanel: document.getElementById("toggleAnalysisPanel"),
     dropZone: document.getElementById("dropZone"),
@@ -3454,6 +3476,10 @@
       filter: "\u8FC7\u6EE4",
       filterPlaceholder: "\u5173\u952E\u5B57\u6216\u6B63\u5219\uFF1B\u591A\u884C\u6309\u4EFB\u610F\u4E00\u884C\u547D\u4E2D\u8FC7\u6EE4",
       view: "\u67E5\u770B",
+      import: "\u5BFC\u5165",
+      importFilterLogFile: "\u5BFC\u5165\u672C\u5730\u8FC7\u6EE4\u65E5\u5FD7",
+      filterHistory: "\u5386\u53F2\u8FC7\u6EE4\u8BB0\u5F55",
+      filterHistoryEmpty: "\u6682\u65E0\u5386\u53F2\u8FC7\u6EE4\u8BB0\u5F55\u3002",
       regex: "\u6B63\u5219",
       caseSensitive: "\u533A\u5206\u5927\u5C0F\u5199",
       search: "\u641C\u7D22",
@@ -3461,18 +3487,27 @@
       resultFilterPlaceholder: "\u8FC7\u6EE4\u5F53\u524D\u7ED3\u679C",
       prevMarked: "\u8DF3\u8F6C\u5230\u4E0A\u4E00\u4E2A\u6807\u8BB0",
       nextMarked: "\u8DF3\u8F6C\u5230\u4E0B\u4E00\u4E2A\u6807\u8BB0",
+      jump: "Jump",
+      jumpTitle: "\u8DF3\u8F6C\u5230\u6307\u5B9A\u884C",
+      jumpLinePlaceholder: "\u8F93\u5165\u884C\u53F7",
       allMarked: "\u5168\u90E8\u6807\u8BB0",
       backendAnalysis: "\u540E\u53F0\u5206\u6790",
+      importTitle: "\u5BFC\u5165",
+      importIntro: "\u5BFC\u5165\u672C\u5730\u8FC7\u6EE4\u65E5\u5FD7\uFF0C\u6216\u9009\u62E9\u65AD\u70B9 JSON \u5E76\u4ECE\u672C\u5730\u670D\u52A1\u83B7\u53D6\u8FC7\u6EE4\u65E5\u5FD7\u3002",
       serviceUrl: "\u670D\u52A1\u5730\u5740",
       breakpointsFile: "\u65AD\u70B9\u6587\u4EF6",
       noBreakpointsFile: "\u672A\u9009\u62E9\u65AD\u70B9\u6587\u4EF6\u3002",
-      logPath: "\u65E5\u5FD7\u8DEF\u5F84",
-      noLogFile: "\u672A\u9009\u62E9\u65E5\u5FD7\u6587\u4EF6\u3002",
       serviceStatus: "\u670D\u52A1\u72B6\u6001",
       serviceAvailable: "\u540E\u53F0\u670D\u52A1\u53EF\u7528",
       serviceUnavailable: "\u540E\u53F0\u670D\u52A1\u4E0D\u53EF\u7528",
       getBreakpointLogs: "\u83B7\u53D6\u65AD\u70B9\u65E5\u5FD7",
       tools: "\u5B9E\u7528\u5DE5\u5177",
+      commonFilters: "\u5E38\u7528\u8FC7\u6EE4",
+      addCommonFilter: "\u6DFB\u52A0\u5E38\u7528\u8FC7\u6EE4",
+      commonFilterTitle: "\u6807\u9898",
+      commonFilterText: "\u8FC7\u6EE4\u8BCD",
+      commonFilterIntro: "\u6DFB\u52A0\u6807\u9898\u548C\u8FC7\u6EE4\u8BCD\uFF0C\u8FC7\u6EE4\u8BCD\u89C4\u5219\u4E0E\u9876\u90E8 Filter \u4E00\u81F4\u3002",
+      commonFilterEmpty: "\u6682\u65E0\u5E38\u7528\u8FC7\u6EE4\u3002",
       expandAnalysis: "\u5C55\u5F00\u540E\u53F0\u5206\u6790",
       collapseAnalysis: "\u6536\u8D77\u540E\u53F0\u5206\u6790",
       logControls: "\u65E5\u5FD7\u63A7\u5236",
@@ -3551,6 +3586,10 @@
       filter: "Filter",
       filterPlaceholder: "Keyword or regex; multiple lines match any rule",
       view: "View",
+      import: "Import",
+      importFilterLogFile: "Import Local Filter Logs",
+      filterHistory: "Filter History",
+      filterHistoryEmpty: "No filter history.",
       regex: "Regex",
       caseSensitive: "Case sensitive",
       search: "Search",
@@ -3558,18 +3597,28 @@
       resultFilterPlaceholder: "Filter current results",
       prevMarked: "Previous mark",
       nextMarked: "Next mark",
+      jump: "Jump",
+      jumpTitle: "Jump to line",
+      jumpLinePlaceholder: "Enter line number",
       allMarked: "All Marks",
       backendAnalysis: "Backend Analysis",
+      importTitle: "Import",
+      importIntro: "Import local filter logs, or choose a breakpoint JSON file and fetch filter logs from the local service.",
       serviceUrl: "Service URL",
       breakpointsFile: "Breakpoints File",
       noBreakpointsFile: "No breakpoints file selected.",
-      logPath: "Log Path",
-      noLogFile: "No log file selected.",
       serviceStatus: "Service Status",
       serviceAvailable: "Backend service available",
       serviceUnavailable: "Backend service unavailable",
       getBreakpointLogs: "Get Breakpoint Logs",
       tools: "Tools",
+      commonFilters: "Common Filters",
+      addCommonFilter: "Add Common Filter",
+      commonFilterTitle: "Title",
+      commonFilterText: "Filter",
+      commonFilterIntro: "Add a title and filter rules. Rules follow the top Filter input.",
+      commonFilterEmpty: "No common filters.",
+      save: "Save",
       expandAnalysis: "Expand backend analysis",
       collapseAnalysis: "Collapse backend analysis",
       logControls: "Log controls",
@@ -3593,7 +3642,6 @@
       logContext: "Log Context",
       noLog: "No log.",
       analysisResults: "Screening Results",
-      save: "Save",
       breakpoints: "Breakpoints File",
       helpTitle: "MyLogger Help",
       helpIntro: "Use this tool to view, filter, locate, mark, save, and screen local logs with breakpoint data.",
@@ -3649,6 +3697,56 @@
     }
     return value;
   }
+  function loadCommonFilters() {
+    try {
+      const value = JSON.parse(localStorage.getItem(COMMON_FILTERS_STORAGE_KEY) || "[]");
+      if (!Array.isArray(value)) return [];
+      return value.map((item) => ({
+        id: String(item.id || `${Date.now()}-${Math.random()}`),
+        title: String(item.title || "").trim(),
+        filterText: String(item.filterText || "").trim()
+      })).filter((item) => item.title && item.filterText);
+    } catch {
+      return [];
+    }
+  }
+  function saveCommonFilters() {
+    localStorage.setItem(COMMON_FILTERS_STORAGE_KEY, JSON.stringify(state.commonFilters));
+  }
+  function loadFilterHistory() {
+    try {
+      const value = JSON.parse(localStorage.getItem(FILTER_HISTORY_STORAGE_KEY) || "[]");
+      if (!Array.isArray(value)) return [];
+      return value.map((item) => ({
+        id: String(item.id || `${Date.now()}-${Math.random()}`),
+        title: String(item.title || "").trim(),
+        filterText: String(item.filterText || "").trim(),
+        createdAt: Number(item.createdAt || Date.now())
+      })).filter((item) => item.filterText).slice(0, 20);
+    } catch {
+      return [];
+    }
+  }
+  function saveFilterHistory() {
+    state.filterHistory = state.filterHistory.slice().sort((left, right) => right.createdAt - left.createdAt).slice(0, 20);
+    localStorage.setItem(FILTER_HISTORY_STORAGE_KEY, JSON.stringify(state.filterHistory));
+  }
+  function rememberFilterHistory(filterText, title = "") {
+    const normalized = String(filterText || "").trim();
+    if (!normalized) return;
+    const label = title || normalized.split(/\r?\n/).map((value) => value.trim()).filter(Boolean)[0] || t("filterHistory");
+    const recentHistory = state.filterHistory.slice().sort((left, right) => right.createdAt - left.createdAt).slice(0, 20);
+    state.filterHistory = [
+      {
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        title: label,
+        filterText: normalized,
+        createdAt: Date.now()
+      },
+      ...recentHistory.filter((item) => item.filterText !== normalized)
+    ];
+    saveFilterHistory();
+  }
   function applyLanguage() {
     document.documentElement.lang = state.language === "en" ? "en" : "zh-CN";
     els.languageButton.textContent = t("languageLabel");
@@ -3660,23 +3758,43 @@
     setText("#saveFiltered", "saveFiltered");
     setLeadingText(".toolbar > label:nth-of-type(1)", "filter");
     setPlaceholder("#filterInput", "filterPlaceholder");
-    setText("#viewFilterResults", "view");
+    updateFilterResultsButton();
     setLeadingText(".toolbar label.checkbox:nth-of-type(2)", "regex");
     setLeadingText(".toolbar label.checkbox:nth-of-type(3)", "caseSensitive");
     setLeadingText(".toolbar > label:nth-of-type(4)", "search");
     setPlaceholder("#searchInput", "searchPlaceholder");
     setText("#openSearchResults", "search");
     setText("#openMarkedRows", "allMarked");
+    setText("#jumpLineButton", "jump");
+    els.jumpLineButton.title = t("jumpTitle");
+    els.jumpLineButton.setAttribute("aria-label", t("jumpTitle"));
+    setLeadingText("#jumpLinePopover label", "lineNumber");
+    setPlaceholder("#jumpLineInput", "jumpLinePlaceholder");
+    setText("#confirmJumpLine", "confirm");
     els.prevMarkedLine.title = t("prevMarked");
     els.nextMarkedLine.title = t("nextMarked");
-    setText(".analysis-panel h2", "backendAnalysis");
-    setLeadingText(".analysis-panel label:nth-of-type(1)", "serviceUrl");
-    setText(".analysis-path-field:nth-of-type(1) > span", "breakpointsFile");
+    setText("#importModalTitle", "importTitle");
+    setText("#importModalMeta", "importIntro");
+    setText("#importFilterLogFile", "importFilterLogFile");
+    els.openFilterHistory.title = t("filterHistory");
+    els.openFilterHistory.setAttribute("aria-label", t("filterHistory"));
+    setText("#closeImportModal", "close");
+    setLeadingText(".import-modal-body > label", "serviceUrl");
+    setText(".import-modal-body .analysis-path-field > span", "breakpointsFile");
     setText("#viewBreakpointsFile", "view");
     setAnalysisPathFallbacks();
     setAnalysisServiceStatusText();
     setText("#analyzeButton", "getBreakpointLogs");
     setText("#openToolsPage", "tools");
+    setText(".common-filter-header h3", "commonFilters");
+    els.addCommonFilter.title = t("addCommonFilter");
+    els.addCommonFilter.setAttribute("aria-label", t("addCommonFilter"));
+    setText("#commonFilterModalTitle", "addCommonFilter");
+    setText("#commonFilterModalMeta", "commonFilterIntro");
+    setLeadingText(".common-filter-modal-body label:nth-of-type(1)", "commonFilterTitle");
+    setLeadingText(".common-filter-modal-body label:nth-of-type(2)", "commonFilterText");
+    setText("#saveCommonFilter", "save");
+    setText("#closeCommonFilterModal", "close");
     updateAnalysisToggleText();
     document.querySelector(".toolbar")?.setAttribute("aria-label", t("logControls"));
     document.querySelector(".log-panel")?.setAttribute("aria-label", t("logTable"));
@@ -3699,6 +3817,7 @@
     setLanguagePopoverState();
     updateFileMeta();
     updateBreakpointsMeta();
+    renderCommonFilters();
   }
   function setText(selector, key) {
     const el = document.querySelector(selector);
@@ -3787,9 +3906,6 @@
     if (!state.breakpointsContent) {
       els.analysisBreakpointsPath.textContent = t("noBreakpointsFile");
       els.breakpointsModalMeta.textContent = t("noBreakpointsFile");
-    }
-    if (!state.filePath) {
-      els.analysisLogPath.textContent = t("noLogFile");
     }
   }
   function setAnalysisServiceStatusText() {
@@ -3920,7 +4036,6 @@
     state.activeMarkedLine = null;
     state.searchResultRows = [];
     closeSearchModal();
-    els.analysisLogPath.textContent = state.filePath;
     updateFileMeta();
     els.dropZone.classList.add("hidden");
     els.tableWrap.classList.remove("hidden");
@@ -3997,6 +4112,7 @@
   }
   function applyFilter() {
     window.clearTimeout(filterTimer);
+    updateFilterResultsButton();
     const filterRules = getFilterRules();
     const matcher = createMatcher(filterRules, {
       regex: els.filterRegex.checked,
@@ -4029,6 +4145,10 @@
   }
   function updateSaveFilteredButton() {
     els.saveFiltered.disabled = !state.rows.length || !hasActiveMainFilter();
+  }
+  function updateFilterResultsButton() {
+    els.viewFilterResults.classList.remove("hidden");
+    els.viewFilterResults.textContent = els.filterInput.value.trim() ? t("view") : t("import");
   }
   function updateLevelFilterOptions() {
     const levels = Array.from(new Set(state.rows.map((row) => row.level || "").filter(Boolean)));
@@ -4652,6 +4772,44 @@
     renderRows();
     updateMarkedLineJumpButtons();
   }
+  function toggleJumpLinePopover(event) {
+    event.stopPropagation();
+    const hidden = els.jumpLinePopover.classList.contains("hidden");
+    if (hidden) {
+      positionJumpLinePopover();
+      els.jumpLinePopover.classList.remove("hidden");
+      window.requestAnimationFrame(() => {
+        els.jumpLineInput.focus();
+        els.jumpLineInput.select();
+      });
+    } else {
+      closeJumpLinePopover();
+    }
+  }
+  function positionJumpLinePopover() {
+    const rect = els.jumpLineButton.getBoundingClientRect();
+    els.jumpLinePopover.style.left = `${Math.max(8, rect.left)}px`;
+    els.jumpLinePopover.style.top = `${rect.bottom + 4}px`;
+  }
+  function closeJumpLinePopover() {
+    els.jumpLinePopover.classList.add("hidden");
+  }
+  function confirmJumpLine() {
+    const sourceLine = Number.parseInt(els.jumpLineInput.value, 10);
+    if (!Number.isFinite(sourceLine) || sourceLine < 1) {
+      showToast(state.language === "en" ? "Enter a valid line number." : "\u8BF7\u8F93\u5165\u6709\u6548\u884C\u53F7\u3002");
+      return;
+    }
+    const visibleIndex = state.visibleRows.findIndex((row) => row.sourceLine === sourceLine);
+    if (visibleIndex < 0) {
+      showToast(state.language === "en" ? "That line is not visible in the current filter." : "\u5F53\u524D\u8FC7\u6EE4\u7ED3\u679C\u4E2D\u6CA1\u6709\u8BE5\u884C\u3002");
+      return;
+    }
+    state.activeMarkedLine = sourceLine;
+    scrollMainRowIndexIntoView(visibleIndex);
+    renderRows();
+    closeJumpLinePopover();
+  }
   function updateMarkedLineJumpButtons() {
     const hasMarkedRows = getVisibleMarkedRows().length > 0;
     for (const button of [els.prevMarkedLine, els.nextMarkedLine]) {
@@ -4911,6 +5069,146 @@
   }
   function closeAnalysisModal() {
     els.analysisModal.classList.add("hidden");
+  }
+  function openImportModal() {
+    els.importModal.classList.remove("hidden");
+    checkAnalysisService();
+  }
+  function closeImportModal() {
+    els.importModal.classList.add("hidden");
+    closeFilterHistoryPopover();
+  }
+  function handleFilterAction() {
+    if (els.filterInput.value.trim()) {
+      filterLogsByBreakpointText();
+      return;
+    }
+    openImportModal();
+  }
+  function renderCommonFilters() {
+    els.commonFilterList.textContent = "";
+    if (!state.commonFilters.length) {
+      const empty = document.createElement("div");
+      empty.className = "common-filter-empty";
+      empty.textContent = t("commonFilterEmpty");
+      els.commonFilterList.append(empty);
+      return;
+    }
+    for (const item of state.commonFilters) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "common-filter-item";
+      const title = document.createElement("span");
+      title.className = "common-filter-item-title";
+      title.textContent = item.title;
+      const preview = document.createElement("span");
+      preview.className = "common-filter-item-preview";
+      preview.textContent = item.filterText.split(/\r?\n/).map((value) => value.trim()).filter(Boolean).join(" | ");
+      button.append(title, preview);
+      button.addEventListener("click", () => applyCommonFilter(item));
+      els.commonFilterList.append(button);
+    }
+  }
+  function openCommonFilterModal() {
+    els.commonFilterTitleInput.value = "";
+    els.commonFilterTextInput.value = "";
+    els.commonFilterModal.classList.remove("hidden");
+    window.requestAnimationFrame(() => els.commonFilterTitleInput.focus());
+  }
+  function closeCommonFilterModal() {
+    els.commonFilterModal.classList.add("hidden");
+  }
+  function saveCommonFilter() {
+    const title = els.commonFilterTitleInput.value.trim();
+    const filterText = els.commonFilterTextInput.value.trim();
+    if (!title || !filterText) {
+      showToast(state.language === "en" ? "Enter a title and filter." : "\u8BF7\u8F93\u5165\u6807\u9898\u548C\u8FC7\u6EE4\u8BCD\u3002");
+      return;
+    }
+    state.commonFilters.push({
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      title,
+      filterText
+    });
+    saveCommonFilters();
+    renderCommonFilters();
+    closeCommonFilterModal();
+  }
+  function applyCommonFilter(item) {
+    const confirmed = window.confirm(state.language === "en" ? `Replace the top Filter with "${item.title}"?` : `\u786E\u8BA4\u4F7F\u7528\u201C${item.title}\u201D\u8986\u76D6\u9876\u90E8\u8FC7\u6EE4\u5185\u5BB9\uFF1F`);
+    if (!confirmed) return;
+    els.filterInput.value = item.filterText;
+    rememberFilterHistory(item.filterText, item.title);
+    applyFilter();
+  }
+  function toggleFilterHistoryPopover(event) {
+    event.stopPropagation();
+    const hidden = els.filterHistoryPopover.classList.contains("hidden");
+    if (hidden) {
+      renderFilterHistory();
+      positionFilterHistoryPopover();
+      els.filterHistoryPopover.classList.remove("hidden");
+    } else {
+      closeFilterHistoryPopover();
+    }
+  }
+  function positionFilterHistoryPopover() {
+    const rect = els.openFilterHistory.getBoundingClientRect();
+    const width = Math.min(460, window.innerWidth - 24);
+    els.filterHistoryPopover.style.width = `${width}px`;
+    els.filterHistoryPopover.style.left = `${Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8))}px`;
+    els.filterHistoryPopover.style.top = `${rect.bottom + 4}px`;
+  }
+  function closeFilterHistoryPopover() {
+    els.filterHistoryPopover.classList.add("hidden");
+  }
+  function renderFilterHistory() {
+    els.filterHistoryPopover.textContent = "";
+    if (!state.filterHistory.length) {
+      const empty = document.createElement("div");
+      empty.className = "filter-history-empty";
+      empty.textContent = t("filterHistoryEmpty");
+      els.filterHistoryPopover.append(empty);
+      return;
+    }
+    for (const item of state.filterHistory.slice(0, 20)) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "filter-history-item";
+      const title = document.createElement("span");
+      title.className = "filter-history-title";
+      title.textContent = item.title;
+      const preview = document.createElement("span");
+      preview.className = "filter-history-preview";
+      preview.textContent = item.filterText.split(/\r?\n/).map((value) => value.trim()).filter(Boolean).join(" | ");
+      button.append(title, preview);
+      button.addEventListener("click", () => applyFilterHistory(item));
+      els.filterHistoryPopover.append(button);
+    }
+  }
+  function applyFilterHistory(item) {
+    els.filterInput.value = item.filterText;
+    rememberFilterHistory(item.filterText, item.title);
+    applyFilter();
+    closeFilterHistoryPopover();
+    closeImportModal();
+  }
+  function openFilterLogFilePicker() {
+    els.filterLogFileInput.value = "";
+    els.filterLogFileInput.click();
+  }
+  async function importFilterLogFile(file) {
+    const text = await file.text();
+    const filterText = extractBreakpointLogText(text).trim();
+    if (!filterText) {
+      showToast(state.language === "en" ? "No filter logs found in this file." : "\u6587\u4EF6\u4E2D\u672A\u627E\u5230\u8FC7\u6EE4\u65E5\u5FD7\u3002");
+      return;
+    }
+    els.filterInput.value = filterText;
+    rememberFilterHistory(filterText, file.name);
+    applyFilter();
+    closeImportModal();
+    showToast(state.language === "en" ? `Imported filter logs: ${file.name}` : `\u5DF2\u5BFC\u5165\u8FC7\u6EE4\u65E5\u5FD7\uFF1A${file.name}`);
   }
   function openBreakpointsModal() {
     if (!state.breakpointsContent) {
@@ -5380,8 +5678,11 @@
       });
       const text = await response.text();
       const resultText = text || `HTTP ${response.status}`;
-      els.filterInput.value = extractBreakpointLogText(resultText);
+      const filterText = extractBreakpointLogText(resultText);
+      els.filterInput.value = filterText;
+      rememberFilterHistory(filterText, state.breakpointsFileName || t("getBreakpointLogs"));
       applyFilter();
+      closeImportModal();
       showToast("\u5DF2\u83B7\u53D6\u65AD\u70B9\u65E5\u5FD7\u3002");
     } catch (error) {
       showToast(`\u5206\u6790\u5931\u8D25\uFF1A${error.message}`);
@@ -5393,6 +5694,7 @@
       showToast("\u8BF7\u5148\u83B7\u53D6\u6216\u8F93\u5165\u8FC7\u6EE4\u5173\u952E\u5B57\u3002");
       return;
     }
+    rememberFilterHistory(els.filterInput.value, t("filter"));
     const matchedLogs = logStrings.map((logString) => {
       const matches = [];
       for (const row of state.rows) {
@@ -5516,6 +5818,10 @@
     const file = event.target.files && event.target.files[0];
     if (file) openBreakpointsFile(file);
   });
+  els.filterLogFileInput.addEventListener("change", (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (file) importFilterLogFile(file);
+  });
   els.viewBreakpointsFile.addEventListener("click", openBreakpointsModal);
   els.toggleAnalysisPanel.addEventListener("click", toggleAnalysisPanel);
   els.filterInput.addEventListener("input", scheduleFilter);
@@ -5550,6 +5856,15 @@
   els.confirmTagFilter.addEventListener("click", confirmTagFilter);
   els.clearTagFilter.addEventListener("click", clearTagFilter);
   document.addEventListener("click", closeTagFilterPopover);
+  els.jumpLineButton.addEventListener("click", toggleJumpLinePopover);
+  els.jumpLinePopover.addEventListener("click", (event) => event.stopPropagation());
+  els.confirmJumpLine.addEventListener("click", confirmJumpLine);
+  els.jumpLineInput.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    confirmJumpLine();
+  });
+  document.addEventListener("click", closeJumpLinePopover);
   els.searchInput.addEventListener("input", markSearchDirty);
   els.languageButton.addEventListener("click", toggleLanguagePopover);
   els.languagePopover.addEventListener("click", (event) => {
@@ -5560,8 +5875,23 @@
   document.addEventListener("click", closeLanguagePopover);
   els.analysisEndpoint.addEventListener("input", scheduleAnalysisServiceCheck);
   els.analysisStatusButton.addEventListener("click", checkAnalysisService);
-  els.viewFilterResults.addEventListener("click", filterLogsByBreakpointText);
+  els.viewFilterResults.addEventListener("click", handleFilterAction);
+  els.importFilterLogFile.addEventListener("click", openFilterLogFilePicker);
+  els.openFilterHistory.addEventListener("click", toggleFilterHistoryPopover);
+  els.filterHistoryPopover.addEventListener("click", (event) => event.stopPropagation());
+  document.addEventListener("click", closeFilterHistoryPopover);
   els.openToolsPage.addEventListener("click", openToolsPage);
+  els.addCommonFilter.addEventListener("click", openCommonFilterModal);
+  els.commonFilterModal.addEventListener("click", (event) => {
+    if (event.target === els.commonFilterModal) closeCommonFilterModal();
+  });
+  els.closeCommonFilterModal.addEventListener("click", closeCommonFilterModal);
+  els.saveCommonFilter.addEventListener("click", saveCommonFilter);
+  els.commonFilterTextInput.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || !event.metaKey && !event.ctrlKey) return;
+    event.preventDefault();
+    saveCommonFilter();
+  });
   els.openSearchResults.addEventListener("click", openSearchResults);
   els.openMarkedRows.addEventListener("click", openMarkedRows);
   els.closeSearchModal.addEventListener("click", closeSearchModal);
@@ -5570,6 +5900,10 @@
   });
   els.closeContextModal.addEventListener("click", closeContextModal);
   els.closeAnalysisModal.addEventListener("click", closeAnalysisModal);
+  els.importModal.addEventListener("click", (event) => {
+    if (event.target === els.importModal) closeImportModal();
+  });
+  els.closeImportModal.addEventListener("click", closeImportModal);
   els.closeBreakpointsModal.addEventListener("click", closeBreakpointsModal);
   els.openHelpModal.addEventListener("click", openHelpModal);
   els.closeHelpModal.addEventListener("click", closeHelpModal);
@@ -5588,6 +5922,7 @@
   els.tableWrap.addEventListener("scroll", closeTimeFilterPopover);
   els.tableWrap.addEventListener("scroll", closeLevelFilterPopover);
   els.tableWrap.addEventListener("scroll", closeTagFilterPopover);
+  els.tableWrap.addEventListener("scroll", closeJumpLinePopover);
   els.searchTableWrap.addEventListener("scroll", scheduleSearchModalRowsRender);
   els.contextTableWrap.addEventListener("scroll", scheduleContextRowsRender);
   els.scrollToTop.addEventListener("click", () => scrollMainLogTo("top"));
@@ -5619,6 +5954,12 @@
     }
     if (event.key === "Escape" && !els.analysisModal.classList.contains("hidden")) {
       closeAnalysisModal();
+    }
+    if (event.key === "Escape" && !els.importModal.classList.contains("hidden")) {
+      closeImportModal();
+    }
+    if (event.key === "Escape" && !els.commonFilterModal.classList.contains("hidden")) {
+      closeCommonFilterModal();
     }
     if (event.key === "Escape" && !els.breakpointsModal.classList.contains("hidden")) {
       closeBreakpointsModal();

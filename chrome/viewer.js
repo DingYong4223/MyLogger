@@ -8,9 +8,13 @@ const LOG_TEXT_FONT = '12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consola
 const TOOLS_PAGE_PATH = "mytools.htm";
 const QRCODE_SCRIPT_PATH = "vendor/qrcode.min.js";
 const LANGUAGE_STORAGE_KEY = "myloggerLanguage";
+const COMMON_FILTERS_STORAGE_KEY = "myloggerCommonFilters";
+const FILTER_HISTORY_STORAGE_KEY = "myloggerFilterHistory";
 
 const state = {
   language: localStorage.getItem(LANGUAGE_STORAGE_KEY) === "zh" ? "zh" : "en",
+  commonFilters: loadCommonFilters(),
+  filterHistory: loadFilterHistory(),
   fileName: "",
   filePath: "",
   fileSize: 0,
@@ -75,6 +79,7 @@ const els = {
   fileInput: document.getElementById("fileInput"),
   breakpointsInput: document.getElementById("breakpointsInput"),
   viewBreakpointsFile: document.getElementById("viewBreakpointsFile"),
+  filterLogFileInput: document.getElementById("filterLogFileInput"),
   fileMeta: document.getElementById("fileMeta"),
   breakpointsMeta: document.getElementById("breakpointsMeta"),
   saveFiltered: document.getElementById("saveFiltered"),
@@ -103,13 +108,30 @@ const els = {
   openMarkedRows: document.getElementById("openMarkedRows"),
   prevMarkedLine: document.getElementById("prevMarkedLine"),
   nextMarkedLine: document.getElementById("nextMarkedLine"),
+  jumpLineButton: document.getElementById("jumpLineButton"),
+  jumpLinePopover: document.getElementById("jumpLinePopover"),
+  jumpLineInput: document.getElementById("jumpLineInput"),
+  confirmJumpLine: document.getElementById("confirmJumpLine"),
   matchStatus: document.getElementById("matchStatus"),
   analyzeButton: document.getElementById("analyzeButton"),
   analysisStatusButton: document.getElementById("analysisStatusButton"),
   analysisEndpoint: document.getElementById("analysisEndpoint"),
   openToolsPage: document.getElementById("openToolsPage"),
+  addCommonFilter: document.getElementById("addCommonFilter"),
+  commonFilterList: document.getElementById("commonFilterList"),
+  commonFilterModal: document.getElementById("commonFilterModal"),
+  commonFilterModalMeta: document.getElementById("commonFilterModalMeta"),
+  closeCommonFilterModal: document.getElementById("closeCommonFilterModal"),
+  commonFilterTitleInput: document.getElementById("commonFilterTitleInput"),
+  commonFilterTextInput: document.getElementById("commonFilterTextInput"),
+  saveCommonFilter: document.getElementById("saveCommonFilter"),
   analysisBreakpointsPath: document.getElementById("analysisBreakpointsPath"),
-  analysisLogPath: document.getElementById("analysisLogPath"),
+  importModal: document.getElementById("importModal"),
+  importModalMeta: document.getElementById("importModalMeta"),
+  importFilterLogFile: document.getElementById("importFilterLogFile"),
+  openFilterHistory: document.getElementById("openFilterHistory"),
+  filterHistoryPopover: document.getElementById("filterHistoryPopover"),
+  closeImportModal: document.getElementById("closeImportModal"),
   content: document.getElementById("content"),
   toggleAnalysisPanel: document.getElementById("toggleAnalysisPanel"),
   dropZone: document.getElementById("dropZone"),
@@ -164,6 +186,10 @@ const I18N = {
     filter: "过滤",
     filterPlaceholder: "关键字或正则；多行按任意一行命中过滤",
     view: "查看",
+    import: "导入",
+    importFilterLogFile: "导入本地过滤日志",
+    filterHistory: "历史过滤记录",
+    filterHistoryEmpty: "暂无历史过滤记录。",
     regex: "正则",
     caseSensitive: "区分大小写",
     search: "搜索",
@@ -171,18 +197,27 @@ const I18N = {
     resultFilterPlaceholder: "过滤当前结果",
     prevMarked: "跳转到上一个标记",
     nextMarked: "跳转到下一个标记",
+    jump: "Jump",
+    jumpTitle: "跳转到指定行",
+    jumpLinePlaceholder: "输入行号",
     allMarked: "全部标记",
     backendAnalysis: "后台分析",
+    importTitle: "导入",
+    importIntro: "导入本地过滤日志，或选择断点 JSON 并从本地服务获取过滤日志。",
     serviceUrl: "服务地址",
     breakpointsFile: "断点文件",
     noBreakpointsFile: "未选择断点文件。",
-    logPath: "日志路径",
-    noLogFile: "未选择日志文件。",
     serviceStatus: "服务状态",
     serviceAvailable: "后台服务可用",
     serviceUnavailable: "后台服务不可用",
     getBreakpointLogs: "获取断点日志",
     tools: "实用工具",
+    commonFilters: "常用过滤",
+    addCommonFilter: "添加常用过滤",
+    commonFilterTitle: "标题",
+    commonFilterText: "过滤词",
+    commonFilterIntro: "添加标题和过滤词，过滤词规则与顶部 Filter 一致。",
+    commonFilterEmpty: "暂无常用过滤。",
     expandAnalysis: "展开后台分析",
     collapseAnalysis: "收起后台分析",
     logControls: "日志控制",
@@ -261,6 +296,10 @@ const I18N = {
     filter: "Filter",
     filterPlaceholder: "Keyword or regex; multiple lines match any rule",
     view: "View",
+    import: "Import",
+    importFilterLogFile: "Import Local Filter Logs",
+    filterHistory: "Filter History",
+    filterHistoryEmpty: "No filter history.",
     regex: "Regex",
     caseSensitive: "Case sensitive",
     search: "Search",
@@ -268,18 +307,28 @@ const I18N = {
     resultFilterPlaceholder: "Filter current results",
     prevMarked: "Previous mark",
     nextMarked: "Next mark",
+    jump: "Jump",
+    jumpTitle: "Jump to line",
+    jumpLinePlaceholder: "Enter line number",
     allMarked: "All Marks",
     backendAnalysis: "Backend Analysis",
+    importTitle: "Import",
+    importIntro: "Import local filter logs, or choose a breakpoint JSON file and fetch filter logs from the local service.",
     serviceUrl: "Service URL",
     breakpointsFile: "Breakpoints File",
     noBreakpointsFile: "No breakpoints file selected.",
-    logPath: "Log Path",
-    noLogFile: "No log file selected.",
     serviceStatus: "Service Status",
     serviceAvailable: "Backend service available",
     serviceUnavailable: "Backend service unavailable",
     getBreakpointLogs: "Get Breakpoint Logs",
     tools: "Tools",
+    commonFilters: "Common Filters",
+    addCommonFilter: "Add Common Filter",
+    commonFilterTitle: "Title",
+    commonFilterText: "Filter",
+    commonFilterIntro: "Add a title and filter rules. Rules follow the top Filter input.",
+    commonFilterEmpty: "No common filters.",
+    save: "Save",
     expandAnalysis: "Expand backend analysis",
     collapseAnalysis: "Collapse backend analysis",
     logControls: "Log controls",
@@ -303,7 +352,6 @@ const I18N = {
     logContext: "Log Context",
     noLog: "No log.",
     analysisResults: "Screening Results",
-    save: "Save",
     breakpoints: "Breakpoints File",
     helpTitle: "MyLogger Help",
     helpIntro: "Use this tool to view, filter, locate, mark, save, and screen local logs with breakpoint data.",
@@ -361,6 +409,72 @@ function t(key, params = {}) {
   return value;
 }
 
+function loadCommonFilters() {
+  try {
+    const value = JSON.parse(localStorage.getItem(COMMON_FILTERS_STORAGE_KEY) || "[]");
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((item) => ({
+        id: String(item.id || `${Date.now()}-${Math.random()}`),
+        title: String(item.title || "").trim(),
+        filterText: String(item.filterText || "").trim(),
+      }))
+      .filter((item) => item.title && item.filterText);
+  } catch {
+    return [];
+  }
+}
+
+function saveCommonFilters() {
+  localStorage.setItem(COMMON_FILTERS_STORAGE_KEY, JSON.stringify(state.commonFilters));
+}
+
+function loadFilterHistory() {
+  try {
+    const value = JSON.parse(localStorage.getItem(FILTER_HISTORY_STORAGE_KEY) || "[]");
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((item) => ({
+        id: String(item.id || `${Date.now()}-${Math.random()}`),
+        title: String(item.title || "").trim(),
+        filterText: String(item.filterText || "").trim(),
+        createdAt: Number(item.createdAt || Date.now()),
+      }))
+      .filter((item) => item.filterText)
+      .slice(0, 20);
+  } catch {
+    return [];
+  }
+}
+
+function saveFilterHistory() {
+  state.filterHistory = state.filterHistory
+    .slice()
+    .sort((left, right) => right.createdAt - left.createdAt)
+    .slice(0, 20);
+  localStorage.setItem(FILTER_HISTORY_STORAGE_KEY, JSON.stringify(state.filterHistory));
+}
+
+function rememberFilterHistory(filterText, title = "") {
+  const normalized = String(filterText || "").trim();
+  if (!normalized) return;
+  const label = title || normalized.split(/\r?\n/).map((value) => value.trim()).filter(Boolean)[0] || t("filterHistory");
+  const recentHistory = state.filterHistory
+    .slice()
+    .sort((left, right) => right.createdAt - left.createdAt)
+    .slice(0, 20);
+  state.filterHistory = [
+    {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      title: label,
+      filterText: normalized,
+      createdAt: Date.now(),
+    },
+    ...recentHistory.filter((item) => item.filterText !== normalized),
+  ];
+  saveFilterHistory();
+}
+
 function applyLanguage() {
   document.documentElement.lang = state.language === "en" ? "en" : "zh-CN";
   els.languageButton.textContent = t("languageLabel");
@@ -373,24 +487,44 @@ function applyLanguage() {
   setText("#saveFiltered", "saveFiltered");
   setLeadingText(".toolbar > label:nth-of-type(1)", "filter");
   setPlaceholder("#filterInput", "filterPlaceholder");
-  setText("#viewFilterResults", "view");
+  updateFilterResultsButton();
   setLeadingText(".toolbar label.checkbox:nth-of-type(2)", "regex");
   setLeadingText(".toolbar label.checkbox:nth-of-type(3)", "caseSensitive");
   setLeadingText(".toolbar > label:nth-of-type(4)", "search");
   setPlaceholder("#searchInput", "searchPlaceholder");
   setText("#openSearchResults", "search");
   setText("#openMarkedRows", "allMarked");
+  setText("#jumpLineButton", "jump");
+  els.jumpLineButton.title = t("jumpTitle");
+  els.jumpLineButton.setAttribute("aria-label", t("jumpTitle"));
+  setLeadingText("#jumpLinePopover label", "lineNumber");
+  setPlaceholder("#jumpLineInput", "jumpLinePlaceholder");
+  setText("#confirmJumpLine", "confirm");
   els.prevMarkedLine.title = t("prevMarked");
   els.nextMarkedLine.title = t("nextMarked");
 
-  setText(".analysis-panel h2", "backendAnalysis");
-  setLeadingText(".analysis-panel label:nth-of-type(1)", "serviceUrl");
-  setText(".analysis-path-field:nth-of-type(1) > span", "breakpointsFile");
+  setText("#importModalTitle", "importTitle");
+  setText("#importModalMeta", "importIntro");
+  setText("#importFilterLogFile", "importFilterLogFile");
+  els.openFilterHistory.title = t("filterHistory");
+  els.openFilterHistory.setAttribute("aria-label", t("filterHistory"));
+  setText("#closeImportModal", "close");
+  setLeadingText(".import-modal-body > label", "serviceUrl");
+  setText(".import-modal-body .analysis-path-field > span", "breakpointsFile");
   setText("#viewBreakpointsFile", "view");
   setAnalysisPathFallbacks();
   setAnalysisServiceStatusText();
   setText("#analyzeButton", "getBreakpointLogs");
   setText("#openToolsPage", "tools");
+  setText(".common-filter-header h3", "commonFilters");
+  els.addCommonFilter.title = t("addCommonFilter");
+  els.addCommonFilter.setAttribute("aria-label", t("addCommonFilter"));
+  setText("#commonFilterModalTitle", "addCommonFilter");
+  setText("#commonFilterModalMeta", "commonFilterIntro");
+  setLeadingText(".common-filter-modal-body label:nth-of-type(1)", "commonFilterTitle");
+  setLeadingText(".common-filter-modal-body label:nth-of-type(2)", "commonFilterText");
+  setText("#saveCommonFilter", "save");
+  setText("#closeCommonFilterModal", "close");
   updateAnalysisToggleText();
   document.querySelector(".toolbar")?.setAttribute("aria-label", t("logControls"));
   document.querySelector(".log-panel")?.setAttribute("aria-label", t("logTable"));
@@ -414,6 +548,7 @@ function applyLanguage() {
   setLanguagePopoverState();
   updateFileMeta();
   updateBreakpointsMeta();
+  renderCommonFilters();
 }
 
 function setText(selector, key) {
@@ -509,9 +644,6 @@ function setAnalysisPathFallbacks() {
   if (!state.breakpointsContent) {
     els.analysisBreakpointsPath.textContent = t("noBreakpointsFile");
     els.breakpointsModalMeta.textContent = t("noBreakpointsFile");
-  }
-  if (!state.filePath) {
-    els.analysisLogPath.textContent = t("noLogFile");
   }
 }
 
@@ -654,7 +786,6 @@ async function openFile(file) {
   state.activeMarkedLine = null;
   state.searchResultRows = [];
   closeSearchModal();
-  els.analysisLogPath.textContent = state.filePath;
   updateFileMeta();
   els.dropZone.classList.add("hidden");
   els.tableWrap.classList.remove("hidden");
@@ -746,6 +877,7 @@ function updateAnalysisToggleText() {
 
 function applyFilter() {
   window.clearTimeout(filterTimer);
+  updateFilterResultsButton();
   const filterRules = getFilterRules();
   const matcher = createMatcher(filterRules, {
     regex: els.filterRegex.checked,
@@ -785,6 +917,11 @@ function hasActiveMainFilter() {
 
 function updateSaveFilteredButton() {
   els.saveFiltered.disabled = !state.rows.length || !hasActiveMainFilter();
+}
+
+function updateFilterResultsButton() {
+  els.viewFilterResults.classList.remove("hidden");
+  els.viewFilterResults.textContent = els.filterInput.value.trim() ? t("view") : t("import");
 }
 
 function updateLevelFilterOptions() {
@@ -1502,6 +1639,52 @@ function goMarkedLine(direction) {
   updateMarkedLineJumpButtons();
 }
 
+function toggleJumpLinePopover(event) {
+  event.stopPropagation();
+  const hidden = els.jumpLinePopover.classList.contains("hidden");
+  if (hidden) {
+    positionJumpLinePopover();
+    els.jumpLinePopover.classList.remove("hidden");
+    window.requestAnimationFrame(() => {
+      els.jumpLineInput.focus();
+      els.jumpLineInput.select();
+    });
+  } else {
+    closeJumpLinePopover();
+  }
+}
+
+function positionJumpLinePopover() {
+  const rect = els.jumpLineButton.getBoundingClientRect();
+  els.jumpLinePopover.style.left = `${Math.max(8, rect.left)}px`;
+  els.jumpLinePopover.style.top = `${rect.bottom + 4}px`;
+}
+
+function closeJumpLinePopover() {
+  els.jumpLinePopover.classList.add("hidden");
+}
+
+function confirmJumpLine() {
+  const sourceLine = Number.parseInt(els.jumpLineInput.value, 10);
+  if (!Number.isFinite(sourceLine) || sourceLine < 1) {
+    showToast(state.language === "en" ? "Enter a valid line number." : "请输入有效行号。");
+    return;
+  }
+
+  const visibleIndex = state.visibleRows.findIndex((row) => row.sourceLine === sourceLine);
+  if (visibleIndex < 0) {
+    showToast(state.language === "en"
+      ? "That line is not visible in the current filter."
+      : "当前过滤结果中没有该行。");
+    return;
+  }
+
+  state.activeMarkedLine = sourceLine;
+  scrollMainRowIndexIntoView(visibleIndex);
+  renderRows();
+  closeJumpLinePopover();
+}
+
 function updateMarkedLineJumpButtons() {
   const hasMarkedRows = getVisibleMarkedRows().length > 0;
   for (const button of [els.prevMarkedLine, els.nextMarkedLine]) {
@@ -1823,6 +2006,171 @@ function openAnalysisModal(resultText, metaText) {
 
 function closeAnalysisModal() {
   els.analysisModal.classList.add("hidden");
+}
+
+function openImportModal() {
+  els.importModal.classList.remove("hidden");
+  checkAnalysisService();
+}
+
+function closeImportModal() {
+  els.importModal.classList.add("hidden");
+  closeFilterHistoryPopover();
+}
+
+function handleFilterAction() {
+  if (els.filterInput.value.trim()) {
+    filterLogsByBreakpointText();
+    return;
+  }
+  openImportModal();
+}
+
+function renderCommonFilters() {
+  els.commonFilterList.textContent = "";
+  if (!state.commonFilters.length) {
+    const empty = document.createElement("div");
+    empty.className = "common-filter-empty";
+    empty.textContent = t("commonFilterEmpty");
+    els.commonFilterList.append(empty);
+    return;
+  }
+
+  for (const item of state.commonFilters) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "common-filter-item";
+    const title = document.createElement("span");
+    title.className = "common-filter-item-title";
+    title.textContent = item.title;
+    const preview = document.createElement("span");
+    preview.className = "common-filter-item-preview";
+    preview.textContent = item.filterText.split(/\r?\n/).map((value) => value.trim()).filter(Boolean).join(" | ");
+    button.append(title, preview);
+    button.addEventListener("click", () => applyCommonFilter(item));
+    els.commonFilterList.append(button);
+  }
+}
+
+function openCommonFilterModal() {
+  els.commonFilterTitleInput.value = "";
+  els.commonFilterTextInput.value = "";
+  els.commonFilterModal.classList.remove("hidden");
+  window.requestAnimationFrame(() => els.commonFilterTitleInput.focus());
+}
+
+function closeCommonFilterModal() {
+  els.commonFilterModal.classList.add("hidden");
+}
+
+function saveCommonFilter() {
+  const title = els.commonFilterTitleInput.value.trim();
+  const filterText = els.commonFilterTextInput.value.trim();
+  if (!title || !filterText) {
+    showToast(state.language === "en" ? "Enter a title and filter." : "请输入标题和过滤词。");
+    return;
+  }
+
+  state.commonFilters.push({
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    title,
+    filterText,
+  });
+  saveCommonFilters();
+  renderCommonFilters();
+  closeCommonFilterModal();
+}
+
+function applyCommonFilter(item) {
+  const confirmed = window.confirm(state.language === "en"
+    ? `Replace the top Filter with "${item.title}"?`
+    : `确认使用“${item.title}”覆盖顶部过滤内容？`);
+  if (!confirmed) return;
+  els.filterInput.value = item.filterText;
+  rememberFilterHistory(item.filterText, item.title);
+  applyFilter();
+}
+
+function toggleFilterHistoryPopover(event) {
+  event.stopPropagation();
+  const hidden = els.filterHistoryPopover.classList.contains("hidden");
+  if (hidden) {
+    renderFilterHistory();
+    positionFilterHistoryPopover();
+    els.filterHistoryPopover.classList.remove("hidden");
+  } else {
+    closeFilterHistoryPopover();
+  }
+}
+
+function positionFilterHistoryPopover() {
+  const rect = els.openFilterHistory.getBoundingClientRect();
+  const width = Math.min(460, window.innerWidth - 24);
+  els.filterHistoryPopover.style.width = `${width}px`;
+  els.filterHistoryPopover.style.left = `${Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8))}px`;
+  els.filterHistoryPopover.style.top = `${rect.bottom + 4}px`;
+}
+
+function closeFilterHistoryPopover() {
+  els.filterHistoryPopover.classList.add("hidden");
+}
+
+function renderFilterHistory() {
+  els.filterHistoryPopover.textContent = "";
+  if (!state.filterHistory.length) {
+    const empty = document.createElement("div");
+    empty.className = "filter-history-empty";
+    empty.textContent = t("filterHistoryEmpty");
+    els.filterHistoryPopover.append(empty);
+    return;
+  }
+
+  for (const item of state.filterHistory.slice(0, 20)) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "filter-history-item";
+    const title = document.createElement("span");
+    title.className = "filter-history-title";
+    title.textContent = item.title;
+    const preview = document.createElement("span");
+    preview.className = "filter-history-preview";
+    preview.textContent = item.filterText.split(/\r?\n/).map((value) => value.trim()).filter(Boolean).join(" | ");
+    button.append(title, preview);
+    button.addEventListener("click", () => applyFilterHistory(item));
+    els.filterHistoryPopover.append(button);
+  }
+}
+
+function applyFilterHistory(item) {
+  els.filterInput.value = item.filterText;
+  rememberFilterHistory(item.filterText, item.title);
+  applyFilter();
+  closeFilterHistoryPopover();
+  closeImportModal();
+}
+
+function openFilterLogFilePicker() {
+  els.filterLogFileInput.value = "";
+  els.filterLogFileInput.click();
+}
+
+async function importFilterLogFile(file) {
+  const text = await file.text();
+  const filterText = extractBreakpointLogText(text).trim();
+  if (!filterText) {
+    showToast(state.language === "en"
+      ? "No filter logs found in this file."
+      : "文件中未找到过滤日志。");
+    return;
+  }
+
+  els.filterInput.value = filterText;
+  rememberFilterHistory(filterText, file.name);
+  applyFilter();
+  closeImportModal();
+  showToast(state.language === "en"
+    ? `Imported filter logs: ${file.name}`
+    : `已导入过滤日志：${file.name}`);
 }
 
 function openBreakpointsModal() {
@@ -2368,8 +2716,11 @@ async function analyzeVisible() {
     });
     const text = await response.text();
     const resultText = text || `HTTP ${response.status}`;
-    els.filterInput.value = extractBreakpointLogText(resultText);
+    const filterText = extractBreakpointLogText(resultText);
+    els.filterInput.value = filterText;
+    rememberFilterHistory(filterText, state.breakpointsFileName || t("getBreakpointLogs"));
     applyFilter();
+    closeImportModal();
     showToast("已获取断点日志。");
   } catch (error) {
     showToast(`分析失败：${error.message}`);
@@ -2383,6 +2734,7 @@ function filterLogsByBreakpointText() {
     showToast("请先获取或输入过滤关键字。");
     return;
   }
+  rememberFilterHistory(els.filterInput.value, t("filter"));
 
   const matchedLogs = logStrings.map((logString) => {
     const matches = [];
@@ -2534,6 +2886,11 @@ els.breakpointsInput.addEventListener("change", (event) => {
   if (file) openBreakpointsFile(file);
 });
 
+els.filterLogFileInput.addEventListener("change", (event) => {
+  const file = event.target.files && event.target.files[0];
+  if (file) importFilterLogFile(file);
+});
+
 els.viewBreakpointsFile.addEventListener("click", openBreakpointsModal);
 els.toggleAnalysisPanel.addEventListener("click", toggleAnalysisPanel);
 els.filterInput.addEventListener("input", scheduleFilter);
@@ -2568,6 +2925,15 @@ els.addTagFilter.addEventListener("click", addTagFilter);
 els.confirmTagFilter.addEventListener("click", confirmTagFilter);
 els.clearTagFilter.addEventListener("click", clearTagFilter);
 document.addEventListener("click", closeTagFilterPopover);
+els.jumpLineButton.addEventListener("click", toggleJumpLinePopover);
+els.jumpLinePopover.addEventListener("click", (event) => event.stopPropagation());
+els.confirmJumpLine.addEventListener("click", confirmJumpLine);
+els.jumpLineInput.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  confirmJumpLine();
+});
+document.addEventListener("click", closeJumpLinePopover);
 els.searchInput.addEventListener("input", markSearchDirty);
 els.languageButton.addEventListener("click", toggleLanguagePopover);
 els.languagePopover.addEventListener("click", (event) => {
@@ -2578,8 +2944,23 @@ els.languagePopover.addEventListener("click", (event) => {
 document.addEventListener("click", closeLanguagePopover);
 els.analysisEndpoint.addEventListener("input", scheduleAnalysisServiceCheck);
 els.analysisStatusButton.addEventListener("click", checkAnalysisService);
-els.viewFilterResults.addEventListener("click", filterLogsByBreakpointText);
+els.viewFilterResults.addEventListener("click", handleFilterAction);
+els.importFilterLogFile.addEventListener("click", openFilterLogFilePicker);
+els.openFilterHistory.addEventListener("click", toggleFilterHistoryPopover);
+els.filterHistoryPopover.addEventListener("click", (event) => event.stopPropagation());
+document.addEventListener("click", closeFilterHistoryPopover);
 els.openToolsPage.addEventListener("click", openToolsPage);
+els.addCommonFilter.addEventListener("click", openCommonFilterModal);
+els.commonFilterModal.addEventListener("click", (event) => {
+  if (event.target === els.commonFilterModal) closeCommonFilterModal();
+});
+els.closeCommonFilterModal.addEventListener("click", closeCommonFilterModal);
+els.saveCommonFilter.addEventListener("click", saveCommonFilter);
+els.commonFilterTextInput.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || (!event.metaKey && !event.ctrlKey)) return;
+  event.preventDefault();
+  saveCommonFilter();
+});
 els.openSearchResults.addEventListener("click", openSearchResults);
 els.openMarkedRows.addEventListener("click", openMarkedRows);
 els.closeSearchModal.addEventListener("click", closeSearchModal);
@@ -2588,6 +2969,10 @@ els.contextModal.addEventListener("click", (event) => {
 });
 els.closeContextModal.addEventListener("click", closeContextModal);
 els.closeAnalysisModal.addEventListener("click", closeAnalysisModal);
+els.importModal.addEventListener("click", (event) => {
+  if (event.target === els.importModal) closeImportModal();
+});
+els.closeImportModal.addEventListener("click", closeImportModal);
 els.closeBreakpointsModal.addEventListener("click", closeBreakpointsModal);
 els.openHelpModal.addEventListener("click", openHelpModal);
 els.closeHelpModal.addEventListener("click", closeHelpModal);
@@ -2606,6 +2991,7 @@ els.tableWrap.addEventListener("scroll", scheduleVirtualRowsRender);
 els.tableWrap.addEventListener("scroll", closeTimeFilterPopover);
 els.tableWrap.addEventListener("scroll", closeLevelFilterPopover);
 els.tableWrap.addEventListener("scroll", closeTagFilterPopover);
+els.tableWrap.addEventListener("scroll", closeJumpLinePopover);
 els.searchTableWrap.addEventListener("scroll", scheduleSearchModalRowsRender);
 els.contextTableWrap.addEventListener("scroll", scheduleContextRowsRender);
 els.scrollToTop.addEventListener("click", () => scrollMainLogTo("top"));
@@ -2640,6 +3026,12 @@ document.addEventListener("keydown", (event) => {
   }
   if (event.key === "Escape" && !els.analysisModal.classList.contains("hidden")) {
     closeAnalysisModal();
+  }
+  if (event.key === "Escape" && !els.importModal.classList.contains("hidden")) {
+    closeImportModal();
+  }
+  if (event.key === "Escape" && !els.commonFilterModal.classList.contains("hidden")) {
+    closeCommonFilterModal();
   }
   if (event.key === "Escape" && !els.breakpointsModal.classList.contains("hidden")) {
     closeBreakpointsModal();
