@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MyLogger Privacy Policy</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --text: #17202a;
+        --muted: #5b6573;
+        --border: #d8dee8;
+        --bg: #f7f9fc;
+        --card: #ffffff;
+        --blue: #1f6feb;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      }
+
+      main {
+        width: min(920px, calc(100% - 32px));
+        margin: 32px auto;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 28px;
+        background: var(--card);
+        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 32px;
+        line-height: 1.2;
+      }
+
+      h2 {
+        margin: 28px 0 8px;
+        font-size: 20px;
+      }
+
+      p {
+        margin: 8px 0;
+      }
+
+      ul {
+        margin: 8px 0 0 22px;
+        padding: 0;
+      }
+
+      li {
+        margin: 6px 0;
+      }
+
+      code {
+        border-radius: 4px;
+        padding: 1px 5px;
+        background: #eef2f7;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        font-size: 0.95em;
+      }
+
+      .meta {
+        color: var(--muted);
+      }
+
+      a {
+        color: var(--blue);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>MyLogger Privacy Policy</h1>
+      <p class="meta">Last updated: July 6, 2026</p>
+
+      <p>
+        MyLogger is a Chrome extension for opening, viewing, filtering, searching,
+        and analyzing local log files. This privacy policy explains what data the
+        extension handles, how that data is used, and why the extension requests
+        specific Chrome permissions.
+      </p>
+
+      <h2>Single Purpose</h2>
+      <p>
+        MyLogger has a single purpose: helping developers open, view, filter,
+        search, and analyze local log files so they can quickly identify relevant
+        log information. All extension features directly support this purpose.
+      </p>
+
+      <h2>Data Processed By The Extension</h2>
+      <p>MyLogger may process the following data when the user chooses to use related features:</p>
+      <ul>
+        <li>Local log files selected by the user through the file picker or drag and drop.</li>
+        <li>Breakpoint JSON files selected by the user for optional breakpoint log analysis.</li>
+        <li>User-entered filter text, search text, tags, and time range selections.</li>
+        <li>User configuration, including language, local service URL, common filters, and filter history.</li>
+      </ul>
+
+      <h2>Local Log Files</h2>
+      <p>
+        Local log files are read and processed in the user's browser. Normal log
+        viewing, filtering, searching, marking, context inspection, and saving
+        are performed locally. MyLogger does not proactively upload local log
+        files to third-party servers.
+      </p>
+
+      <h2>Optional Local Backend Service</h2>
+      <p>
+        MyLogger includes an optional feature called Get Breakpoint Logs. When
+        the user explicitly uses this feature, the extension sends the selected
+        breakpoint JSON content to the configured local MyLogger backend service.
+        The default service URL is <code>http://127.0.0.1:7878/analyze</code>.
+      </p>
+      <p>
+        This local service is used to extract log filter rules from breakpoint
+        information and local source code. Regular log file content is not sent
+        through this breakpoint feature. The extension does not use this feature
+        to contact third-party servers.
+      </p>
+
+      <h2>Local Storage</h2>
+      <p>
+        MyLogger uses browser local storage to save user preferences and workflow
+        data, including:
+      </p>
+      <ul>
+        <li>Selected language.</li>
+        <li>Configured local backend service URL.</li>
+        <li>Common filters created by the user.</li>
+        <li>Recent filter history.</li>
+      </ul>
+      <p>
+        This data is stored locally in the user's browser. Users can back up,
+        restore, edit, delete, or clear related configuration from the extension UI.
+      </p>
+
+      <h2>Chrome Permissions</h2>
+      <h3>clipboardWrite</h3>
+      <p>
+        MyLogger requests <code>clipboardWrite</code> so users can copy selected
+        log rows from the local log viewer. This is used only when the user
+        explicitly copies log text from the extension UI. MyLogger does not read
+        clipboard contents.
+      </p>
+
+      <h3>downloads</h3>
+      <p>
+        MyLogger requests <code>downloads</code> so users can save filtered log
+        results, search results, screening results, exported common filters, and
+        configuration backup files. This permission is used only when the user
+        explicitly clicks a Save, Export, or Backup button.
+      </p>
+
+      <h3>Host permissions for localhost and 127.0.0.1</h3>
+      <p>
+        MyLogger requests host permissions for <code>http://localhost/*</code>
+        and <code>http://127.0.0.1/*</code> so the extension can communicate
+        with the optional local MyLogger backend service. These permissions are
+        used only for local service communication initiated by the user.
+      </p>
+
+      <h2>Data Sharing</h2>
+      <p>
+        MyLogger does not sell user data. MyLogger does not share user data with
+        third-party advertising networks, analytics providers, or data brokers.
+        The extension does not use remote analytics or tracking services.
+      </p>
+
+      <h2>User Control</h2>
+      <p>
+        Users control which log files and breakpoint JSON files are opened in the
+        extension. Users can clear browser extension data, remove stored filters,
+        edit common filters, delete filter history, or uninstall the extension at
+        any time.
+      </p>
+
+      <h2>Changes To This Policy</h2>
+      <p>
+        This policy may be updated when MyLogger changes how it handles data or
+        permissions. Updates will be published with the project documentation.
+      </p>
+
+      <h2>Contact</h2>
+      <p>
+        For questions about this privacy policy, contact the project maintainer
+        through the MyLogger GitHub repository:
+        <a href="https://github.com/DingYong4223/MyLogger">https://github.com/DingYong4223/MyLogger</a>.
+      </p>
+    </main>
+  </body>
+</html>

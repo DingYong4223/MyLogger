@@ -1,8 +1,8 @@
 ﻿﻿<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
-<title>原始JSON代码格式化及着色</title>
-<meta name="description" content="原始JSON代码格式化及着色工具">
+<title>常用工具</title>
+<meta name="description" content="常用工具">
 <meta name="keywords" content="Json, 打印机, 着色, 格式化, 颜色">
 <script>
 /*翻译：球*/
@@ -42,9 +42,9 @@ function Process(){
 
     if(json == "") json = "\"\"";
 
-    var obj = eval("["+json+"]");
+    var obj = JSON.parse(json);
 
-    html = ProcessObject(obj[0], 0, false, false, false);
+    html = ProcessObject(obj, 0, false, false, false);
 
     document.getElementById("Canvas").innerHTML = "<PRE class='CodeContainer'>"+html+"</PRE>";
 
@@ -727,7 +727,7 @@ PRE.CodeContainer{
 
 <body>
 
-<h3 style="margin-bottom:2px">原始JSON代码格式化及着色</h3>
+<h3 style="margin-bottom:2px">常用工具</h3>
 <!--nav-->
 ﻿<script>
 	//if (window == top)
@@ -746,7 +746,7 @@ a {
 </style>
 <!--nav-->
 
-<div>请在下方输入你的JSON:</div>
+<div>请在下方输入内容</div>
 <textarea id="RawJson" rows="8" style="width:100%"></textarea><BR/>
 <div style="display:inline-block; vertical-align:top; margin-right:10px;">
 <input type="Button" value="Json格式化" onClick="Process()" style="display:block; margin-bottom:5px;"/>

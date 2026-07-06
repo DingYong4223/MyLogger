@@ -8,3 +8,5 @@
 *.json
 !/chrome/package.json
 !/chrome/package-lock.json
+/temp
+/test
