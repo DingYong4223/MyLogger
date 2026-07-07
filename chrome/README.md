@@ -14,7 +14,7 @@ This Chrome extension provides a local log viewer UI.
 
 ## Features
 
-- Open common text files such as `.log`, `.txt`, `.json`, `.md`, `.csv`, `.xml`, and `.yaml` with file picker or drag and drop.
+- Open local logs and common text files with file picker or drag and drop.
 - Display logs in columns: line, time, level, tag, message.
 - Filter visible logs by keyword or regex.
 - Search visible logs and jump between matches.
@@ -22,7 +22,7 @@ This Chrome extension provides a local log viewer UI.
 - Highlight log time, level, tag, and search terms.
 - Use native horizontal and vertical scrollbars.
 - Double-click any row to copy the original line.
-- Save filtered results as a `.filtered.txt` file.
+- Save filtered results.
 - POST the selected log path and breakpoint JSON content to a backend analysis endpoint and show the returned result in an in-page dialog.
 
 ## Backend Analysis API

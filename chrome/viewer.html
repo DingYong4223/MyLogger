@@ -14,6 +14,7 @@
           <input
             id="fileInput"
             type="file"
+            multiple
             accept=".log,.txt,.json,.jsonl,.md,.markdown,.csv,.tsv,.xml,.yaml,.yml,.properties,.conf,.config,.ini,.gradle,.kt,.java,.js,.ts,.html,.css,text/plain,text/markdown,application/json,application/x-ndjson,text/csv,text/tab-separated-values,application/xml,text/xml,application/yaml,*/*"
             hidden
           />
@@ -40,6 +41,7 @@
     </header>
 
     <main class="layout">
+      <section id="fileTabs" class="file-tabs hidden" aria-label="打开的日志文件"></section>
       <section class="toolbar" aria-label="日志控制">
         <label>
           过滤

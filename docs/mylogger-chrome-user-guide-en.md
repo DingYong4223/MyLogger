@@ -8,7 +8,7 @@ The extension is mainly designed for Android, backend service, and client-side l
 
 ## Key Features
 
-- Open common text files such as `.log`, `.txt`, `.json`, `.md`, `.csv`, `.xml`, and `.yaml`.
+- Open local logs and common text files.
 - Parse time, level, tag, and message columns when possible; unsupported columns remain empty while the original content stays visible.
 - Filter logs by keyword, multi-line OR rules, regular expressions, and case-sensitive matching.
 - Filter by time range, log level, and exact tag matching.
@@ -16,7 +16,7 @@ The extension is mainly designed for Android, backend service, and client-side l
 - Open a log context window from result rows to inspect nearby logs with the selected row highlighted.
 - Mark log lines, view marked rows, jump between marks, and jump to a specific line number.
 - Double-click a log row to copy its text.
-- Save filtered results, search results, and screening results as `.txt` files by default.
+- Save filtered results, search results, and screening results.
 - Add, edit, delete, drag-sort, import, and export reusable common filters.
 - Keep the latest 20 filter history records.
 - Switch between English and Chinese.

@@ -12,14 +12,65 @@ const SERVICE_ENDPOINT_STORAGE_KEY = "myloggerServiceEndpoint";
 const LANGUAGE_STORAGE_KEY = "myloggerLanguage";
 const COMMON_FILTERS_STORAGE_KEY = "myloggerCommonFilters";
 const FILTER_HISTORY_STORAGE_KEY = "myloggerFilterHistory";
+const TAB_STATE_KEYS = [
+  "fileName",
+  "filePath",
+  "fileSize",
+  "rawText",
+  "rows",
+  "visibleRows",
+  "selectedLevels",
+  "tagFilters",
+  "draftTagFilters",
+  "timeFilterStart",
+  "timeFilterEnd",
+  "draftTimeFilterStart",
+  "draftTimeFilterEnd",
+  "timeFilterPoints",
+  "matches",
+  "searchResultRows",
+  "searchModalCanOpenContext",
+  "searchModalMode",
+  "markedLines",
+  "activeMarkedLine",
+  "activeMatch",
+  "activeSearch",
+  "searchDirty",
+  "modalMatches",
+  "modalActiveMatch",
+  "modalActiveSearch",
+  "modalFilteredRows",
+  "modalVirtualStart",
+  "modalVirtualEnd",
+  "analysisModalText",
+  "analysisModalData",
+  "analysisModalMatches",
+  "analysisModalActiveMatch",
+  "analysisModalSearch",
+  "analysisModalFilteredCount",
+  "analysisModalTotalCount",
+  "analysisRightRows",
+  "analysisRightHighlight",
+  "analysisRightBody",
+  "analysisRightVirtualStart",
+  "analysisRightVirtualEnd",
+  "virtualStart",
+  "virtualEnd",
+  "contextActiveIndex",
+  "contextVirtualStart",
+  "contextVirtualEnd",
+];
 
 const state = {
-  language: localStorage.getItem(LANGUAGE_STORAGE_KEY) === "zh" ? "zh" : "en",
+  language: localStorage.getItem(LANGUAGE_STORAGE_KEY) === "en" ? "en" : "zh",
   serviceEndpoint: localStorage.getItem(SERVICE_ENDPOINT_STORAGE_KEY) || DEFAULT_ANALYSIS_ENDPOINT,
   commonFilters: loadCommonFilters(),
   editingCommonFilterId: "",
   draggedCommonFilterId: "",
   filterHistory: loadFilterHistory(),
+  tabs: [],
+  activeTabId: "",
+  nextTabId: 1,
   fileName: "",
   filePath: "",
   fileSize: 0,
@@ -140,6 +191,7 @@ const els = {
   openFilterHistory: document.getElementById("openFilterHistory"),
   filterHistoryPopover: document.getElementById("filterHistoryPopover"),
   closeImportModal: document.getElementById("closeImportModal"),
+  fileTabs: document.getElementById("fileTabs"),
   content: document.getElementById("content"),
   toggleAnalysisPanel: document.getElementById("toggleAnalysisPanel"),
   dropZone: document.getElementById("dropZone"),
@@ -199,6 +251,11 @@ const els = {
   clearFilterHistory: document.getElementById("clearFilterHistory"),
   toast: document.getElementById("toast"),
 };
+
+installTabStateAccessors();
+const initialTab = createLogTab();
+state.tabs.push(initialTab);
+state.activeTabId = initialTab.id;
 
 const I18N = {
   zh: {
@@ -459,6 +516,203 @@ function t(key, params = {}) {
   return value;
 }
 
+function createLogTab() {
+  const id = `tab-${state.nextTabId++}`;
+  return {
+    id,
+    fileName: "",
+    filePath: "",
+    fileSize: 0,
+    rawText: "",
+    rows: [],
+    visibleRows: [],
+    selectedLevels: new Set(),
+    tagFilters: [""],
+    draftTagFilters: [""],
+    timeFilterStart: null,
+    timeFilterEnd: null,
+    draftTimeFilterStart: null,
+    draftTimeFilterEnd: null,
+    timeFilterPoints: [],
+    matches: [],
+    searchResultRows: [],
+    searchModalCanOpenContext: false,
+    searchModalMode: "",
+    markedLines: new Set(),
+    activeMarkedLine: null,
+    activeMatch: -1,
+    activeSearch: "",
+    searchDirty: false,
+    modalMatches: [],
+    modalActiveMatch: -1,
+    modalActiveSearch: "",
+    modalFilteredRows: [],
+    modalVirtualStart: 0,
+    modalVirtualEnd: 0,
+    analysisModalText: "",
+    analysisModalData: null,
+    analysisModalMatches: [],
+    analysisModalActiveMatch: -1,
+    analysisModalSearch: "",
+    analysisModalFilteredCount: 0,
+    analysisModalTotalCount: 0,
+    analysisRightRows: [],
+    analysisRightHighlight: "",
+    analysisRightBody: null,
+    analysisRightVirtualStart: 0,
+    analysisRightVirtualEnd: 0,
+    virtualStart: 0,
+    virtualEnd: 0,
+    contextActiveIndex: -1,
+    contextVirtualStart: 0,
+    contextVirtualEnd: 0,
+    filterText: "",
+    searchText: "",
+    filterRegex: false,
+    filterCase: false,
+    tableScrollTop: 0,
+  };
+}
+
+function installTabStateAccessors() {
+  for (const key of TAB_STATE_KEYS) {
+    Object.defineProperty(state, key, {
+      configurable: true,
+      enumerable: true,
+      get() {
+        return getActiveTab()[key];
+      },
+      set(value) {
+        getActiveTab()[key] = value;
+      },
+    });
+  }
+}
+
+function getActiveTab() {
+  let tab = state.tabs.find((item) => item.id === state.activeTabId);
+  if (!tab) {
+    tab = state.tabs[0];
+  }
+  if (!tab) {
+    tab = createLogTab();
+    state.tabs.push(tab);
+  }
+  state.activeTabId = tab.id;
+  return tab;
+}
+
+function saveActiveTabControls() {
+  const tab = getActiveTab();
+  tab.filterText = els.filterInput.value;
+  tab.searchText = els.searchInput.value;
+  tab.filterRegex = els.filterRegex.checked;
+  tab.filterCase = els.filterCase.checked;
+  tab.tableScrollTop = els.tableWrap.scrollTop;
+}
+
+function restoreActiveTabControls() {
+  const tab = getActiveTab();
+  els.filterInput.value = tab.filterText || "";
+  els.searchInput.value = tab.searchText || "";
+  els.filterRegex.checked = Boolean(tab.filterRegex);
+  els.filterCase.checked = Boolean(tab.filterCase);
+}
+
+function renderFileTabs() {
+  els.fileTabs.textContent = "";
+  const visibleTabs = state.tabs.filter((tab) => tab.fileName);
+  els.fileTabs.classList.toggle("hidden", visibleTabs.length <= 1);
+  for (const tab of visibleTabs) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "file-tab";
+    button.classList.toggle("active", tab.id === state.activeTabId);
+    button.title = tab.filePath || tab.fileName;
+    const title = document.createElement("span");
+    title.className = "file-tab-title";
+    title.textContent = tab.fileName;
+    const close = document.createElement("span");
+    close.className = "file-tab-close";
+    close.textContent = "×";
+    close.title = state.language === "en" ? "Close tab" : "关闭标签";
+    close.setAttribute("aria-label", close.title);
+    close.addEventListener("click", (event) => {
+      event.stopPropagation();
+      closeLogTab(tab.id);
+    });
+    button.append(title, close);
+    button.addEventListener("click", () => switchLogTab(tab.id));
+    els.fileTabs.append(button);
+  }
+}
+
+function switchLogTab(tabId) {
+  if (tabId === state.activeTabId) return;
+  if (!state.tabs.some((tab) => tab.id === tabId)) return;
+  saveActiveTabControls();
+  closeSearchModal();
+  closeContextModal();
+  closeAnalysisModal();
+  closeTimeFilterPopover();
+  closeLevelFilterPopover();
+  closeTagFilterPopover();
+  closeJumpLinePopover();
+  state.activeTabId = tabId;
+  restoreActiveTab();
+}
+
+function closeLogTab(tabId) {
+  const index = state.tabs.findIndex((tab) => tab.id === tabId);
+  if (index < 0) return;
+  const wasActive = state.activeTabId === tabId;
+  state.tabs.splice(index, 1);
+  if (!state.tabs.length) {
+    const tab = createLogTab();
+    state.tabs.push(tab);
+    state.activeTabId = tab.id;
+  } else if (wasActive) {
+    const next = state.tabs[Math.min(index, state.tabs.length - 1)];
+    state.activeTabId = next.id;
+  }
+  if (wasActive) {
+    closeSearchModal();
+    closeContextModal();
+    closeAnalysisModal();
+    restoreActiveTab();
+  } else {
+    renderFileTabs();
+  }
+}
+
+function restoreActiveTab() {
+  restoreActiveTabControls();
+  updateFileMeta();
+  updateLogColumnVisibility();
+  updateLevelFilterOptions();
+  updateTimeFilterOptions();
+  updateTimeFilterHeader();
+  renderTagFilterInputs();
+  updateTagFilterHeader();
+  updateFilterResultsButton();
+  if (state.rows.length) {
+    els.dropZone.classList.add("hidden");
+    els.tableWrap.classList.remove("hidden");
+  } else {
+    els.dropZone.classList.remove("hidden");
+    els.tableWrap.classList.add("hidden");
+  }
+  updateLogTableWidth(state.visibleRows);
+  renderRows();
+  window.requestAnimationFrame(() => {
+    els.tableWrap.scrollTop = getActiveTab().tableScrollTop || 0;
+  });
+  updateMarkedLineJumpButtons();
+  updateSaveFilteredButton();
+  updateMatchStatus();
+  renderFileTabs();
+}
+
 function normalizeCommonFilters(value) {
   if (!Array.isArray(value)) return [];
   return value
@@ -629,6 +883,7 @@ function applyLanguage() {
   updateBreakpointsMeta();
   renderCommonFilters();
   renderSettings();
+  renderFileTabs();
 }
 
 function setText(selector, key) {
@@ -843,6 +1098,11 @@ function parseLogTimeValue(value) {
 
 async function openFile(file) {
   const text = await file.text();
+  saveActiveTabControls();
+  const currentTab = getActiveTab();
+  const targetTab = currentTab.fileName ? createLogTab() : currentTab;
+  if (!state.tabs.includes(targetTab)) state.tabs.push(targetTab);
+  state.activeTabId = targetTab.id;
   state.fileName = file.name;
   state.filePath = file.path || file.name;
   state.fileSize = file.size;
@@ -865,13 +1125,26 @@ async function openFile(file) {
   state.markedLines.clear();
   state.activeMarkedLine = null;
   state.searchResultRows = [];
+  state.filterText = "";
+  state.searchText = "";
+  state.filterRegex = false;
+  state.filterCase = false;
+  state.tableScrollTop = 0;
   closeSearchModal();
+  restoreActiveTabControls();
   updateFileMeta();
   els.dropZone.classList.add("hidden");
   els.tableWrap.classList.remove("hidden");
   updateLevelFilterOptions();
   applyFilter();
   updateAnalyzeButtonState();
+  renderFileTabs();
+}
+
+async function openFiles(files) {
+  for (const file of files) {
+    await openFile(file);
+  }
 }
 
 async function openBreakpointsFile(file) {
@@ -957,6 +1230,7 @@ function updateAnalysisToggleText() {
 
 function applyFilter() {
   window.clearTimeout(filterTimer);
+  saveActiveTabControls();
   updateFilterResultsButton();
   const filterRules = getFilterRules();
   const matcher = createMatcher(filterRules, {
@@ -979,6 +1253,7 @@ function applyFilter() {
   }
   updateLogTableWidth(state.visibleRows);
   els.tableWrap.scrollTop = 0;
+  state.tableScrollTop = 0;
   clearSearchState();
   renderRows();
   updateMarkedLineJumpButtons();
@@ -3270,8 +3545,9 @@ function setLanguage(language) {
 }
 
 els.fileInput.addEventListener("change", (event) => {
-  const file = event.target.files && event.target.files[0];
-  if (file) openFile(file);
+  const files = Array.from(event.target.files || []);
+  void openFiles(files);
+  els.fileInput.value = "";
 });
 
 els.breakpointsInput.addEventListener("change", (event) => {
@@ -3411,6 +3687,9 @@ els.modalNextMatch.addEventListener("click", () => goModalMatch(1));
 els.prevMarkedLine.addEventListener("click", () => goMarkedLine(-1));
 els.nextMarkedLine.addEventListener("click", () => goMarkedLine(1));
 els.tableWrap.addEventListener("scroll", scheduleVirtualRowsRender);
+els.tableWrap.addEventListener("scroll", () => {
+  state.tableScrollTop = els.tableWrap.scrollTop;
+});
 els.tableWrap.addEventListener("scroll", closeTimeFilterPopover);
 els.tableWrap.addEventListener("scroll", closeLevelFilterPopover);
 els.tableWrap.addEventListener("scroll", closeTagFilterPopover);
@@ -3436,8 +3715,8 @@ for (const target of [document.body, els.dropZone]) {
   target.addEventListener("drop", (event) => {
     event.preventDefault();
     els.dropZone.classList.remove("dragging");
-    const file = event.dataTransfer.files && event.dataTransfer.files[0];
-    if (file) openFile(file);
+    const files = Array.from(event.dataTransfer.files || []);
+    void openFiles(files);
   });
 }
 
