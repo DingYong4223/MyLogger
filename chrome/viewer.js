@@ -434,11 +434,13 @@ const I18N = {
     save: "保存",
     breakpoints: "断点文件",
     helpTitle: "MyLogger 帮助",
-    helpIntro: "本工具用于本地日志查看、过滤、定位、标记、保存和断点日志筛查。",
+    helpIntro: "本工具用于本地日志查看、过滤、搜索、定位、标记、比较、保存和断点日志筛查。",
     helpOpenTitle: "打开日志",
-    helpOpenText: "点击右上角“打开文本/日志”，或将日志文件拖拽到主窗口。支持 `.log`、`.txt`、`.json`、`.md` 等常见文本文件。",
+    helpOpenText: "通过顶部“文件”菜单打开文本/日志，或将日志文件拖拽到主窗口。也可以打开文件夹，插件会遍历其中可识别的文本文件并按文件生成标签页；重复打开同一文件会自动复用已有标签。",
+    helpMenuTitle: "文件与分析菜单",
+    helpMenuText: "顶部“文件”菜单包含打开文本/日志和打开文件夹。“分析”菜单提供日志比较入口。打开多个日志时会出现标签页，顶部过滤、搜索、时间、级别、Tag、保存等操作只作用于当前可见标签页。",
     helpFilterTitle: "过滤与搜索",
-    helpFilterText: "顶部“过滤”会直接影响主窗口展示结果，可输入关键字，也可勾选“正则”和“区分大小写”。“搜索”会基于当前过滤结果打开搜索结果子窗口。",
+    helpFilterText: "顶部“过滤”会直接影响主窗口展示结果，支持多行关键字，按“任意一行命中”过滤；也可勾选“正则”和“区分大小写”。过滤输入框有内容时可点击“查看”打开筛查结果窗口。搜索会基于当前过滤结果打开搜索结果窗口，并可在窗口内继续过滤。",
     helpTimeTitle: "时间筛选",
     helpTimeText: "点击表头“时间”打开时间筛选窗口。时间点按当前日志实际分布生成，选择起点和终点后点击“确定”，主窗口只展示对应时间段内的日志。",
     helpLevelTitle: "级别筛选",
@@ -450,7 +452,11 @@ const I18N = {
     helpMarkTitle: "标记与跳转",
     helpMarkText: "点击行号可标记或取消标记当前行。右上角“全部标记”可查看标记行。搜索区旁边的上下箭头可在标记行之间跳转。",
     helpSaveTitle: "复制与保存",
-    helpSaveText: "双击日志行会复制当前行文本。右上角“保存过滤结果”会把当前主窗口展示的过滤结果保存为 `.txt` 文件。各子窗口右上角“保存”也默认保存为 `.txt`。",
+    helpSaveText: "双击日志行会复制当前行文本。标签栏右侧“保存过滤结果”会把当前标签页展示的过滤结果保存为 `.txt` 文件。搜索结果、筛查结果等子窗口的保存也默认保存为 `.txt`。",
+    helpCompareTitle: "日志比较",
+    helpCompareText: "在“分析”菜单点击“比较”，选择两个不同的已打开日志后进入左右分屏比较窗口。左右两侧支持独立过滤、正则、大小写、行号标记、标记上下跳转和 Jump 行号跳转；双击日志行可复制当行文本。比较窗口内的提示会显示在窗口底部。",
+    helpCommonFilterTitle: "常用过滤与配置",
+    helpCommonFilterText: "左侧“常用过滤”可保存、编辑、删除、拖拽排序、导入和导出过滤规则，点击条目确认后会覆盖顶部过滤输入框。右上角设置可统一管理服务地址、语言、常用过滤、历史过滤，并支持一键备份和恢复配置。",
     helpBackendTitle: "后台分析",
     helpBackendText: "左侧“后台分析”默认收起，点击可展开。选择断点 JSON 文件后，可点击“获取断点日志”从本地后台服务提取断点日志字符串。",
     helpBreakpointTitle: "断点日志筛查",
@@ -571,11 +577,13 @@ const I18N = {
     analysisResults: "Screening Results",
     breakpoints: "Breakpoints File",
     helpTitle: "MyLogger Help",
-    helpIntro: "Use this tool to view, filter, locate, mark, save, and screen local logs with breakpoint data.",
+    helpIntro: "Use this tool to view, filter, search, locate, mark, compare, save, and screen local logs with breakpoint data.",
     helpOpenTitle: "Open Logs",
-    helpOpenText: "Click \"Open Text/Log\" in the top-right area, or drop a log file into the main window. Common text files such as `.log`, `.txt`, `.json`, and `.md` are supported.",
+    helpOpenText: "Use the top File menu to open text/log files, or drop files into the main window. You can also open a folder; recognized text files are loaded as separate tabs. Reopening the same file reuses the existing tab.",
+    helpMenuTitle: "File And Analysis Menus",
+    helpMenuText: "The File menu contains Open Text/Log and Open Folder. The Analysis menu opens log comparison. When multiple logs are open, filters, search, time, level, tag, and save actions apply only to the visible tab.",
     helpFilterTitle: "Filter And Search",
-    helpFilterText: "The top Filter field directly changes the main log view. Enter keywords, or enable Regex and Case sensitive. Search opens a result window based on the current filtered logs.",
+    helpFilterText: "The top Filter field directly changes the main log view. Multiple lines are supported and match with OR logic. Regex and Case sensitive are available. When the filter field has content, View opens the screening result window. Search opens a result window based on the current filtered logs and can be filtered again inside the window.",
     helpTimeTitle: "Time Filter",
     helpTimeText: "Click the Time header to open time filtering. Time points are generated from the loaded logs. Select a start and end time, then click Confirm.",
     helpLevelTitle: "Level Filter",
@@ -587,7 +595,11 @@ const I18N = {
     helpMarkTitle: "Marks And Jump",
     helpMarkText: "Click a line number to mark or unmark that row. All Marks shows marked rows. The up/down arrows near Search jump between marked rows.",
     helpSaveTitle: "Copy And Save",
-    helpSaveText: "Double-click a log row to copy it. Save Filtered saves the current main view as a `.txt` file. Save buttons in subwindows also save `.txt` files by default.",
+    helpSaveText: "Double-click a log row to copy it. Save Filtered near the tab bar saves the current tab's filtered rows as a `.txt` file. Search and screening windows also save as `.txt` by default.",
+    helpCompareTitle: "Log Compare",
+    helpCompareText: "Choose Compare from the Analysis menu, then select two different open logs. The comparison window shows them side by side. Each side has its own filter, regex, case-sensitive option, line marks, mark navigation, and Jump by line number. Double-click a row to copy it. Prompts in this window appear at the bottom of the comparison window.",
+    helpCommonFilterTitle: "Common Filters And Settings",
+    helpCommonFilterText: "Common Filters can be saved, edited, deleted, reordered by drag and drop, imported, and exported. Selecting one replaces the top Filter field after confirmation. Settings manage the service URL, language, common filters, and filter history, with backup and restore support.",
     helpBackendTitle: "Backend Analysis",
     helpBackendText: "The left Backend Analysis panel is collapsed by default. Expand it, choose a breakpoint JSON file, then click Get Breakpoint Logs to extract log strings through the local backend service.",
     helpBreakpointTitle: "Breakpoint Log Screening",
@@ -1093,6 +1105,7 @@ function applyModalLanguage() {
 
   const helpSections = [
     ["helpOpenTitle", "helpOpenText"],
+    ["helpMenuTitle", "helpMenuText"],
     ["helpFilterTitle", "helpFilterText"],
     ["helpTimeTitle", "helpTimeText"],
     ["helpLevelTitle", "helpLevelText"],
@@ -1100,6 +1113,8 @@ function applyModalLanguage() {
     ["helpContextTitle", "helpContextText"],
     ["helpMarkTitle", "helpMarkText"],
     ["helpSaveTitle", "helpSaveText"],
+    ["helpCompareTitle", "helpCompareText"],
+    ["helpCommonFilterTitle", "helpCommonFilterText"],
     ["helpBackendTitle", "helpBackendText"],
     ["helpBreakpointTitle", "helpBreakpointText"],
     ["helpServiceTitle", "helpServiceText"],
@@ -4346,6 +4361,9 @@ els.importModal.addEventListener("click", (event) => {
 els.closeImportModal.addEventListener("click", closeImportModal);
 els.closeBreakpointsModal.addEventListener("click", closeBreakpointsModal);
 els.openHelpModal.addEventListener("click", openHelpModal);
+els.helpModal.addEventListener("click", (event) => {
+  if (event.target === els.helpModal) closeHelpModal();
+});
 els.closeHelpModal.addEventListener("click", closeHelpModal);
 els.openSettingsModal.addEventListener("click", openSettingsModal);
 els.settingsModal.addEventListener("click", (event) => {

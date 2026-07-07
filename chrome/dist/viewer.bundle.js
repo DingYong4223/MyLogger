@@ -3723,11 +3723,13 @@
       save: "\u4FDD\u5B58",
       breakpoints: "\u65AD\u70B9\u6587\u4EF6",
       helpTitle: "MyLogger \u5E2E\u52A9",
-      helpIntro: "\u672C\u5DE5\u5177\u7528\u4E8E\u672C\u5730\u65E5\u5FD7\u67E5\u770B\u3001\u8FC7\u6EE4\u3001\u5B9A\u4F4D\u3001\u6807\u8BB0\u3001\u4FDD\u5B58\u548C\u65AD\u70B9\u65E5\u5FD7\u7B5B\u67E5\u3002",
+      helpIntro: "\u672C\u5DE5\u5177\u7528\u4E8E\u672C\u5730\u65E5\u5FD7\u67E5\u770B\u3001\u8FC7\u6EE4\u3001\u641C\u7D22\u3001\u5B9A\u4F4D\u3001\u6807\u8BB0\u3001\u6BD4\u8F83\u3001\u4FDD\u5B58\u548C\u65AD\u70B9\u65E5\u5FD7\u7B5B\u67E5\u3002",
       helpOpenTitle: "\u6253\u5F00\u65E5\u5FD7",
-      helpOpenText: "\u70B9\u51FB\u53F3\u4E0A\u89D2\u201C\u6253\u5F00\u6587\u672C/\u65E5\u5FD7\u201D\uFF0C\u6216\u5C06\u65E5\u5FD7\u6587\u4EF6\u62D6\u62FD\u5230\u4E3B\u7A97\u53E3\u3002\u652F\u6301 `.log`\u3001`.txt`\u3001`.json`\u3001`.md` \u7B49\u5E38\u89C1\u6587\u672C\u6587\u4EF6\u3002",
+      helpOpenText: "\u901A\u8FC7\u9876\u90E8\u201C\u6587\u4EF6\u201D\u83DC\u5355\u6253\u5F00\u6587\u672C/\u65E5\u5FD7\uFF0C\u6216\u5C06\u65E5\u5FD7\u6587\u4EF6\u62D6\u62FD\u5230\u4E3B\u7A97\u53E3\u3002\u4E5F\u53EF\u4EE5\u6253\u5F00\u6587\u4EF6\u5939\uFF0C\u63D2\u4EF6\u4F1A\u904D\u5386\u5176\u4E2D\u53EF\u8BC6\u522B\u7684\u6587\u672C\u6587\u4EF6\u5E76\u6309\u6587\u4EF6\u751F\u6210\u6807\u7B7E\u9875\uFF1B\u91CD\u590D\u6253\u5F00\u540C\u4E00\u6587\u4EF6\u4F1A\u81EA\u52A8\u590D\u7528\u5DF2\u6709\u6807\u7B7E\u3002",
+      helpMenuTitle: "\u6587\u4EF6\u4E0E\u5206\u6790\u83DC\u5355",
+      helpMenuText: "\u9876\u90E8\u201C\u6587\u4EF6\u201D\u83DC\u5355\u5305\u542B\u6253\u5F00\u6587\u672C/\u65E5\u5FD7\u548C\u6253\u5F00\u6587\u4EF6\u5939\u3002\u201C\u5206\u6790\u201D\u83DC\u5355\u63D0\u4F9B\u65E5\u5FD7\u6BD4\u8F83\u5165\u53E3\u3002\u6253\u5F00\u591A\u4E2A\u65E5\u5FD7\u65F6\u4F1A\u51FA\u73B0\u6807\u7B7E\u9875\uFF0C\u9876\u90E8\u8FC7\u6EE4\u3001\u641C\u7D22\u3001\u65F6\u95F4\u3001\u7EA7\u522B\u3001Tag\u3001\u4FDD\u5B58\u7B49\u64CD\u4F5C\u53EA\u4F5C\u7528\u4E8E\u5F53\u524D\u53EF\u89C1\u6807\u7B7E\u9875\u3002",
       helpFilterTitle: "\u8FC7\u6EE4\u4E0E\u641C\u7D22",
-      helpFilterText: "\u9876\u90E8\u201C\u8FC7\u6EE4\u201D\u4F1A\u76F4\u63A5\u5F71\u54CD\u4E3B\u7A97\u53E3\u5C55\u793A\u7ED3\u679C\uFF0C\u53EF\u8F93\u5165\u5173\u952E\u5B57\uFF0C\u4E5F\u53EF\u52FE\u9009\u201C\u6B63\u5219\u201D\u548C\u201C\u533A\u5206\u5927\u5C0F\u5199\u201D\u3002\u201C\u641C\u7D22\u201D\u4F1A\u57FA\u4E8E\u5F53\u524D\u8FC7\u6EE4\u7ED3\u679C\u6253\u5F00\u641C\u7D22\u7ED3\u679C\u5B50\u7A97\u53E3\u3002",
+      helpFilterText: "\u9876\u90E8\u201C\u8FC7\u6EE4\u201D\u4F1A\u76F4\u63A5\u5F71\u54CD\u4E3B\u7A97\u53E3\u5C55\u793A\u7ED3\u679C\uFF0C\u652F\u6301\u591A\u884C\u5173\u952E\u5B57\uFF0C\u6309\u201C\u4EFB\u610F\u4E00\u884C\u547D\u4E2D\u201D\u8FC7\u6EE4\uFF1B\u4E5F\u53EF\u52FE\u9009\u201C\u6B63\u5219\u201D\u548C\u201C\u533A\u5206\u5927\u5C0F\u5199\u201D\u3002\u8FC7\u6EE4\u8F93\u5165\u6846\u6709\u5185\u5BB9\u65F6\u53EF\u70B9\u51FB\u201C\u67E5\u770B\u201D\u6253\u5F00\u7B5B\u67E5\u7ED3\u679C\u7A97\u53E3\u3002\u641C\u7D22\u4F1A\u57FA\u4E8E\u5F53\u524D\u8FC7\u6EE4\u7ED3\u679C\u6253\u5F00\u641C\u7D22\u7ED3\u679C\u7A97\u53E3\uFF0C\u5E76\u53EF\u5728\u7A97\u53E3\u5185\u7EE7\u7EED\u8FC7\u6EE4\u3002",
       helpTimeTitle: "\u65F6\u95F4\u7B5B\u9009",
       helpTimeText: "\u70B9\u51FB\u8868\u5934\u201C\u65F6\u95F4\u201D\u6253\u5F00\u65F6\u95F4\u7B5B\u9009\u7A97\u53E3\u3002\u65F6\u95F4\u70B9\u6309\u5F53\u524D\u65E5\u5FD7\u5B9E\u9645\u5206\u5E03\u751F\u6210\uFF0C\u9009\u62E9\u8D77\u70B9\u548C\u7EC8\u70B9\u540E\u70B9\u51FB\u201C\u786E\u5B9A\u201D\uFF0C\u4E3B\u7A97\u53E3\u53EA\u5C55\u793A\u5BF9\u5E94\u65F6\u95F4\u6BB5\u5185\u7684\u65E5\u5FD7\u3002",
       helpLevelTitle: "\u7EA7\u522B\u7B5B\u9009",
@@ -3739,7 +3741,11 @@
       helpMarkTitle: "\u6807\u8BB0\u4E0E\u8DF3\u8F6C",
       helpMarkText: "\u70B9\u51FB\u884C\u53F7\u53EF\u6807\u8BB0\u6216\u53D6\u6D88\u6807\u8BB0\u5F53\u524D\u884C\u3002\u53F3\u4E0A\u89D2\u201C\u5168\u90E8\u6807\u8BB0\u201D\u53EF\u67E5\u770B\u6807\u8BB0\u884C\u3002\u641C\u7D22\u533A\u65C1\u8FB9\u7684\u4E0A\u4E0B\u7BAD\u5934\u53EF\u5728\u6807\u8BB0\u884C\u4E4B\u95F4\u8DF3\u8F6C\u3002",
       helpSaveTitle: "\u590D\u5236\u4E0E\u4FDD\u5B58",
-      helpSaveText: "\u53CC\u51FB\u65E5\u5FD7\u884C\u4F1A\u590D\u5236\u5F53\u524D\u884C\u6587\u672C\u3002\u53F3\u4E0A\u89D2\u201C\u4FDD\u5B58\u8FC7\u6EE4\u7ED3\u679C\u201D\u4F1A\u628A\u5F53\u524D\u4E3B\u7A97\u53E3\u5C55\u793A\u7684\u8FC7\u6EE4\u7ED3\u679C\u4FDD\u5B58\u4E3A `.txt` \u6587\u4EF6\u3002\u5404\u5B50\u7A97\u53E3\u53F3\u4E0A\u89D2\u201C\u4FDD\u5B58\u201D\u4E5F\u9ED8\u8BA4\u4FDD\u5B58\u4E3A `.txt`\u3002",
+      helpSaveText: "\u53CC\u51FB\u65E5\u5FD7\u884C\u4F1A\u590D\u5236\u5F53\u524D\u884C\u6587\u672C\u3002\u6807\u7B7E\u680F\u53F3\u4FA7\u201C\u4FDD\u5B58\u8FC7\u6EE4\u7ED3\u679C\u201D\u4F1A\u628A\u5F53\u524D\u6807\u7B7E\u9875\u5C55\u793A\u7684\u8FC7\u6EE4\u7ED3\u679C\u4FDD\u5B58\u4E3A `.txt` \u6587\u4EF6\u3002\u641C\u7D22\u7ED3\u679C\u3001\u7B5B\u67E5\u7ED3\u679C\u7B49\u5B50\u7A97\u53E3\u7684\u4FDD\u5B58\u4E5F\u9ED8\u8BA4\u4FDD\u5B58\u4E3A `.txt`\u3002",
+      helpCompareTitle: "\u65E5\u5FD7\u6BD4\u8F83",
+      helpCompareText: "\u5728\u201C\u5206\u6790\u201D\u83DC\u5355\u70B9\u51FB\u201C\u6BD4\u8F83\u201D\uFF0C\u9009\u62E9\u4E24\u4E2A\u4E0D\u540C\u7684\u5DF2\u6253\u5F00\u65E5\u5FD7\u540E\u8FDB\u5165\u5DE6\u53F3\u5206\u5C4F\u6BD4\u8F83\u7A97\u53E3\u3002\u5DE6\u53F3\u4E24\u4FA7\u652F\u6301\u72EC\u7ACB\u8FC7\u6EE4\u3001\u6B63\u5219\u3001\u5927\u5C0F\u5199\u3001\u884C\u53F7\u6807\u8BB0\u3001\u6807\u8BB0\u4E0A\u4E0B\u8DF3\u8F6C\u548C Jump \u884C\u53F7\u8DF3\u8F6C\uFF1B\u53CC\u51FB\u65E5\u5FD7\u884C\u53EF\u590D\u5236\u5F53\u884C\u6587\u672C\u3002\u6BD4\u8F83\u7A97\u53E3\u5185\u7684\u63D0\u793A\u4F1A\u663E\u793A\u5728\u7A97\u53E3\u5E95\u90E8\u3002",
+      helpCommonFilterTitle: "\u5E38\u7528\u8FC7\u6EE4\u4E0E\u914D\u7F6E",
+      helpCommonFilterText: "\u5DE6\u4FA7\u201C\u5E38\u7528\u8FC7\u6EE4\u201D\u53EF\u4FDD\u5B58\u3001\u7F16\u8F91\u3001\u5220\u9664\u3001\u62D6\u62FD\u6392\u5E8F\u3001\u5BFC\u5165\u548C\u5BFC\u51FA\u8FC7\u6EE4\u89C4\u5219\uFF0C\u70B9\u51FB\u6761\u76EE\u786E\u8BA4\u540E\u4F1A\u8986\u76D6\u9876\u90E8\u8FC7\u6EE4\u8F93\u5165\u6846\u3002\u53F3\u4E0A\u89D2\u8BBE\u7F6E\u53EF\u7EDF\u4E00\u7BA1\u7406\u670D\u52A1\u5730\u5740\u3001\u8BED\u8A00\u3001\u5E38\u7528\u8FC7\u6EE4\u3001\u5386\u53F2\u8FC7\u6EE4\uFF0C\u5E76\u652F\u6301\u4E00\u952E\u5907\u4EFD\u548C\u6062\u590D\u914D\u7F6E\u3002",
       helpBackendTitle: "\u540E\u53F0\u5206\u6790",
       helpBackendText: "\u5DE6\u4FA7\u201C\u540E\u53F0\u5206\u6790\u201D\u9ED8\u8BA4\u6536\u8D77\uFF0C\u70B9\u51FB\u53EF\u5C55\u5F00\u3002\u9009\u62E9\u65AD\u70B9 JSON \u6587\u4EF6\u540E\uFF0C\u53EF\u70B9\u51FB\u201C\u83B7\u53D6\u65AD\u70B9\u65E5\u5FD7\u201D\u4ECE\u672C\u5730\u540E\u53F0\u670D\u52A1\u63D0\u53D6\u65AD\u70B9\u65E5\u5FD7\u5B57\u7B26\u4E32\u3002",
       helpBreakpointTitle: "\u65AD\u70B9\u65E5\u5FD7\u7B5B\u67E5",
@@ -3860,11 +3866,13 @@
       analysisResults: "Screening Results",
       breakpoints: "Breakpoints File",
       helpTitle: "MyLogger Help",
-      helpIntro: "Use this tool to view, filter, locate, mark, save, and screen local logs with breakpoint data.",
+      helpIntro: "Use this tool to view, filter, search, locate, mark, compare, save, and screen local logs with breakpoint data.",
       helpOpenTitle: "Open Logs",
-      helpOpenText: 'Click "Open Text/Log" in the top-right area, or drop a log file into the main window. Common text files such as `.log`, `.txt`, `.json`, and `.md` are supported.',
+      helpOpenText: "Use the top File menu to open text/log files, or drop files into the main window. You can also open a folder; recognized text files are loaded as separate tabs. Reopening the same file reuses the existing tab.",
+      helpMenuTitle: "File And Analysis Menus",
+      helpMenuText: "The File menu contains Open Text/Log and Open Folder. The Analysis menu opens log comparison. When multiple logs are open, filters, search, time, level, tag, and save actions apply only to the visible tab.",
       helpFilterTitle: "Filter And Search",
-      helpFilterText: "The top Filter field directly changes the main log view. Enter keywords, or enable Regex and Case sensitive. Search opens a result window based on the current filtered logs.",
+      helpFilterText: "The top Filter field directly changes the main log view. Multiple lines are supported and match with OR logic. Regex and Case sensitive are available. When the filter field has content, View opens the screening result window. Search opens a result window based on the current filtered logs and can be filtered again inside the window.",
       helpTimeTitle: "Time Filter",
       helpTimeText: "Click the Time header to open time filtering. Time points are generated from the loaded logs. Select a start and end time, then click Confirm.",
       helpLevelTitle: "Level Filter",
@@ -3876,7 +3884,11 @@
       helpMarkTitle: "Marks And Jump",
       helpMarkText: "Click a line number to mark or unmark that row. All Marks shows marked rows. The up/down arrows near Search jump between marked rows.",
       helpSaveTitle: "Copy And Save",
-      helpSaveText: "Double-click a log row to copy it. Save Filtered saves the current main view as a `.txt` file. Save buttons in subwindows also save `.txt` files by default.",
+      helpSaveText: "Double-click a log row to copy it. Save Filtered near the tab bar saves the current tab's filtered rows as a `.txt` file. Search and screening windows also save as `.txt` by default.",
+      helpCompareTitle: "Log Compare",
+      helpCompareText: "Choose Compare from the Analysis menu, then select two different open logs. The comparison window shows them side by side. Each side has its own filter, regex, case-sensitive option, line marks, mark navigation, and Jump by line number. Double-click a row to copy it. Prompts in this window appear at the bottom of the comparison window.",
+      helpCommonFilterTitle: "Common Filters And Settings",
+      helpCommonFilterText: "Common Filters can be saved, edited, deleted, reordered by drag and drop, imported, and exported. Selecting one replaces the top Filter field after confirmation. Settings manage the service URL, language, common filters, and filter history, with backup and restore support.",
       helpBackendTitle: "Backend Analysis",
       helpBackendText: "The left Backend Analysis panel is collapsed by default. Expand it, choose a breakpoint JSON file, then click Get Breakpoint Logs to extract log strings through the local backend service.",
       helpBreakpointTitle: "Breakpoint Log Screening",
@@ -4343,6 +4355,7 @@
     setText("#closeHelpModal", "close");
     const helpSections = [
       ["helpOpenTitle", "helpOpenText"],
+      ["helpMenuTitle", "helpMenuText"],
       ["helpFilterTitle", "helpFilterText"],
       ["helpTimeTitle", "helpTimeText"],
       ["helpLevelTitle", "helpLevelText"],
@@ -4350,6 +4363,8 @@
       ["helpContextTitle", "helpContextText"],
       ["helpMarkTitle", "helpMarkText"],
       ["helpSaveTitle", "helpSaveText"],
+      ["helpCompareTitle", "helpCompareText"],
+      ["helpCommonFilterTitle", "helpCommonFilterText"],
       ["helpBackendTitle", "helpBackendText"],
       ["helpBreakpointTitle", "helpBreakpointText"],
       ["helpServiceTitle", "helpServiceText"],
@@ -7162,6 +7177,9 @@
   els.closeImportModal.addEventListener("click", closeImportModal);
   els.closeBreakpointsModal.addEventListener("click", closeBreakpointsModal);
   els.openHelpModal.addEventListener("click", openHelpModal);
+  els.helpModal.addEventListener("click", (event) => {
+    if (event.target === els.helpModal) closeHelpModal();
+  });
   els.closeHelpModal.addEventListener("click", closeHelpModal);
   els.openSettingsModal.addEventListener("click", openSettingsModal);
   els.settingsModal.addEventListener("click", (event) => {
