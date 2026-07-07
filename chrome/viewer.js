@@ -40,6 +40,8 @@ const TAB_STATE_KEYS = [
   "fileName",
   "filePath",
   "fileSize",
+  "fileLastModified",
+  "fileKey",
   "rawText",
   "rows",
   "visibleRows",
@@ -554,6 +556,8 @@ function createLogTab() {
     fileName: "",
     filePath: "",
     fileSize: 0,
+    fileLastModified: 0,
+    fileKey: "",
     rawText: "",
     rows: [],
     visibleRows: [],
@@ -1127,6 +1131,12 @@ function parseLogTimeValue(value) {
 }
 
 async function openFile(file) {
+  const fileKey = getFileKey(file);
+  const existingTab = findTabByFileKey(fileKey);
+  if (existingTab) {
+    switchLogTab(existingTab.id);
+    return false;
+  }
   const text = await file.text();
   saveActiveTabControls();
   const currentTab = getActiveTab();
@@ -1135,7 +1145,9 @@ async function openFile(file) {
   state.activeTabId = targetTab.id;
   state.fileName = file.name;
   state.filePath = getFileDisplayPath(file);
+  state.fileKey = fileKey;
   state.fileSize = file.size;
+  state.fileLastModified = file.lastModified || 0;
   state.rawText = text;
   state.rows = text.split(/\r?\n/).map(parseLine);
   els.filterInput.value = "";
@@ -1169,6 +1181,7 @@ async function openFile(file) {
   applyFilter();
   updateAnalyzeButtonState();
   renderFileTabs();
+  return true;
 }
 
 async function openFiles(files, options = {}) {
@@ -1185,8 +1198,12 @@ async function openFiles(files, options = {}) {
     showToast(t("noTextFilesInFolder"));
     return;
   }
+  let openedCount = 0;
   for (const file of filteredFiles) {
-    await openFile(file);
+    if (await openFile(file)) openedCount += 1;
+  }
+  if (!openedCount && filteredFiles.length) {
+    renderFileTabs();
   }
 }
 
@@ -1202,6 +1219,31 @@ function isTextFile(file) {
 
 function getFileDisplayPath(file) {
   return fileRelativePaths.get(file) || file.webkitRelativePath || file.path || file.name || "";
+}
+
+function getFileKey(file) {
+  return [
+    normalizeFileKey(file.name || ""),
+    Number(file.size || 0),
+    Number(file.lastModified || 0),
+  ].join(":");
+}
+
+function normalizeFileKey(value) {
+  return String(value || "").replace(/\\/g, "/").trim().toLowerCase();
+}
+
+function findTabByFileKey(fileKey) {
+  if (!fileKey) return null;
+  return state.tabs.find((tab) => {
+    if (!tab.fileName) return false;
+    const tabKey = tab.fileKey || [
+      normalizeFileKey(tab.fileName || ""),
+      Number(tab.fileSize || 0),
+      Number(tab.fileLastModified || 0),
+    ].join(":");
+    return tabKey === fileKey;
+  }) || null;
 }
 
 async function openFolder() {
