@@ -3306,6 +3306,30 @@
   var LANGUAGE_STORAGE_KEY = "myloggerLanguage";
   var COMMON_FILTERS_STORAGE_KEY = "myloggerCommonFilters";
   var FILTER_HISTORY_STORAGE_KEY = "myloggerFilterHistory";
+  var TEXT_FILE_EXTENSIONS = /* @__PURE__ */ new Set([
+    ".log",
+    ".txt",
+    ".json",
+    ".jsonl",
+    ".md",
+    ".markdown",
+    ".csv",
+    ".tsv",
+    ".xml",
+    ".yaml",
+    ".yml",
+    ".properties",
+    ".conf",
+    ".config",
+    ".ini",
+    ".gradle",
+    ".kt",
+    ".java",
+    ".js",
+    ".ts",
+    ".html",
+    ".css"
+  ]);
   var TAB_STATE_KEYS = [
     "fileName",
     "filePath",
@@ -3422,8 +3446,11 @@
   var analysisRightVirtualScrollFrame = 0;
   var pendingLogRowClickTimer = 0;
   var suppressNextLogRowClick = false;
+  var fileRelativePaths = /* @__PURE__ */ new WeakMap();
   var els = {
     fileInput: document.getElementById("fileInput"),
+    directoryInput: document.getElementById("directoryInput"),
+    openFolderButton: document.getElementById("openFolderButton"),
     breakpointsInput: document.getElementById("breakpointsInput"),
     viewBreakpointsFile: document.getElementById("viewBreakpointsFile"),
     filterLogFileInput: document.getElementById("filterLogFileInput"),
@@ -3549,11 +3576,13 @@
   var I18N = {
     zh: {
       openFile: "\u6253\u5F00\u6587\u672C/\u65E5\u5FD7",
+      openFolder: "\u6253\u5F00\u6587\u4EF6\u5939",
+      noTextFilesInFolder: "\u6587\u4EF6\u5939\u4E2D\u6CA1\u6709\u627E\u5230\u53EF\u6253\u5F00\u7684\u6587\u672C\u6587\u4EF6\u3002",
       saveFiltered: "\u4FDD\u5B58\u8FC7\u6EE4\u7ED3\u679C",
       help: "\u5E2E\u52A9",
       settings: "\u8BBE\u7F6E",
       filter: "\u8FC7\u6EE4",
-      filterPlaceholder: "\u5173\u952E\u5B57\u6216\u6B63\u5219\uFF1B\u591A\u884C\u6309\u4EFB\u610F\u4E00\u884C\u547D\u4E2D\u8FC7\u6EE4",
+      filterPlaceholder: "\u8FC7\u6EE4",
       view: "\u67E5\u770B",
       import: "\u5BFC\u5165",
       importFilterLogFile: "\u5BFC\u5165\u672C\u5730\u8FC7\u6EE4\u65E5\u5FD7",
@@ -3673,11 +3702,13 @@
     },
     en: {
       openFile: "Open Text/Log",
+      openFolder: "Open Folder",
+      noTextFilesInFolder: "No text files found in this folder.",
       saveFiltered: "Save Filtered",
       help: "Help",
       settings: "Settings",
       filter: "Filter",
-      filterPlaceholder: "Keyword or regex; multiple lines match any rule",
+      filterPlaceholder: "Filter",
       view: "View",
       import: "Import",
       importFilterLogFile: "Import Local Filter Logs",
@@ -4055,13 +4086,12 @@
     els.openSettingsModal.title = t("settings");
     els.openSettingsModal.setAttribute("aria-label", t("settings"));
     setLeadingText(".header-actions-left label.button.primary", "openFile");
+    setText("#openFolderButton", "openFolder");
     setText("#saveFiltered", "saveFiltered");
-    setLeadingText(".toolbar > label:nth-of-type(1)", "filter");
     setPlaceholder("#filterInput", "filterPlaceholder");
     updateFilterResultsButton();
     setLeadingText(".toolbar label.checkbox:nth-of-type(2)", "regex");
     setLeadingText(".toolbar label.checkbox:nth-of-type(3)", "caseSensitive");
-    setLeadingText(".toolbar > label:nth-of-type(4)", "search");
     setPlaceholder("#searchInput", "searchPlaceholder");
     setText("#openSearchResults", "search");
     setText("#openMarkedRows", "allMarked");
@@ -4341,7 +4371,7 @@
     if (!state.tabs.includes(targetTab)) state.tabs.push(targetTab);
     state.activeTabId = targetTab.id;
     state.fileName = file.name;
-    state.filePath = file.path || file.name;
+    state.filePath = getFileDisplayPath(file);
     state.fileSize = file.size;
     state.rawText = text;
     state.rows = text.split(/\r?\n/).map(parseLine);
@@ -4377,9 +4407,62 @@
     updateAnalyzeButtonState();
     renderFileTabs();
   }
-  async function openFiles(files) {
-    for (const file of files) {
+  async function openFiles(files, options = {}) {
+    const fileList = Array.from(files || []);
+    const filteredFiles = options.onlyText ? fileList.filter(isTextFile) : fileList;
+    filteredFiles.sort((left, right) => {
+      const leftPath = getFileDisplayPath(left);
+      const rightPath = getFileDisplayPath(right);
+      return leftPath.localeCompare(rightPath);
+    });
+    if (options.onlyText && !filteredFiles.length) {
+      showToast(t("noTextFilesInFolder"));
+      return;
+    }
+    for (const file of filteredFiles) {
       await openFile(file);
+    }
+  }
+  function isTextFile(file) {
+    const name = getFileDisplayPath(file).toLowerCase();
+    const basename = name.split("/").pop() || name;
+    if (!basename || basename === ".ds_store" || basename.startsWith("._")) return false;
+    const dotIndex = basename.lastIndexOf(".");
+    const extension = dotIndex >= 0 ? basename.slice(dotIndex) : "";
+    if (TEXT_FILE_EXTENSIONS.has(extension)) return true;
+    return typeof file.type === "string" && file.type.startsWith("text/");
+  }
+  function getFileDisplayPath(file) {
+    return fileRelativePaths.get(file) || file.webkitRelativePath || file.path || file.name || "";
+  }
+  async function openFolder() {
+    if (window.showDirectoryPicker) {
+      try {
+        const directoryHandle = await window.showDirectoryPicker();
+        const files = [];
+        await collectDirectoryFiles(directoryHandle, "", files);
+        await openFiles(files, { onlyText: true });
+        return;
+      } catch (error) {
+        if (error && error.name === "AbortError") return;
+        showToast(error.message || t("noTextFilesInFolder"));
+        return;
+      }
+    }
+    els.directoryInput.value = "";
+    els.directoryInput.click();
+  }
+  async function collectDirectoryFiles(directoryHandle, prefix, files) {
+    for await (const [name, handle] of directoryHandle.entries()) {
+      const relativePath = prefix ? `${prefix}/${name}` : name;
+      if (handle.kind === "directory") {
+        await collectDirectoryFiles(handle, relativePath, files);
+        continue;
+      }
+      if (handle.kind !== "file") continue;
+      const file = await handle.getFile();
+      fileRelativePaths.set(file, relativePath);
+      files.push(file);
     }
   }
   async function openBreakpointsFile(file) {
@@ -6431,6 +6514,12 @@
     const files = Array.from(event.target.files || []);
     void openFiles(files);
     els.fileInput.value = "";
+  });
+  els.openFolderButton.addEventListener("click", openFolder);
+  els.directoryInput.addEventListener("change", (event) => {
+    const files = Array.from(event.target.files || []);
+    void openFiles(files, { onlyText: true });
+    els.directoryInput.value = "";
   });
   els.breakpointsInput.addEventListener("change", (event) => {
     const file = event.target.files && event.target.files[0];

@@ -19,7 +19,8 @@
             hidden
           />
         </label>
-        <button id="saveFiltered" class="button" type="button" disabled>保存过滤结果</button>
+        <button id="openFolderButton" class="button" type="button">打开文件夹</button>
+        <input id="directoryInput" type="file" webkitdirectory multiple hidden />
       </div>
       <div class="header-title-row">
         <div class="header-meta">
@@ -43,10 +44,9 @@
     <main class="layout">
       <section id="fileTabs" class="file-tabs hidden" aria-label="打开的日志文件"></section>
       <section class="toolbar" aria-label="日志控制">
-        <label>
-          过滤
+        <label class="filter-control">
           <div class="filter-input-row">
-            <textarea id="filterInput" class="filter-input" rows="2" spellcheck="false" placeholder="关键字或正则；多行按任意一行命中过滤"></textarea>
+            <textarea id="filterInput" class="filter-input" rows="2" spellcheck="false" placeholder="过滤"></textarea>
             <button id="viewFilterResults" class="filter-view-button hidden" type="button">查看</button>
           </div>
         </label>
@@ -58,8 +58,7 @@
           <input id="filterCase" type="checkbox" />
           区分大小写
         </label>
-        <label>
-          搜索
+        <label class="search-control">
           <input id="searchInput" type="search" placeholder="在当前结果中查找" />
         </label>
         <button id="openSearchResults" class="button compact" type="button">搜索</button>
@@ -68,6 +67,7 @@
         <button id="jumpLineButton" class="button compact" type="button" title="跳转到指定行">Jump</button>
         <span id="matchStatus" class="status">0 个匹配</span>
         <span class="toolbar-spacer"></span>
+        <button id="saveFiltered" class="button compact" type="button" disabled>保存过滤结果</button>
         <button id="openMarkedRows" class="button compact" type="button" disabled>全部标记</button>
       </section>
 

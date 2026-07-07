@@ -12,6 +12,30 @@ const SERVICE_ENDPOINT_STORAGE_KEY = "myloggerServiceEndpoint";
 const LANGUAGE_STORAGE_KEY = "myloggerLanguage";
 const COMMON_FILTERS_STORAGE_KEY = "myloggerCommonFilters";
 const FILTER_HISTORY_STORAGE_KEY = "myloggerFilterHistory";
+const TEXT_FILE_EXTENSIONS = new Set([
+  ".log",
+  ".txt",
+  ".json",
+  ".jsonl",
+  ".md",
+  ".markdown",
+  ".csv",
+  ".tsv",
+  ".xml",
+  ".yaml",
+  ".yml",
+  ".properties",
+  ".conf",
+  ".config",
+  ".ini",
+  ".gradle",
+  ".kt",
+  ".java",
+  ".js",
+  ".ts",
+  ".html",
+  ".css",
+]);
 const TAB_STATE_KEYS = [
   "fileName",
   "filePath",
@@ -130,9 +154,12 @@ let modalVirtualScrollFrame = 0;
 let analysisRightVirtualScrollFrame = 0;
 let pendingLogRowClickTimer = 0;
 let suppressNextLogRowClick = false;
+const fileRelativePaths = new WeakMap();
 
 const els = {
   fileInput: document.getElementById("fileInput"),
+  directoryInput: document.getElementById("directoryInput"),
+  openFolderButton: document.getElementById("openFolderButton"),
   breakpointsInput: document.getElementById("breakpointsInput"),
   viewBreakpointsFile: document.getElementById("viewBreakpointsFile"),
   filterLogFileInput: document.getElementById("filterLogFileInput"),
@@ -260,11 +287,13 @@ state.activeTabId = initialTab.id;
 const I18N = {
   zh: {
     openFile: "打开文本/日志",
+    openFolder: "打开文件夹",
+    noTextFilesInFolder: "文件夹中没有找到可打开的文本文件。",
     saveFiltered: "保存过滤结果",
     help: "帮助",
     settings: "设置",
     filter: "过滤",
-    filterPlaceholder: "关键字或正则；多行按任意一行命中过滤",
+    filterPlaceholder: "过滤",
     view: "查看",
     import: "导入",
     importFilterLogFile: "导入本地过滤日志",
@@ -384,11 +413,13 @@ const I18N = {
   },
   en: {
     openFile: "Open Text/Log",
+    openFolder: "Open Folder",
+    noTextFilesInFolder: "No text files found in this folder.",
     saveFiltered: "Save Filtered",
     help: "Help",
     settings: "Settings",
     filter: "Filter",
-    filterPlaceholder: "Keyword or regex; multiple lines match any rule",
+    filterPlaceholder: "Filter",
     view: "View",
     import: "Import",
     importFilterLogFile: "Import Local Filter Logs",
@@ -797,13 +828,12 @@ function applyLanguage() {
   els.openSettingsModal.setAttribute("aria-label", t("settings"));
 
   setLeadingText(".header-actions-left label.button.primary", "openFile");
+  setText("#openFolderButton", "openFolder");
   setText("#saveFiltered", "saveFiltered");
-  setLeadingText(".toolbar > label:nth-of-type(1)", "filter");
   setPlaceholder("#filterInput", "filterPlaceholder");
   updateFilterResultsButton();
   setLeadingText(".toolbar label.checkbox:nth-of-type(2)", "regex");
   setLeadingText(".toolbar label.checkbox:nth-of-type(3)", "caseSensitive");
-  setLeadingText(".toolbar > label:nth-of-type(4)", "search");
   setPlaceholder("#searchInput", "searchPlaceholder");
   setText("#openSearchResults", "search");
   setText("#openMarkedRows", "allMarked");
@@ -1104,7 +1134,7 @@ async function openFile(file) {
   if (!state.tabs.includes(targetTab)) state.tabs.push(targetTab);
   state.activeTabId = targetTab.id;
   state.fileName = file.name;
-  state.filePath = file.path || file.name;
+  state.filePath = getFileDisplayPath(file);
   state.fileSize = file.size;
   state.rawText = text;
   state.rows = text.split(/\r?\n/).map(parseLine);
@@ -1141,9 +1171,68 @@ async function openFile(file) {
   renderFileTabs();
 }
 
-async function openFiles(files) {
-  for (const file of files) {
+async function openFiles(files, options = {}) {
+  const fileList = Array.from(files || []);
+  const filteredFiles = options.onlyText
+    ? fileList.filter(isTextFile)
+    : fileList;
+  filteredFiles.sort((left, right) => {
+    const leftPath = getFileDisplayPath(left);
+    const rightPath = getFileDisplayPath(right);
+    return leftPath.localeCompare(rightPath);
+  });
+  if (options.onlyText && !filteredFiles.length) {
+    showToast(t("noTextFilesInFolder"));
+    return;
+  }
+  for (const file of filteredFiles) {
     await openFile(file);
+  }
+}
+
+function isTextFile(file) {
+  const name = getFileDisplayPath(file).toLowerCase();
+  const basename = name.split("/").pop() || name;
+  if (!basename || basename === ".ds_store" || basename.startsWith("._")) return false;
+  const dotIndex = basename.lastIndexOf(".");
+  const extension = dotIndex >= 0 ? basename.slice(dotIndex) : "";
+  if (TEXT_FILE_EXTENSIONS.has(extension)) return true;
+  return typeof file.type === "string" && file.type.startsWith("text/");
+}
+
+function getFileDisplayPath(file) {
+  return fileRelativePaths.get(file) || file.webkitRelativePath || file.path || file.name || "";
+}
+
+async function openFolder() {
+  if (window.showDirectoryPicker) {
+    try {
+      const directoryHandle = await window.showDirectoryPicker();
+      const files = [];
+      await collectDirectoryFiles(directoryHandle, "", files);
+      await openFiles(files, { onlyText: true });
+      return;
+    } catch (error) {
+      if (error && error.name === "AbortError") return;
+      showToast(error.message || t("noTextFilesInFolder"));
+      return;
+    }
+  }
+  els.directoryInput.value = "";
+  els.directoryInput.click();
+}
+
+async function collectDirectoryFiles(directoryHandle, prefix, files) {
+  for await (const [name, handle] of directoryHandle.entries()) {
+    const relativePath = prefix ? `${prefix}/${name}` : name;
+    if (handle.kind === "directory") {
+      await collectDirectoryFiles(handle, relativePath, files);
+      continue;
+    }
+    if (handle.kind !== "file") continue;
+    const file = await handle.getFile();
+    fileRelativePaths.set(file, relativePath);
+    files.push(file);
   }
 }
 
@@ -3548,6 +3637,14 @@ els.fileInput.addEventListener("change", (event) => {
   const files = Array.from(event.target.files || []);
   void openFiles(files);
   els.fileInput.value = "";
+});
+
+els.openFolderButton.addEventListener("click", openFolder);
+
+els.directoryInput.addEventListener("change", (event) => {
+  const files = Array.from(event.target.files || []);
+  void openFiles(files, { onlyText: true });
+  els.directoryInput.value = "";
 });
 
 els.breakpointsInput.addEventListener("change", (event) => {
