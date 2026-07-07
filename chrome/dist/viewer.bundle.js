@@ -3387,6 +3387,18 @@
     editingCommonFilterId: "",
     draggedCommonFilterId: "",
     filterHistory: loadFilterHistory(),
+    compareLeftTabId: "",
+    compareRightTabId: "",
+    compareModalLeftTabId: "",
+    compareModalRightTabId: "",
+    compareSides: {
+      left: null,
+      right: null
+    },
+    compareLeftVirtualStart: 0,
+    compareLeftVirtualEnd: 0,
+    compareRightVirtualStart: 0,
+    compareRightVirtualEnd: 0,
     tabs: [],
     activeTabId: "",
     nextTabId: 1,
@@ -3446,12 +3458,20 @@
   var contextVirtualScrollFrame = 0;
   var modalVirtualScrollFrame = 0;
   var analysisRightVirtualScrollFrame = 0;
+  var compareLeftVirtualScrollFrame = 0;
+  var compareRightVirtualScrollFrame = 0;
   var pendingLogRowClickTimer = 0;
   var suppressNextLogRowClick = false;
   var fileRelativePaths = /* @__PURE__ */ new WeakMap();
   var els = {
     fileInput: document.getElementById("fileInput"),
     directoryInput: document.getElementById("directoryInput"),
+    fileMenuButton: document.getElementById("fileMenuButton"),
+    fileMenuPopover: document.getElementById("fileMenuPopover"),
+    openFileMenuItem: document.getElementById("openFileMenuItem"),
+    analysisMenuButton: document.getElementById("analysisMenuButton"),
+    analysisMenuPopover: document.getElementById("analysisMenuPopover"),
+    analysisMenuCompareAction: document.getElementById("analysisMenuCompareAction"),
     openFolderButton: document.getElementById("openFolderButton"),
     breakpointsInput: document.getElementById("breakpointsInput"),
     viewBreakpointsFile: document.getElementById("viewBreakpointsFile"),
@@ -3515,6 +3535,7 @@
     content: document.getElementById("content"),
     toggleAnalysisPanel: document.getElementById("toggleAnalysisPanel"),
     dropZone: document.getElementById("dropZone"),
+    logPanel: document.querySelector(".log-panel"),
     tableWrap: document.getElementById("tableWrap"),
     logTable: document.querySelector("#tableWrap .log-table"),
     scrollToTop: document.getElementById("scrollToTop"),
@@ -3548,6 +3569,40 @@
     analysisModalMatchStatus: document.getElementById("analysisModalMatchStatus"),
     saveAnalysisModal: document.getElementById("saveAnalysisModal"),
     closeAnalysisModal: document.getElementById("closeAnalysisModal"),
+    comparePickerModal: document.getElementById("comparePickerModal"),
+    comparePickerMeta: document.getElementById("comparePickerMeta"),
+    compareLeftTitle: document.getElementById("compareLeftTitle"),
+    compareRightTitle: document.getElementById("compareRightTitle"),
+    compareLeftList: document.getElementById("compareLeftList"),
+    compareRightList: document.getElementById("compareRightList"),
+    confirmComparePicker: document.getElementById("confirmComparePicker"),
+    cancelComparePicker: document.getElementById("cancelComparePicker"),
+    compareModal: document.getElementById("compareModal"),
+    compareModalMeta: document.getElementById("compareModalMeta"),
+    compareModalLeftTitle: document.getElementById("compareModalLeftTitle"),
+    compareModalRightTitle: document.getElementById("compareModalRightTitle"),
+    compareLeftFilter: document.getElementById("compareLeftFilter"),
+    compareLeftRegex: document.getElementById("compareLeftRegex"),
+    compareLeftCase: document.getElementById("compareLeftCase"),
+    compareLeftPrevMark: document.getElementById("compareLeftPrevMark"),
+    compareLeftNextMark: document.getElementById("compareLeftNextMark"),
+    compareLeftJumpInput: document.getElementById("compareLeftJumpInput"),
+    compareLeftJumpButton: document.getElementById("compareLeftJumpButton"),
+    compareRightFilter: document.getElementById("compareRightFilter"),
+    compareRightRegex: document.getElementById("compareRightRegex"),
+    compareRightCase: document.getElementById("compareRightCase"),
+    compareRightPrevMark: document.getElementById("compareRightPrevMark"),
+    compareRightNextMark: document.getElementById("compareRightNextMark"),
+    compareRightJumpInput: document.getElementById("compareRightJumpInput"),
+    compareRightJumpButton: document.getElementById("compareRightJumpButton"),
+    compareLeftWrap: document.getElementById("compareLeftWrap"),
+    compareRightWrap: document.getElementById("compareRightWrap"),
+    compareLeftTable: document.getElementById("compareLeftTable"),
+    compareRightTable: document.getElementById("compareRightTable"),
+    compareLeftBody: document.getElementById("compareLeftBody"),
+    compareRightBody: document.getElementById("compareRightBody"),
+    closeCompareModal: document.getElementById("closeCompareModal"),
+    compareToast: document.getElementById("compareToast"),
     breakpointsModal: document.getElementById("breakpointsModal"),
     breakpointsModalMeta: document.getElementById("breakpointsModalMeta"),
     breakpointsModalBody: document.getElementById("breakpointsModalBody"),
@@ -3577,6 +3632,8 @@
   state.activeTabId = initialTab.id;
   var I18N = {
     zh: {
+      fileMenu: "\u6587\u4EF6",
+      analysisMenu: "\u5206\u6790",
       openFile: "\u6253\u5F00\u6587\u672C/\u65E5\u5FD7",
       openFolder: "\u6253\u5F00\u6587\u4EF6\u5939",
       noTextFilesInFolder: "\u6587\u4EF6\u5939\u4E2D\u6CA1\u6709\u627E\u5230\u53EF\u6253\u5F00\u7684\u6587\u672C\u6587\u4EF6\u3002",
@@ -3587,6 +3644,15 @@
       filterPlaceholder: "\u8FC7\u6EE4",
       view: "\u67E5\u770B",
       import: "\u5BFC\u5165",
+      compare: "\u6BD4\u8F83",
+      compareLogs: "\u65E5\u5FD7\u6BD4\u8F83",
+      chooseCompareLogs: "\u9009\u62E9\u6BD4\u8F83\u65E5\u5FD7",
+      chooseTwoDifferentLogs: "\u8BF7\u9009\u62E9\u4E24\u4E2A\u4E0D\u540C\u7684\u65E5\u5FD7\u6587\u4EF6\u3002",
+      needTwoLogsToCompare: "\u81F3\u5C11\u9700\u8981\u6253\u5F00\u4E24\u4E2A\u65E5\u5FD7\u6587\u4EF6\u624D\u80FD\u6BD4\u8F83\u3002",
+      cannotCompareSameLog: "\u5DE6\u53F3\u4E24\u4FA7\u4E0D\u80FD\u9009\u62E9\u540C\u4E00\u4E2A\u65E5\u5FD7\u3002",
+      leftLog: "\u5DE6\u4FA7\u65E5\u5FD7",
+      rightLog: "\u53F3\u4FA7\u65E5\u5FD7",
+      cancel: "\u53D6\u6D88",
       importFilterLogFile: "\u5BFC\u5165\u672C\u5730\u8FC7\u6EE4\u65E5\u5FD7",
       filterHistory: "\u5386\u53F2\u8FC7\u6EE4\u8BB0\u5F55",
       filterHistoryEmpty: "\u6682\u65E0\u5386\u53F2\u8FC7\u6EE4\u8BB0\u5F55\u3002",
@@ -3703,6 +3769,8 @@
       languageEn: "English"
     },
     en: {
+      fileMenu: "File",
+      analysisMenu: "Analysis",
       openFile: "Open Text/Log",
       openFolder: "Open Folder",
       noTextFilesInFolder: "No text files found in this folder.",
@@ -3713,6 +3781,15 @@
       filterPlaceholder: "Filter",
       view: "View",
       import: "Import",
+      compare: "Compare",
+      compareLogs: "Log Compare",
+      chooseCompareLogs: "Choose Logs To Compare",
+      chooseTwoDifferentLogs: "Choose two different log files.",
+      needTwoLogsToCompare: "Open at least two log files to compare.",
+      cannotCompareSameLog: "Left and right cannot use the same log.",
+      leftLog: "Left Log",
+      rightLog: "Right Log",
+      cancel: "Cancel",
       importFilterLogFile: "Import Local Filter Logs",
       filterHistory: "Filter History",
       filterHistoryEmpty: "No filter history.",
@@ -3970,6 +4047,8 @@
     closeSearchModal();
     closeContextModal();
     closeAnalysisModal();
+    closeComparePicker();
+    closeCompareModal();
     closeTimeFilterPopover();
     closeLevelFilterPopover();
     closeTagFilterPopover();
@@ -3994,6 +4073,8 @@
       closeSearchModal();
       closeContextModal();
       closeAnalysisModal();
+      closeComparePicker();
+      closeCompareModal();
       restoreActiveTab();
     } else {
       renderFileTabs();
@@ -4089,8 +4170,11 @@
     els.openHelpModal.setAttribute("aria-label", t("help"));
     els.openSettingsModal.title = t("settings");
     els.openSettingsModal.setAttribute("aria-label", t("settings"));
-    setLeadingText(".header-actions-left label.button.primary", "openFile");
+    setText("#fileMenuButton", "fileMenu");
+    setText("#analysisMenuButton", "analysisMenu");
+    setText("#openFileMenuItem", "openFile");
     setText("#openFolderButton", "openFolder");
+    setText("#analysisMenuCompareAction", "compare");
     setText("#saveFiltered", "saveFiltered");
     setPlaceholder("#filterInput", "filterPlaceholder");
     updateFilterResultsButton();
@@ -4149,6 +4233,34 @@
     setText("#settingsAddCommonFilter", "add");
     setText(".settings-section:nth-of-type(3) h3", "filterHistory");
     setText("#clearFilterHistory", "clear");
+    setText("#comparePickerTitle", "chooseCompareLogs");
+    setText("#comparePickerMeta", "chooseTwoDifferentLogs");
+    setText("#compareLeftTitle", "leftLog");
+    setText("#compareRightTitle", "rightLog");
+    setText("#confirmComparePicker", "compare");
+    setText("#cancelComparePicker", "cancel");
+    setText("#compareModalTitle", "compareLogs");
+    setText("#compareModalLeftTitle", "leftLog");
+    setText("#compareModalRightTitle", "rightLog");
+    setText("#closeCompareModal", "close");
+    setPlaceholder("#compareLeftFilter", "filterPlaceholder");
+    setPlaceholder("#compareRightFilter", "filterPlaceholder");
+    setLeadingText("#compareModal .compare-log-pane:nth-of-type(1) .compact-checkbox:nth-of-type(1)", "regex");
+    setLeadingText("#compareModal .compare-log-pane:nth-of-type(1) .compact-checkbox:nth-of-type(2)", "caseSensitive");
+    setLeadingText("#compareModal .compare-log-pane:nth-of-type(2) .compact-checkbox:nth-of-type(1)", "regex");
+    setLeadingText("#compareModal .compare-log-pane:nth-of-type(2) .compact-checkbox:nth-of-type(2)", "caseSensitive");
+    setPlaceholder("#compareLeftJumpInput", "jumpLinePlaceholder");
+    setPlaceholder("#compareRightJumpInput", "jumpLinePlaceholder");
+    setText("#compareLeftJumpButton", "jump");
+    setText("#compareRightJumpButton", "jump");
+    for (const button of [els.compareLeftPrevMark, els.compareRightPrevMark]) {
+      button.title = t("prevMarked");
+      button.setAttribute("aria-label", t("prevMarked"));
+    }
+    for (const button of [els.compareLeftNextMark, els.compareRightNextMark]) {
+      button.title = t("nextMarked");
+      button.setAttribute("aria-label", t("nextMarked"));
+    }
     updateAnalysisToggleText();
     document.querySelector(".toolbar")?.setAttribute("aria-label", t("logControls"));
     document.querySelector(".log-panel")?.setAttribute("aria-label", t("logTable"));
@@ -4475,6 +4587,7 @@
     }) || null;
   }
   async function openFolder() {
+    closeTopMenus();
     if (window.showDirectoryPicker) {
       try {
         const directoryHandle = await window.showDirectoryPicker();
@@ -4544,6 +4657,7 @@
     els.analyzeButton.disabled = !state.breakpointsContent;
   }
   function updateFileMeta() {
+    els.logPanel.classList.toggle("log-has-file", state.rows.length > 0);
     if (!state.fileName) {
       els.fileMeta.textContent = "";
       return;
@@ -4611,7 +4725,8 @@
   }
   function updateFilterResultsButton() {
     els.viewFilterResults.classList.remove("hidden");
-    els.viewFilterResults.textContent = els.filterInput.value.trim() ? t("view") : t("import");
+    const key = els.filterInput.value.trim() ? "view" : "import";
+    els.viewFilterResults.textContent = t(key);
   }
   function updateLevelFilterOptions() {
     const levels = Array.from(new Set(state.rows.map((row) => row.level || "").filter(Boolean)));
@@ -4928,9 +5043,15 @@
     return els.filterInput.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
   }
   function findMatchingFilterRule(row, filterRules) {
+    return findMatchingFilterRuleWithOptions(row, filterRules, {
+      regex: els.filterRegex.checked,
+      caseSensitive: els.filterCase.checked
+    });
+  }
+  function findMatchingFilterRuleWithOptions(row, filterRules, options) {
     if (!filterRules.length) return "";
-    if (els.filterRegex.checked) {
-      const flags = els.filterCase.checked ? "" : "i";
+    if (options.regex) {
+      const flags = options.caseSensitive ? "" : "i";
       for (const rule of filterRules) {
         try {
           if (new RegExp(rule, flags).test(row.searchable)) return rule;
@@ -4940,8 +5061,8 @@
       }
       return "";
     }
-    const haystack = els.filterCase.checked ? row.searchable : row.searchable.toLowerCase();
-    return filterRules.find((rule) => haystack.includes(els.filterCase.checked ? rule : rule.toLowerCase())) || "";
+    const haystack = options.caseSensitive ? row.searchable : row.searchable.toLowerCase();
+    return filterRules.find((rule) => haystack.includes(options.caseSensitive ? rule : rule.toLowerCase())) || "";
   }
   function spacerRow(height) {
     const tr = document.createElement("tr");
@@ -5532,6 +5653,333 @@
   }
   function closeAnalysisModal() {
     els.analysisModal.classList.add("hidden");
+  }
+  function getLoadedLogTabs() {
+    return state.tabs.filter((tab) => tab.fileName && Array.isArray(tab.rows) && tab.rows.length);
+  }
+  function openComparePicker() {
+    closeTopMenus();
+    const tabs = getLoadedLogTabs();
+    if (tabs.length < 2) {
+      showToast(t("needTwoLogsToCompare"));
+      return;
+    }
+    const activeTab = tabs.find((tab) => tab.id === state.activeTabId) || tabs[0];
+    const rightTab = tabs.find((tab) => tab.id !== activeTab.id) || tabs[1];
+    state.compareLeftTabId = activeTab.id;
+    state.compareRightTabId = rightTab.id;
+    renderComparePicker();
+    els.comparePickerModal.classList.remove("hidden");
+  }
+  function closeComparePicker() {
+    els.comparePickerModal.classList.add("hidden");
+  }
+  function renderComparePicker() {
+    const tabs = getLoadedLogTabs();
+    els.compareLeftList.textContent = "";
+    els.compareRightList.textContent = "";
+    for (const tab of tabs) {
+      els.compareLeftList.append(createComparePickerRow(tab, "left"));
+      els.compareRightList.append(createComparePickerRow(tab, "right"));
+    }
+  }
+  function createComparePickerRow(tab, side) {
+    const selectedId = side === "left" ? state.compareLeftTabId : state.compareRightTabId;
+    const otherId = side === "left" ? state.compareRightTabId : state.compareLeftTabId;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "compare-picker-row";
+    button.classList.toggle("selected", selectedId === tab.id);
+    button.classList.toggle("conflict", otherId === tab.id);
+    button.title = tab.filePath || tab.fileName;
+    const title = document.createElement("strong");
+    title.textContent = tab.fileName;
+    const meta = document.createElement("span");
+    meta.textContent = `${tab.rows.length.toLocaleString()} ${state.language === "en" ? "rows" : "\u884C"} \xB7 ${formatBytes(tab.fileSize)}`;
+    button.append(title, meta);
+    button.addEventListener("click", () => selectCompareTab(side, tab.id));
+    return button;
+  }
+  function selectCompareTab(side, tabId) {
+    if (side === "left" && tabId === state.compareRightTabId) {
+      showToast(t("cannotCompareSameLog"));
+      return;
+    }
+    if (side === "right" && tabId === state.compareLeftTabId) {
+      showToast(t("cannotCompareSameLog"));
+      return;
+    }
+    if (side === "left") {
+      state.compareLeftTabId = tabId;
+    } else {
+      state.compareRightTabId = tabId;
+    }
+    renderComparePicker();
+  }
+  function confirmComparePicker() {
+    const leftTab = state.tabs.find((tab) => tab.id === state.compareLeftTabId);
+    const rightTab = state.tabs.find((tab) => tab.id === state.compareRightTabId);
+    if (!leftTab || !rightTab || leftTab.id === rightTab.id) {
+      showToast(t("cannotCompareSameLog"));
+      return;
+    }
+    closeComparePicker();
+    openCompareModal(leftTab, rightTab);
+  }
+  function openCompareModal(leftTab, rightTab) {
+    state.compareModalLeftTabId = leftTab.id;
+    state.compareModalRightTabId = rightTab.id;
+    state.compareSides.left = createCompareSideState(leftTab);
+    state.compareSides.right = createCompareSideState(rightTab);
+    resetCompareControls("left");
+    resetCompareControls("right");
+    els.compareModalMeta.textContent = `${leftTab.fileName} \xB7 ${leftTab.rows.length.toLocaleString()} ${state.language === "en" ? "rows" : "\u884C"}  |  ${rightTab.fileName} \xB7 ${rightTab.rows.length.toLocaleString()} ${state.language === "en" ? "rows" : "\u884C"}`;
+    els.compareModalLeftTitle.textContent = leftTab.fileName;
+    els.compareModalRightTitle.textContent = rightTab.fileName;
+    updateLogTableWidthForTables(leftTab.rows, [els.compareLeftTable]);
+    updateLogTableWidthForTables(rightTab.rows, [els.compareRightTable]);
+    els.compareLeftWrap.scrollTop = 0;
+    els.compareRightWrap.scrollTop = 0;
+    els.compareModal.classList.remove("hidden");
+    renderCompareRows("left");
+    renderCompareRows("right");
+  }
+  function closeCompareModal() {
+    els.compareModal.classList.add("hidden");
+    els.compareToast.classList.remove("show");
+    state.compareModalLeftTabId = "";
+    state.compareModalRightTabId = "";
+    state.compareSides.left = null;
+    state.compareSides.right = null;
+    els.compareLeftBody.textContent = "";
+    els.compareRightBody.textContent = "";
+  }
+  function requestCloseCompareModal() {
+    const message = state.language === "en" ? "Close the log comparison window?" : "\u786E\u5B9A\u5173\u95ED\u65E5\u5FD7\u6BD4\u8F83\u7A97\u53E3\u5417\uFF1F";
+    if (!window.confirm(message)) return;
+    closeCompareModal();
+  }
+  function createCompareSideState(tab) {
+    return {
+      tabId: tab.id,
+      filterText: "",
+      filterRegex: false,
+      filterCase: false,
+      visibleRows: tab.rows.slice(),
+      markedLines: /* @__PURE__ */ new Set(),
+      activeMarkedLine: null
+    };
+  }
+  function getCompareSideState(side) {
+    return state.compareSides[side];
+  }
+  function getCompareSideEls(side) {
+    return side === "left" ? {
+      filter: els.compareLeftFilter,
+      regex: els.compareLeftRegex,
+      caseSensitive: els.compareLeftCase,
+      prevMark: els.compareLeftPrevMark,
+      nextMark: els.compareLeftNextMark,
+      jumpInput: els.compareLeftJumpInput,
+      wrap: els.compareLeftWrap,
+      table: els.compareLeftTable
+    } : {
+      filter: els.compareRightFilter,
+      regex: els.compareRightRegex,
+      caseSensitive: els.compareRightCase,
+      prevMark: els.compareRightPrevMark,
+      nextMark: els.compareRightNextMark,
+      jumpInput: els.compareRightJumpInput,
+      wrap: els.compareRightWrap,
+      table: els.compareRightTable
+    };
+  }
+  function resetCompareControls(side) {
+    const sideEls = getCompareSideEls(side);
+    sideEls.filter.value = "";
+    sideEls.regex.checked = false;
+    sideEls.caseSensitive.checked = false;
+    sideEls.jumpInput.value = "";
+    updateCompareMarkedButtons(side);
+  }
+  function getCompareTab(side) {
+    const tabId = side === "left" ? state.compareModalLeftTabId : state.compareModalRightTabId;
+    return state.tabs.find((tab) => tab.id === tabId);
+  }
+  function getCompareFilterRules(side) {
+    return getCompareSideEls(side).filter.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
+  }
+  function applyCompareFilter(side) {
+    const compareState = getCompareSideState(side);
+    const tab = getCompareTab(side);
+    if (!compareState || !tab) return;
+    const sideEls = getCompareSideEls(side);
+    compareState.filterText = sideEls.filter.value;
+    compareState.filterRegex = sideEls.regex.checked;
+    compareState.filterCase = sideEls.caseSensitive.checked;
+    const rules = getCompareFilterRules(side);
+    const matcher = createMatcher(rules, {
+      regex: compareState.filterRegex,
+      caseSensitive: compareState.filterCase
+    });
+    compareState.visibleRows = matcher ? tab.rows.filter((row) => matcher(row.searchable)) : tab.rows.slice();
+    if (compareState.activeMarkedLine != null && !compareState.visibleRows.some((row) => row.sourceLine === compareState.activeMarkedLine)) {
+      compareState.activeMarkedLine = null;
+    }
+    updateLogTableWidthForTables(compareState.visibleRows, [sideEls.table]);
+    sideEls.wrap.scrollTop = 0;
+    renderCompareRows(side);
+    updateCompareMarkedButtons(side);
+  }
+  function renderCompareRows(side) {
+    const tab = getCompareTab(side);
+    const compareState = getCompareSideState(side);
+    if (!tab || !compareState) return;
+    const wrap = side === "left" ? els.compareLeftWrap : els.compareRightWrap;
+    const body = side === "left" ? els.compareLeftBody : els.compareRightBody;
+    const rows = compareState.visibleRows;
+    const viewportHeight = wrap.clientHeight || 1;
+    const scrollTop = wrap.scrollTop;
+    const start = Math.max(0, Math.floor(scrollTop / LOG_ROW_HEIGHT) - LOG_OVERSCAN_ROWS);
+    const end = Math.min(rows.length, Math.ceil((scrollTop + viewportHeight) / LOG_ROW_HEIGHT) + LOG_OVERSCAN_ROWS);
+    if (side === "left") {
+      state.compareLeftVirtualStart = start;
+      state.compareLeftVirtualEnd = end;
+    } else {
+      state.compareRightVirtualStart = start;
+      state.compareRightVirtualEnd = end;
+    }
+    const fragment = document.createDocumentFragment();
+    body.textContent = "";
+    if (start > 0) {
+      fragment.appendChild(spacerRow(start * LOG_ROW_HEIGHT));
+    }
+    const filterRules = getCompareFilterRules(side);
+    for (let index = start; index < end; index += 1) {
+      fragment.appendChild(createCompareLogRow(rows[index], side, getCompareRowHighlight(rows[index], side, filterRules)));
+    }
+    const bottomRows = rows.length - end;
+    if (bottomRows > 0) {
+      fragment.appendChild(spacerRow(bottomRows * LOG_ROW_HEIGHT));
+    }
+    body.appendChild(fragment);
+  }
+  function getCompareRowHighlight(row, side, filterRules) {
+    const compareState = getCompareSideState(side);
+    if (!compareState) return "";
+    const matchedRule = findMatchingFilterRuleWithOptions(row, filterRules, {
+      regex: compareState.filterRegex,
+      caseSensitive: compareState.filterCase
+    });
+    return matchedRule ? { query: matchedRule, regex: compareState.filterRegex, caseSensitive: compareState.filterCase } : "";
+  }
+  function createCompareLogRow(row, side, activeSearch) {
+    const compareState = getCompareSideState(side);
+    const tr = document.createElement("tr");
+    tr.title = "\u53CC\u51FB\u590D\u5236\u5F53\u524D\u884C";
+    if (compareState?.markedLines.has(row.sourceLine)) {
+      tr.classList.add("marked-row");
+    }
+    if (compareState?.activeMarkedLine === row.sourceLine) {
+      tr.classList.add("active-match");
+    }
+    const lineCell = cell(row.sourceLine, "line-col");
+    lineCell.title = "\u70B9\u51FB\u6807\u8BB0\u6216\u53D6\u6D88\u6807\u8BB0\u5F53\u524D\u884C";
+    lineCell.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleCompareMarkedLine(side, row.sourceLine);
+    });
+    tr.append(
+      lineCell,
+      cell(highlight(row.time, activeSearch), "time-col"),
+      cell(row.level, `level-col level-${row.level || "none"}`),
+      cell(highlight(row.tag, activeSearch), "tag-col"),
+      cell(highlight(row.message, activeSearch), "message-col")
+    );
+    tr.addEventListener("dblclick", () => copyLine(row.raw));
+    return tr;
+  }
+  function toggleCompareMarkedLine(side, sourceLine) {
+    const compareState = getCompareSideState(side);
+    if (!compareState) return;
+    if (compareState.markedLines.has(sourceLine)) {
+      compareState.markedLines.delete(sourceLine);
+      if (compareState.activeMarkedLine === sourceLine) {
+        compareState.activeMarkedLine = null;
+      }
+    } else {
+      compareState.markedLines.add(sourceLine);
+      compareState.activeMarkedLine = sourceLine;
+    }
+    renderCompareRows(side);
+    updateCompareMarkedButtons(side);
+  }
+  function getVisibleCompareMarkedRows(side) {
+    const compareState = getCompareSideState(side);
+    if (!compareState) return [];
+    return compareState.visibleRows.filter((row) => compareState.markedLines.has(row.sourceLine));
+  }
+  function goCompareMarkedLine(side, direction) {
+    const compareState = getCompareSideState(side);
+    if (!compareState) return;
+    const markedRows = getVisibleCompareMarkedRows(side);
+    if (!markedRows.length) return;
+    const currentIndex = compareState.activeMarkedLine == null ? -1 : markedRows.findIndex((row) => row.sourceLine === compareState.activeMarkedLine);
+    const nextIndex = currentIndex < 0 ? direction > 0 ? 0 : markedRows.length - 1 : (currentIndex + direction + markedRows.length) % markedRows.length;
+    const targetRow = markedRows[nextIndex];
+    const visibleIndex = compareState.visibleRows.indexOf(targetRow);
+    if (visibleIndex < 0) return;
+    compareState.activeMarkedLine = targetRow.sourceLine;
+    scrollCompareRowIndexIntoView(side, visibleIndex);
+    renderCompareRows(side);
+    updateCompareMarkedButtons(side);
+  }
+  function confirmCompareJump(side) {
+    const compareState = getCompareSideState(side);
+    if (!compareState) return;
+    const sideEls = getCompareSideEls(side);
+    const sourceLine = Number.parseInt(sideEls.jumpInput.value, 10);
+    if (!Number.isFinite(sourceLine) || sourceLine < 1) {
+      showToast(state.language === "en" ? "Enter a valid line number." : "\u8BF7\u8F93\u5165\u6709\u6548\u884C\u53F7\u3002");
+      return;
+    }
+    const visibleIndex = compareState.visibleRows.findIndex((row) => row.sourceLine === sourceLine);
+    if (visibleIndex < 0) {
+      showToast(state.language === "en" ? "That line is not visible in the current filter." : "\u5F53\u524D\u8FC7\u6EE4\u7ED3\u679C\u4E2D\u6CA1\u6709\u8BE5\u884C\u3002");
+      return;
+    }
+    compareState.activeMarkedLine = sourceLine;
+    scrollCompareRowIndexIntoView(side, visibleIndex);
+    renderCompareRows(side);
+    updateCompareMarkedButtons(side);
+  }
+  function scrollCompareRowIndexIntoView(side, index) {
+    const wrap = side === "left" ? els.compareLeftWrap : els.compareRightWrap;
+    const viewportHeight = wrap.clientHeight || 0;
+    wrap.scrollTop = Math.max(0, index * LOG_ROW_HEIGHT - Math.max(0, viewportHeight - LOG_ROW_HEIGHT) / 2);
+  }
+  function updateCompareMarkedButtons(side) {
+    const hasMarkedRows = getVisibleCompareMarkedRows(side).length > 0;
+    const sideEls = getCompareSideEls(side);
+    for (const button of [sideEls.prevMark, sideEls.nextMark]) {
+      button.disabled = !hasMarkedRows;
+      button.classList.toggle("available", hasMarkedRows);
+    }
+  }
+  function scheduleCompareRowsRender(side) {
+    if (side === "left") {
+      if (compareLeftVirtualScrollFrame) return;
+      compareLeftVirtualScrollFrame = window.requestAnimationFrame(() => {
+        compareLeftVirtualScrollFrame = 0;
+        renderCompareRows("left");
+      });
+      return;
+    }
+    if (compareRightVirtualScrollFrame) return;
+    compareRightVirtualScrollFrame = window.requestAnimationFrame(() => {
+      compareRightVirtualScrollFrame = 0;
+      renderCompareRows("right");
+    });
   }
   function openImportModal() {
     els.importModal.classList.remove("hidden");
@@ -6497,10 +6945,20 @@
     els.matchStatus.textContent = state.language === "en" ? `${matchedRows.toLocaleString()} matched rows \xB7 ${total}` : `${matchedRows.toLocaleString()} \u884C\u547D\u4E2D \xB7 ${total}`;
   }
   function showToast(message) {
+    if (!els.compareModal.classList.contains("hidden")) {
+      showCompareToast(message);
+      return;
+    }
     els.toast.textContent = message;
     els.toast.classList.add("show");
     window.clearTimeout(showToast.timer);
     showToast.timer = window.setTimeout(() => els.toast.classList.remove("show"), 1800);
+  }
+  function showCompareToast(message) {
+    els.compareToast.textContent = message;
+    els.compareToast.classList.add("show");
+    window.clearTimeout(showCompareToast.timer);
+    showCompareToast.timer = window.setTimeout(() => els.compareToast.classList.remove("show"), 1800);
   }
   function formatBytes(bytes) {
     if (bytes < 1024) return `${bytes} B`;
@@ -6538,6 +6996,28 @@
     els.languageButton.setAttribute("aria-expanded", "false");
     els.languageButton.classList.remove("active");
   }
+  function toggleTopMenu(menuName, event) {
+    event.stopPropagation();
+    openTopMenu(menuName);
+  }
+  function openTopMenu(menuName) {
+    const button = menuName === "file" ? els.fileMenuButton : els.analysisMenuButton;
+    const popover = menuName === "file" ? els.fileMenuPopover : els.analysisMenuPopover;
+    closeTopMenus();
+    popover.classList.remove("hidden");
+    button.classList.add("active");
+    button.setAttribute("aria-expanded", "true");
+  }
+  function closeTopMenus() {
+    for (const [button, popover] of [
+      [els.fileMenuButton, els.fileMenuPopover],
+      [els.analysisMenuButton, els.analysisMenuPopover]
+    ]) {
+      popover.classList.add("hidden");
+      button.classList.remove("active");
+      button.setAttribute("aria-expanded", "false");
+    }
+  }
   function setLanguage(language) {
     if (language !== "zh" && language !== "en") return;
     state.language = language;
@@ -6554,7 +7034,21 @@
     void openFiles(files);
     els.fileInput.value = "";
   });
+  els.fileMenuButton.addEventListener("click", (event) => toggleTopMenu("file", event));
+  els.analysisMenuButton.addEventListener("click", (event) => toggleTopMenu("analysis", event));
+  els.fileMenuButton.parentElement.addEventListener("mouseenter", () => openTopMenu("file"));
+  els.fileMenuButton.parentElement.addEventListener("mouseleave", closeTopMenus);
+  els.analysisMenuButton.parentElement.addEventListener("mouseenter", () => openTopMenu("analysis"));
+  els.analysisMenuButton.parentElement.addEventListener("mouseleave", closeTopMenus);
+  els.fileMenuPopover.addEventListener("click", (event) => event.stopPropagation());
+  els.analysisMenuPopover.addEventListener("click", (event) => event.stopPropagation());
+  document.addEventListener("click", closeTopMenus);
+  els.openFileMenuItem.addEventListener("click", () => {
+    closeTopMenus();
+    els.fileInput.click();
+  });
   els.openFolderButton.addEventListener("click", openFolder);
+  els.analysisMenuCompareAction.addEventListener("click", openComparePicker);
   els.directoryInput.addEventListener("change", (event) => {
     const files = Array.from(event.target.files || []);
     void openFiles(files, { onlyText: true });
@@ -6683,6 +7177,15 @@
   });
   els.settingsAddCommonFilter.addEventListener("click", () => openCommonFilterModal());
   els.clearFilterHistory.addEventListener("click", clearFilterHistory);
+  els.comparePickerModal.addEventListener("click", (event) => {
+    if (event.target === els.comparePickerModal) closeComparePicker();
+  });
+  els.cancelComparePicker.addEventListener("click", closeComparePicker);
+  els.confirmComparePicker.addEventListener("click", confirmComparePicker);
+  els.compareModal.addEventListener("click", (event) => {
+    if (event.target === els.compareModal) requestCloseCompareModal();
+  });
+  els.closeCompareModal.addEventListener("click", requestCloseCompareModal);
   els.saveAnalysisModal.addEventListener("click", saveAnalysisModal);
   els.analysisModalSearchInput.addEventListener("input", runAnalysisModalSearch);
   els.analysisModalPrevMatch.addEventListener("click", () => goAnalysisModalMatch(-1));
@@ -6704,6 +7207,30 @@
   els.tableWrap.addEventListener("scroll", closeJumpLinePopover);
   els.searchTableWrap.addEventListener("scroll", scheduleSearchModalRowsRender);
   els.contextTableWrap.addEventListener("scroll", scheduleContextRowsRender);
+  els.compareLeftWrap.addEventListener("scroll", () => scheduleCompareRowsRender("left"));
+  els.compareRightWrap.addEventListener("scroll", () => scheduleCompareRowsRender("right"));
+  els.compareLeftFilter.addEventListener("input", () => applyCompareFilter("left"));
+  els.compareRightFilter.addEventListener("input", () => applyCompareFilter("right"));
+  els.compareLeftRegex.addEventListener("change", () => applyCompareFilter("left"));
+  els.compareRightRegex.addEventListener("change", () => applyCompareFilter("right"));
+  els.compareLeftCase.addEventListener("change", () => applyCompareFilter("left"));
+  els.compareRightCase.addEventListener("change", () => applyCompareFilter("right"));
+  els.compareLeftPrevMark.addEventListener("click", () => goCompareMarkedLine("left", -1));
+  els.compareLeftNextMark.addEventListener("click", () => goCompareMarkedLine("left", 1));
+  els.compareRightPrevMark.addEventListener("click", () => goCompareMarkedLine("right", -1));
+  els.compareRightNextMark.addEventListener("click", () => goCompareMarkedLine("right", 1));
+  els.compareLeftJumpButton.addEventListener("click", () => confirmCompareJump("left"));
+  els.compareRightJumpButton.addEventListener("click", () => confirmCompareJump("right"));
+  els.compareLeftJumpInput.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    confirmCompareJump("left");
+  });
+  els.compareRightJumpInput.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    confirmCompareJump("right");
+  });
   els.scrollToTop.addEventListener("click", () => scrollMainLogTo("top"));
   els.scrollToBottom.addEventListener("click", () => scrollMainLogTo("bottom"));
   els.saveFiltered.addEventListener("click", saveFiltered);
@@ -6734,6 +7261,12 @@
     }
     if (event.key === "Escape" && !els.analysisModal.classList.contains("hidden")) {
       closeAnalysisModal();
+    }
+    if (event.key === "Escape" && !els.comparePickerModal.classList.contains("hidden")) {
+      closeComparePicker();
+    }
+    if (event.key === "Escape" && !els.compareModal.classList.contains("hidden")) {
+      requestCloseCompareModal();
     }
     if (event.key === "Escape" && !els.importModal.classList.contains("hidden")) {
       closeImportModal();

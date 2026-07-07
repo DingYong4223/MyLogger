@@ -9,22 +9,30 @@
   <body>
     <header class="app-header">
       <div class="header-actions header-actions-left">
-        <label class="button primary">
-          打开文本/日志
-          <input
-            id="fileInput"
-            type="file"
-            multiple
-            accept=".log,.txt,.json,.jsonl,.md,.markdown,.csv,.tsv,.xml,.yaml,.yml,.properties,.conf,.config,.ini,.gradle,.kt,.java,.js,.ts,.html,.css,text/plain,text/markdown,application/json,application/x-ndjson,text/csv,text/tab-separated-values,application/xml,text/xml,application/yaml,*/*"
-            hidden
-          />
-        </label>
-        <button id="openFolderButton" class="button" type="button">打开文件夹</button>
+        <div class="top-menu">
+          <button id="fileMenuButton" class="top-menu-button" type="button" aria-haspopup="true" aria-expanded="false">文件</button>
+          <div id="fileMenuPopover" class="top-menu-popover hidden">
+            <button id="openFileMenuItem" type="button">打开文本/日志</button>
+            <button id="openFolderButton" type="button">打开文件夹</button>
+          </div>
+        </div>
+        <div class="top-menu">
+          <button id="analysisMenuButton" class="top-menu-button" type="button" aria-haspopup="true" aria-expanded="false">分析</button>
+          <div id="analysisMenuPopover" class="top-menu-popover hidden">
+            <button id="analysisMenuCompareAction" type="button">比较</button>
+          </div>
+        </div>
+        <input
+          id="fileInput"
+          type="file"
+          multiple
+          accept=".log,.txt,.json,.jsonl,.md,.markdown,.csv,.tsv,.xml,.yaml,.yml,.properties,.conf,.config,.ini,.gradle,.kt,.java,.js,.ts,.html,.css,text/plain,text/markdown,application/json,application/x-ndjson,text/csv,text/tab-separated-values,application/xml,text/xml,application/yaml,*/*"
+          hidden
+        />
         <input id="directoryInput" type="file" webkitdirectory multiple hidden />
       </div>
       <div class="header-title-row">
         <div class="header-meta">
-          <p id="fileMeta"></p>
           <p id="breakpointsMeta"></p>
         </div>
       </div>
@@ -114,6 +122,9 @@
               <tbody id="logBody"></tbody>
             </table>
           </div>
+          <footer class="log-status-bar">
+            <p id="fileMeta"></p>
+          </footer>
         </section>
       </section>
     </main>
@@ -207,6 +218,114 @@
           </div>
         </header>
         <div id="analysisModalBody" class="analysis-modal-body"></div>
+      </section>
+    </div>
+
+    <div id="comparePickerModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="comparePickerTitle">
+      <section class="modal-panel compare-picker-panel">
+        <header class="modal-header">
+          <div>
+            <h2 id="comparePickerTitle">选择比较日志</h2>
+            <p id="comparePickerMeta">请选择两个不同的日志文件。</p>
+          </div>
+        </header>
+        <div class="compare-picker-body">
+          <div class="compare-picker-lists">
+            <section>
+              <h3 id="compareLeftTitle">左侧日志</h3>
+              <div id="compareLeftList" class="compare-picker-list"></div>
+            </section>
+            <section>
+              <h3 id="compareRightTitle">右侧日志</h3>
+              <div id="compareRightList" class="compare-picker-list"></div>
+            </section>
+          </div>
+          <div class="compare-picker-actions">
+            <button id="confirmComparePicker" class="button primary" type="button">比较</button>
+            <button id="cancelComparePicker" class="button" type="button">取消</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div id="compareModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="compareModalTitle">
+      <section class="modal-panel compare-modal-panel">
+        <header class="modal-header">
+          <div>
+            <h2 id="compareModalTitle">日志比较</h2>
+            <p id="compareModalMeta">暂无日志。</p>
+          </div>
+          <div class="header-actions">
+            <button id="closeCompareModal" class="button" type="button">关闭</button>
+          </div>
+        </header>
+        <div class="compare-modal-body">
+          <section class="compare-log-pane">
+            <h3 id="compareModalLeftTitle">左侧日志</h3>
+            <div class="compare-pane-toolbar">
+              <textarea id="compareLeftFilter" class="compare-filter-input" rows="2" spellcheck="false" placeholder="过滤"></textarea>
+              <label class="checkbox compact-checkbox">
+                <input id="compareLeftRegex" type="checkbox" />
+                正则
+              </label>
+              <label class="checkbox compact-checkbox">
+                <input id="compareLeftCase" type="checkbox" />
+                区分大小写
+              </label>
+              <button id="compareLeftPrevMark" class="button compact mark-jump" type="button" disabled title="跳转到上一个标记">↑</button>
+              <button id="compareLeftNextMark" class="button compact mark-jump" type="button" disabled title="跳转到下一个标记">↓</button>
+              <input id="compareLeftJumpInput" class="compare-jump-input" type="number" min="1" step="1" placeholder="行号" />
+              <button id="compareLeftJumpButton" class="button compact" type="button">Jump</button>
+            </div>
+            <div id="compareLeftWrap" class="modal-table-wrap compare-table-wrap">
+              <table id="compareLeftTable" class="log-table">
+                <thead>
+                  <tr>
+                    <th class="line-col">行号</th>
+                    <th class="time-col">时间</th>
+                    <th class="level-col">级别</th>
+                    <th class="tag-col">Tag</th>
+                    <th class="message-col">内容</th>
+                  </tr>
+                </thead>
+                <tbody id="compareLeftBody"></tbody>
+              </table>
+            </div>
+          </section>
+          <section class="compare-log-pane">
+            <h3 id="compareModalRightTitle">右侧日志</h3>
+            <div class="compare-pane-toolbar">
+              <textarea id="compareRightFilter" class="compare-filter-input" rows="2" spellcheck="false" placeholder="过滤"></textarea>
+              <label class="checkbox compact-checkbox">
+                <input id="compareRightRegex" type="checkbox" />
+                正则
+              </label>
+              <label class="checkbox compact-checkbox">
+                <input id="compareRightCase" type="checkbox" />
+                区分大小写
+              </label>
+              <button id="compareRightPrevMark" class="button compact mark-jump" type="button" disabled title="跳转到上一个标记">↑</button>
+              <button id="compareRightNextMark" class="button compact mark-jump" type="button" disabled title="跳转到下一个标记">↓</button>
+              <input id="compareRightJumpInput" class="compare-jump-input" type="number" min="1" step="1" placeholder="行号" />
+              <button id="compareRightJumpButton" class="button compact" type="button">Jump</button>
+            </div>
+            <div id="compareRightWrap" class="modal-table-wrap compare-table-wrap">
+              <table id="compareRightTable" class="log-table">
+                <thead>
+                  <tr>
+                    <th class="line-col">行号</th>
+                    <th class="time-col">时间</th>
+                    <th class="level-col">级别</th>
+                    <th class="tag-col">Tag</th>
+                    <th class="message-col">内容</th>
+                  </tr>
+                </thead>
+                <tbody id="compareRightBody"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+        <div id="compareToast" class="compare-toast" role="status" aria-live="polite"></div>
       </section>
     </div>
 
