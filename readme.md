@@ -1,59 +1,238 @@
 # MyLogger
 
-MyLogger 是一个面向开发者的日志分析工具。当前版本是 Rust MVP，已支持基础日志分析、Android logcat 抓取和轻量交互式入口。
+MyLogger 是一个面向开发者的日志抓取、浏览和分析工具集。当前项目包含 Rust CLI/TUI、Chrome 本地日志查看器、Android Studio 断点导出插件，以及一个用于联调的本地分析服务。
+
+## 能做什么
+
+- 抓取 Android `logcat`，支持指定设备、包名、输出文件和按时间命名。
+- 分析本地日志文件，输出行数、级别统计、Top Tag、问题摘要、JSON 或 Markdown 报告。
+- 通过 TUI 交互式执行 `/capture`、`/analyze` 等常用工作流。
+- 在 Chrome 扩展中打开、过滤、搜索和导出日志，并把日志路径与断点数据发送给本地分析服务。
+- 通过 Android Studio 插件导出当前工程真实断点信息，供后续分析使用。
+
+## 项目结构
+
+```text
+crates/mylogger-cli/    CLI 入口和命令分发，二进制名为 MyLogger
+crates/mylogger-core/   日志解析、过滤、路由、工作流、分析摘要和报告生成
+crates/mylogger-tools/  adb 抓取、本地服务启动等外部工具集成
+crates/mylogger-tui/    交互式终端界面
+crates/mylogger-llm/    LLM 集成边界
+chrome/                 Chrome 本地日志查看器扩展
+asplugin/               Android Studio 断点导出插件
+backend/                Chrome 扩展联调用的本地分析服务
+docs/                   产品、架构、发布和使用文档
+skills/                 本项目的本地 agent skills
+```
 
 ## 环境要求
 
+基础开发：
+
 - Rust 1.95+
 - Cargo
-- Android 抓取能力需要本机已安装 `adb`，并且 `adb` 在 `PATH` 中
-- 交互式文件选择需要本机已安装 `yazi`，并且 `yazi` 在 `PATH` 中
 
-检查环境：
+按功能可选：
+
+- Android 日志抓取：`adb`，并确保在 `PATH` 中。
+- TUI 文件选择：`yazi`，用于 `/analyze` 交互式选文件。
+- TUI 打开分析报告：`nvim`，用于 `/analyze --open`。
+- Chrome 扩展构建：Node.js 和 npm。
+- Android Studio 插件构建：Gradle / Android Studio 插件开发环境。
+
+检查常用环境：
 
 ```bash
 rustc --version
 cargo --version
 adb version
 yazi --version
+nvim --version
 ```
 
-## 编译
+## 快速开始
+
+构建整个 Rust workspace：
 
 ```bash
 cargo build --workspace
 ```
 
-编译 release 版本：
+启动交互式 TUI：
+
+```bash
+cargo run -p mylogger
+```
+
+查看 CLI 帮助：
+
+```bash
+cargo run -p mylogger -- --help
+```
+
+运行测试和格式化：
+
+```bash
+cargo test --workspace
+cargo fmt --all
+```
+
+Release 构建：
 
 ```bash
 cargo build --workspace --release
 ```
 
-生成的二进制：
+生成的主程序路径：
 
 ```bash
 target/debug/MyLogger
 target/release/MyLogger
 ```
 
-## 测试
+## CLI 用法
+
+MyLogger 无子命令时进入 TUI；带子命令时执行一次性任务。
+
+### 分析日志
+
+分析本地日志：
 
 ```bash
-cargo test --workspace
+cargo run -p mylogger -- analyze app.log
 ```
 
-格式化代码：
+按关键字、Tag、PID 或最低级别过滤：
 
 ```bash
-cargo fmt --all
+cargo run -p mylogger -- analyze app.log --keyword Exception
+cargo run -p mylogger -- analyze app.log --tag ActivityManager
+cargo run -p mylogger -- analyze app.log --pid 12345
+cargo run -p mylogger -- analyze app.log --level error
 ```
+
+输出 JSON 或生成 Markdown 报告：
+
+```bash
+cargo run -p mylogger -- analyze app.log --json
+cargo run -p mylogger -- analyze app.log --report mylogger-analysis.md
+```
+
+`--level` 支持 `trace`/`verbose`/`v`、`debug`/`d`、`info`/`i`、`warn`/`warning`/`w`、`error`/`e`、`fatal`/`f`。
+
+### 抓取 Android 日志
+
+默认抓取到当前目录 `123.txt`，按 `Ctrl+C` 结束：
+
+```bash
+cargo run -p mylogger -- capture
+```
+
+按当前时间命名输出文件：
+
+```bash
+cargo run -p mylogger -- capture -t
+```
+
+指定设备、包名或输出文件：
+
+```bash
+cargo run -p mylogger -- capture --device emulator-5554
+cargo run -p mylogger -- capture --package com.example.app
+cargo run -p mylogger -- capture --output app.log
+cargo run -p mylogger -- capture --device emulator-5554 --package com.example.app --output app.log
+```
+
+抓取流程会先检测 `adb devices`。没有可用设备时会提示连接设备；单设备时直接抓取；多设备场景在 TUI 中会显示设备选择列表。
+
+### 启动本地分析服务
+
+用于 Chrome 扩展把日志路径和断点 JSON 提交到本地后端：
+
+```bash
+cargo run -p mylogger -- StartService
+```
+
+可指定监听地址、端口和仓库根目录：
+
+```bash
+cargo run -p mylogger -- StartService --host 127.0.0.1 --port 7878 --repo-root .
+```
+
+命令别名也可用：
+
+```bash
+cargo run -p mylogger -- start-service
+cargo run -p mylogger -- service
+```
+
+## TUI 用法
+
+启动：
+
+```bash
+cargo run -p mylogger
+```
+
+常用命令：
+
+```text
+/                 打开命令菜单
+/capture          抓取日志，默认写入 ./123.txt，Ctrl+C 结束
+/capture -t       抓取日志，写入 mylogger-YYYYMMDD-HHMMSS.log
+/analyze          打开 yazi 选择日志文件并分析
+/analyze <file>   直接分析指定日志文件
+/analyze --open   分析日志，生成 mylogger-analysis.md，并用 Neovim 打开
+/help             查看 TUI 命令
+```
+
+命令菜单中可用上下键移动，按 Enter 将选中的命令填入输入框，再按 Enter 执行。日志抓取和外部编辑器会临时切回普通终端环境，完成后自动回到 TUI。
+
+## Chrome 扩展
+
+Chrome 扩展提供本地日志查看器，支持文件选择、拖拽打开、关键词/正则过滤、搜索跳转、复制原始行、导出过滤结果，并可调用本地分析服务。
+
+构建：
+
+```bash
+cd chrome
+npm install
+npm run build
+```
+
+加载方式：
+
+1. 打开 `chrome://extensions`。
+2. 启用 `Developer mode`。
+3. 点击 `Load unpacked`。
+4. 选择本仓库的 `chrome/` 目录。
+5. 点击 MyLogger 扩展图标并选择 `Open Viewer`。
+
+默认分析接口：
+
+```text
+http://127.0.0.1:7878/analyze
+```
+
+可以通过 Rust CLI 启动服务：
+
+```bash
+cargo run -p mylogger -- StartService
+```
+
+也可以直接启动 Python demo 服务：
+
+```bash
+python3 backend/analysis_server.py
+```
+
+更多说明见 [chrome/README.md](chrome/README.md)。
 
 ## Android Studio 插件
 
-`asplugin/` 下提供了 MyLogger Android Studio 插件，用于从 IDE 内部读取当前项目真实断点并导出 JSON。
+`asplugin/` 提供 Android Studio 插件，用于从 IDE 内部读取当前项目断点并导出 JSON。
 
-构建插件：
+构建：
 
 ```bash
 cd asplugin
@@ -62,109 +241,51 @@ gradle buildPlugin
 
 插件产物：
 
-```bash
+```text
 asplugin/build/distributions/mylogger-as-plugin-0.1.0.zip
 ```
 
-安装方式：Android Studio 打开 `Settings | Plugins`，选择 `Install Plugin from Disk...`，安装上面的 zip 后重启。
+安装方式：
 
-使用方式：打开目标 Android 工程后，执行 `Tools > MyLogger > Export Breakpoints`，选择保存位置即可导出 `mylogger-breakpoints.json`。
+1. Android Studio 打开 `Settings | Plugins`。
+2. 选择 `Install Plugin from Disk...`。
+3. 安装上面的 zip 后重启。
+4. 打开目标 Android 工程，执行 `Tools > MyLogger > Export Breakpoints`。
 
-## 运行
+更多说明见 [asplugin/README.md](asplugin/README.md)。
 
-无参数启动交互式入口：
+## 常用开发命令
 
 ```bash
+cargo build --workspace
+cargo test --workspace
+cargo fmt --all
 cargo run -p mylogger
-```
-
-进入交互式入口后，输入 `/` 会立即打开命令菜单，可以用上下键移动，按 Enter 将选中的命令填入输入框，再按 Enter 执行。命令结果会显示在上方消息区，输入框始终固定在底部。
-
-在交互式入口中执行 `/analyze` 时，程序会临时退出 TUI 并打开 `yazi` 文件选择器。用户在 `yazi` 中选择日志文件后，会自动回到 TUI 并继续执行分析。也可以执行 `/analyze <file>` 直接分析指定文件。执行 `/analyze --open` 或 `/analyze <file> --open` 会在分析后生成 `mylogger-analysis.md`，并用 Neovim 打开结果。
-
-在交互式入口中执行 `/capture` 或 `/capture -t` 时，会先执行 `adb devices` 检测设备。如果只有一个可用设备，会直接临时退出 TUI，切换到普通终端环境执行日志抓取；如果存在多个可用设备，会先在 TUI 中弹出设备列表，使用上下键切换设备并按 Enter 确认后，再切换到终端环境抓取。按 `Ctrl+C` 结束抓取后，会自动回到 TUI，并在消息区显示日志文件路径或错误信息。
-
-查看帮助：
-
-```bash
 cargo run -p mylogger -- --help
 ```
 
-## 分析日志文件
-
-分析本地日志：
+Chrome 扩展检查：
 
 ```bash
-cargo run -p mylogger -- analyze app.log
+cd chrome
+npm run check
+npm run build
 ```
 
-按关键字过滤：
+Android Studio 插件构建：
 
 ```bash
-cargo run -p mylogger -- analyze app.log --keyword Exception
+cd asplugin
+gradle buildPlugin
 ```
 
-输出 JSON：
+## 生成文件与注意事项
 
-```bash
-cargo run -p mylogger -- analyze app.log --json
-```
+不要提交以下生成内容：
 
-## 抓取 Android 日志
+- `target/`
+- `asplugin/build/`
+- `chrome/node_modules/`
+- 抓取日志、临时 `.txt` 文件和本地分析结果
 
-默认抓取到当前目录 `123.txt`，按 `Ctrl+C` 结束：
-
-```bash
-cargo run -p mylogger -- capture
-```
-
-抓取到以当前时间命名的文件：
-
-```bash
-cargo run -p mylogger -- capture -t
-```
-
-指定设备：
-
-```bash
-cargo run -p mylogger -- capture --device emulator-5554
-```
-
-指定输出文件：
-
-```bash
-cargo run -p mylogger -- capture --output app.log
-```
-
-指定设备并输出到文件：
-
-```bash
-cargo run -p mylogger -- capture --device emulator-5554 --output app.log
-```
-
-`capture` 执行逻辑：
-
-- 先执行 `adb devices`
-- 如果没有可用设备，提示连接设备或启动模拟器
-- 如果只有一个可用设备，直接抓取
-- 如果有多个可用设备，提示选择设备
-- 抓取通过 `Ctrl+C` 终止
-- 结束时输出最终日志文件路径
-
-## 直接运行编译后的二进制
-
-Debug 版本：
-
-```bash
-target/debug/MyLogger --help
-target/debug/MyLogger analyze app.log
-target/debug/MyLogger capture
-```
-
-Release 版本：
-
-```bash
-target/release/MyLogger --help
-target/release/MyLogger analyze app.log
-target/release/MyLogger capture -t
-```
+日志抓取默认会写入当前目录；如需保留结果，建议通过 `--output` 显式指定文件名。
