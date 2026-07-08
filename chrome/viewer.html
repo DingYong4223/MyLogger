@@ -250,10 +250,13 @@
 
     <div id="compareModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="compareModalTitle">
       <section class="modal-panel compare-modal-panel">
-        <header class="modal-header">
+        <header class="modal-header compare-modal-header">
           <div>
             <h2 id="compareModalTitle">日志比较</h2>
             <p id="compareModalMeta">暂无日志。</p>
+          </div>
+          <div class="compare-header-center">
+            <button id="toggleCompareLineMode" class="button compact compare-line-mode-button" type="button" title="按行比较">==</button>
           </div>
           <div class="header-actions">
             <button id="closeCompareModal" class="button" type="button">关闭</button>
@@ -261,7 +264,10 @@
         </header>
         <div class="compare-modal-body">
           <section class="compare-log-pane">
-            <h3 id="compareModalLeftTitle">左侧日志</h3>
+            <div class="compare-log-title-wrap">
+              <button id="compareModalLeftTitle" class="compare-log-title-button" type="button">请选择日志</button>
+              <div id="compareLeftTitleMenu" class="compare-title-menu hidden"></div>
+            </div>
             <div class="compare-pane-toolbar">
               <textarea id="compareLeftFilter" class="compare-filter-input" rows="2" spellcheck="false" placeholder="过滤"></textarea>
               <label class="checkbox compact-checkbox">
@@ -293,7 +299,10 @@
             </div>
           </section>
           <section class="compare-log-pane">
-            <h3 id="compareModalRightTitle">右侧日志</h3>
+            <div class="compare-log-title-wrap">
+              <button id="compareModalRightTitle" class="compare-log-title-button" type="button">请选择日志</button>
+              <div id="compareRightTitleMenu" class="compare-title-menu hidden"></div>
+            </div>
             <div class="compare-pane-toolbar">
               <textarea id="compareRightFilter" class="compare-filter-input" rows="2" spellcheck="false" placeholder="过滤"></textarea>
               <label class="checkbox compact-checkbox">

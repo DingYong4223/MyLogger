@@ -1427,6 +1427,19 @@ mark {
   background: #fbfcfe;
 }
 
+.compare-modal-header {
+  position: relative;
+}
+
+.compare-header-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  transform: translate(-50%, -50%);
+}
+
 .modal-search {
   display: flex;
   align-items: center;
@@ -1511,10 +1524,68 @@ mark {
 }
 
 .compare-picker-lists h3,
-.compare-log-pane h3 {
+.compare-log-title-button {
   margin: 0 0 6px;
   color: var(--muted);
   font: 600 12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.compare-log-title-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.compare-log-title-button {
+  max-width: 100%;
+  display: block;
+  border: 0;
+  padding: 0 18px 0 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compare-log-title-button::after {
+  content: "▾";
+  position: absolute;
+  right: 4px;
+  top: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.compare-log-title-button:hover {
+  color: var(--blue);
+}
+
+.compare-title-menu {
+  position: absolute;
+  z-index: 8;
+  top: 22px;
+  left: 0;
+  width: min(360px, 80vw);
+  max-height: 300px;
+  overflow: auto;
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px;
+  background: #ffffff;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+}
+
+.compare-title-menu.hidden {
+  display: none;
+}
+
+.compare-title-empty {
+  padding: 8px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .compare-picker-list {
@@ -1602,6 +1673,30 @@ mark {
 .compare-table-wrap {
   border: 1px solid var(--border);
   border-radius: 6px;
+}
+
+.compare-line-mode-button {
+  margin-top: 0;
+  min-width: 38px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.compare-line-mode-button.active {
+  border-color: #ef4444;
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+tr.compare-diff-row > td {
+  background: #fee2e2;
+}
+
+tr.compare-placeholder-row > td {
+  color: #94a3b8;
+}
+
+tr.compare-missing-row > td {
+  background: #fff1f2;
 }
 
 .compare-pane-toolbar {

@@ -3391,10 +3391,14 @@
     compareRightTabId: "",
     compareModalLeftTabId: "",
     compareModalRightTabId: "",
+    compareTitleMenuSide: "",
     compareSides: {
       left: null,
       right: null
     },
+    compareAlignedRows: [],
+    compareLineMode: false,
+    syncingCompareScroll: false,
     compareLeftVirtualStart: 0,
     compareLeftVirtualEnd: 0,
     compareRightVirtualStart: 0,
@@ -3581,6 +3585,9 @@
     compareModalMeta: document.getElementById("compareModalMeta"),
     compareModalLeftTitle: document.getElementById("compareModalLeftTitle"),
     compareModalRightTitle: document.getElementById("compareModalRightTitle"),
+    compareLeftTitleMenu: document.getElementById("compareLeftTitleMenu"),
+    compareRightTitleMenu: document.getElementById("compareRightTitleMenu"),
+    toggleCompareLineMode: document.getElementById("toggleCompareLineMode"),
     compareLeftFilter: document.getElementById("compareLeftFilter"),
     compareLeftRegex: document.getElementById("compareLeftRegex"),
     compareLeftCase: document.getElementById("compareLeftCase"),
@@ -3650,6 +3657,10 @@
       chooseTwoDifferentLogs: "\u8BF7\u9009\u62E9\u4E24\u4E2A\u4E0D\u540C\u7684\u65E5\u5FD7\u6587\u4EF6\u3002",
       needTwoLogsToCompare: "\u81F3\u5C11\u9700\u8981\u6253\u5F00\u4E24\u4E2A\u65E5\u5FD7\u6587\u4EF6\u624D\u80FD\u6BD4\u8F83\u3002",
       cannotCompareSameLog: "\u5DE6\u53F3\u4E24\u4FA7\u4E0D\u80FD\u9009\u62E9\u540C\u4E00\u4E2A\u65E5\u5FD7\u3002",
+      compareLineMode: "\u6309\u884C\u6BD4\u8F83",
+      compareLineModeOn: "\u5DF2\u5F00\u542F\u6309\u884C\u6BD4\u8F83",
+      compareLineModeOff: "\u5DF2\u5173\u95ED\u6309\u884C\u6BD4\u8F83",
+      selectLog: "\u8BF7\u9009\u62E9\u65E5\u5FD7",
       leftLog: "\u5DE6\u4FA7\u65E5\u5FD7",
       rightLog: "\u53F3\u4FA7\u65E5\u5FD7",
       cancel: "\u53D6\u6D88",
@@ -3793,6 +3804,10 @@
       chooseTwoDifferentLogs: "Choose two different log files.",
       needTwoLogsToCompare: "Open at least two log files to compare.",
       cannotCompareSameLog: "Left and right cannot use the same log.",
+      compareLineMode: "Compare by line",
+      compareLineModeOn: "Line comparison enabled",
+      compareLineModeOff: "Line comparison disabled",
+      selectLog: "Select Log",
       leftLog: "Left Log",
       rightLog: "Right Log",
       cancel: "Cancel",
@@ -4252,8 +4267,9 @@
     setText("#confirmComparePicker", "compare");
     setText("#cancelComparePicker", "cancel");
     setText("#compareModalTitle", "compareLogs");
-    setText("#compareModalLeftTitle", "leftLog");
-    setText("#compareModalRightTitle", "rightLog");
+    updateCompareModalHeader();
+    els.toggleCompareLineMode.title = t("compareLineMode");
+    els.toggleCompareLineMode.setAttribute("aria-label", t("compareLineMode"));
     setText("#closeCompareModal", "close");
     setPlaceholder("#compareLeftFilter", "filterPlaceholder");
     setPlaceholder("#compareRightFilter", "filterPlaceholder");
@@ -5672,64 +5688,12 @@
   function getLoadedLogTabs() {
     return state.tabs.filter((tab) => tab.fileName && Array.isArray(tab.rows) && tab.rows.length);
   }
-  function openComparePicker() {
+  function openFlexibleCompareModal() {
     closeTopMenus();
-    const tabs = getLoadedLogTabs();
-    if (tabs.length < 2) {
-      showToast(t("needTwoLogsToCompare"));
-      return;
-    }
-    const activeTab = tabs.find((tab) => tab.id === state.activeTabId) || tabs[0];
-    const rightTab = tabs.find((tab) => tab.id !== activeTab.id) || tabs[1];
-    state.compareLeftTabId = activeTab.id;
-    state.compareRightTabId = rightTab.id;
-    renderComparePicker();
-    els.comparePickerModal.classList.remove("hidden");
+    openCompareModal();
   }
   function closeComparePicker() {
     els.comparePickerModal.classList.add("hidden");
-  }
-  function renderComparePicker() {
-    const tabs = getLoadedLogTabs();
-    els.compareLeftList.textContent = "";
-    els.compareRightList.textContent = "";
-    for (const tab of tabs) {
-      els.compareLeftList.append(createComparePickerRow(tab, "left"));
-      els.compareRightList.append(createComparePickerRow(tab, "right"));
-    }
-  }
-  function createComparePickerRow(tab, side) {
-    const selectedId = side === "left" ? state.compareLeftTabId : state.compareRightTabId;
-    const otherId = side === "left" ? state.compareRightTabId : state.compareLeftTabId;
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "compare-picker-row";
-    button.classList.toggle("selected", selectedId === tab.id);
-    button.classList.toggle("conflict", otherId === tab.id);
-    button.title = tab.filePath || tab.fileName;
-    const title = document.createElement("strong");
-    title.textContent = tab.fileName;
-    const meta = document.createElement("span");
-    meta.textContent = `${tab.rows.length.toLocaleString()} ${state.language === "en" ? "rows" : "\u884C"} \xB7 ${formatBytes(tab.fileSize)}`;
-    button.append(title, meta);
-    button.addEventListener("click", () => selectCompareTab(side, tab.id));
-    return button;
-  }
-  function selectCompareTab(side, tabId) {
-    if (side === "left" && tabId === state.compareRightTabId) {
-      showToast(t("cannotCompareSameLog"));
-      return;
-    }
-    if (side === "right" && tabId === state.compareLeftTabId) {
-      showToast(t("cannotCompareSameLog"));
-      return;
-    }
-    if (side === "left") {
-      state.compareLeftTabId = tabId;
-    } else {
-      state.compareRightTabId = tabId;
-    }
-    renderComparePicker();
   }
   function confirmComparePicker() {
     const leftTab = state.tabs.find((tab) => tab.id === state.compareLeftTabId);
@@ -5741,18 +5705,20 @@
     closeComparePicker();
     openCompareModal(leftTab, rightTab);
   }
-  function openCompareModal(leftTab, rightTab) {
-    state.compareModalLeftTabId = leftTab.id;
-    state.compareModalRightTabId = rightTab.id;
-    state.compareSides.left = createCompareSideState(leftTab);
-    state.compareSides.right = createCompareSideState(rightTab);
+  function openCompareModal(leftTab = null, rightTab = null) {
+    state.compareModalLeftTabId = leftTab?.id || "";
+    state.compareModalRightTabId = rightTab?.id || "";
+    state.compareLineMode = false;
+    state.compareAlignedRows = [];
+    state.compareTitleMenuSide = "";
+    updateCompareLineModeButton();
+    state.compareSides.left = leftTab ? createCompareSideState(leftTab) : null;
+    state.compareSides.right = rightTab ? createCompareSideState(rightTab) : null;
     resetCompareControls("left");
     resetCompareControls("right");
-    els.compareModalMeta.textContent = `${leftTab.fileName} \xB7 ${leftTab.rows.length.toLocaleString()} ${state.language === "en" ? "rows" : "\u884C"}  |  ${rightTab.fileName} \xB7 ${rightTab.rows.length.toLocaleString()} ${state.language === "en" ? "rows" : "\u884C"}`;
-    els.compareModalLeftTitle.textContent = leftTab.fileName;
-    els.compareModalRightTitle.textContent = rightTab.fileName;
-    updateLogTableWidthForTables(leftTab.rows, [els.compareLeftTable]);
-    updateLogTableWidthForTables(rightTab.rows, [els.compareRightTable]);
+    updateCompareModalHeader();
+    if (leftTab) updateLogTableWidthForTables(leftTab.rows, [els.compareLeftTable]);
+    if (rightTab) updateLogTableWidthForTables(rightTab.rows, [els.compareRightTable]);
     els.compareLeftWrap.scrollTop = 0;
     els.compareRightWrap.scrollTop = 0;
     els.compareModal.classList.remove("hidden");
@@ -5762,14 +5728,110 @@
   function closeCompareModal() {
     els.compareModal.classList.add("hidden");
     els.compareToast.classList.remove("show");
+    closeCompareTitleMenu();
     state.compareModalLeftTabId = "";
     state.compareModalRightTabId = "";
+    state.compareTitleMenuSide = "";
+    state.compareLineMode = false;
+    state.compareAlignedRows = [];
+    state.syncingCompareScroll = false;
     state.compareSides.left = null;
     state.compareSides.right = null;
     els.compareLeftBody.textContent = "";
     els.compareRightBody.textContent = "";
   }
+  function updateCompareModalHeader() {
+    const leftTab = getCompareTab("left");
+    const rightTab = getCompareTab("right");
+    els.compareModalLeftTitle.textContent = leftTab?.fileName || t("selectLog");
+    els.compareModalRightTitle.textContent = rightTab?.fileName || t("selectLog");
+    els.compareModalLeftTitle.title = leftTab?.filePath || leftTab?.fileName || t("selectLog");
+    els.compareModalRightTitle.title = rightTab?.filePath || rightTab?.fileName || t("selectLog");
+    const leftText = leftTab ? `${leftTab.fileName} \xB7 ${leftTab.rows.length.toLocaleString()} ${state.language === "en" ? "rows" : "\u884C"}` : t("selectLog");
+    const rightText = rightTab ? `${rightTab.fileName} \xB7 ${rightTab.rows.length.toLocaleString()} ${state.language === "en" ? "rows" : "\u884C"}` : t("selectLog");
+    els.compareModalMeta.textContent = `${leftText}  |  ${rightText}`;
+  }
+  function toggleCompareTitleMenu(side, event) {
+    event.stopPropagation();
+    const nextOpen = state.compareTitleMenuSide !== side;
+    closeCompareTitleMenu();
+    if (!nextOpen) return;
+    state.compareTitleMenuSide = side;
+    renderCompareTitleMenu(side);
+    getCompareSideEls(side).titleMenu.classList.remove("hidden");
+  }
+  function closeCompareTitleMenu() {
+    state.compareTitleMenuSide = "";
+    els.compareLeftTitleMenu.classList.add("hidden");
+    els.compareRightTitleMenu.classList.add("hidden");
+  }
+  function renderCompareTitleMenu(side) {
+    const sideEls = getCompareSideEls(side);
+    const tabs = getLoadedLogTabs();
+    sideEls.titleMenu.textContent = "";
+    if (!tabs.length) {
+      const empty = document.createElement("div");
+      empty.className = "compare-title-empty";
+      empty.textContent = state.language === "en" ? "No logs opened." : "\u6682\u65E0\u5DF2\u6253\u5F00\u65E5\u5FD7\u3002";
+      sideEls.titleMenu.append(empty);
+      return;
+    }
+    for (const tab of tabs) {
+      sideEls.titleMenu.append(createCompareTitleMenuRow(tab, side));
+    }
+  }
+  function createCompareTitleMenuRow(tab, side) {
+    const selectedId = side === "left" ? state.compareModalLeftTabId : state.compareModalRightTabId;
+    const otherId = side === "left" ? state.compareModalRightTabId : state.compareModalLeftTabId;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "compare-picker-row";
+    button.classList.toggle("selected", selectedId === tab.id);
+    button.classList.toggle("conflict", otherId === tab.id);
+    button.title = tab.filePath || tab.fileName;
+    const title = document.createElement("strong");
+    title.textContent = tab.fileName;
+    const meta = document.createElement("span");
+    meta.textContent = `${tab.rows.length.toLocaleString()} ${state.language === "en" ? "rows" : "\u884C"} \xB7 ${formatBytes(tab.fileSize)}`;
+    button.append(title, meta);
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      selectCompareModalTab(side, tab.id);
+    });
+    return button;
+  }
+  function selectCompareModalTab(side, tabId) {
+    const otherId = side === "left" ? state.compareModalRightTabId : state.compareModalLeftTabId;
+    if (tabId === otherId) {
+      showToast(t("cannotCompareSameLog"));
+      return;
+    }
+    const tab = state.tabs.find((item) => item.id === tabId);
+    if (!tab) return;
+    if (side === "left") {
+      state.compareModalLeftTabId = tab.id;
+    } else {
+      state.compareModalRightTabId = tab.id;
+    }
+    state.compareSides[side] = createCompareSideState(tab);
+    resetCompareControls(side);
+    updateLogTableWidthForTables(tab.rows, [getCompareSideEls(side).table]);
+    getCompareSideEls(side).wrap.scrollTop = 0;
+    if (state.compareLineMode) {
+      rebuildCompareAlignment();
+      syncCompareScrollFrom(side);
+    }
+    closeCompareTitleMenu();
+    updateCompareModalHeader();
+    renderCompareRows("left");
+    renderCompareRows("right");
+    updateCompareMarkedButtons(side);
+  }
   function requestCloseCompareModal() {
+    if (!state.compareModalLeftTabId && !state.compareModalRightTabId) {
+      closeCompareModal();
+      return;
+    }
     const message = state.language === "en" ? "Close the log comparison window?" : "\u786E\u5B9A\u5173\u95ED\u65E5\u5FD7\u6BD4\u8F83\u7A97\u53E3\u5417\uFF1F";
     if (!window.confirm(message)) return;
     closeCompareModal();
@@ -5797,7 +5859,10 @@
       nextMark: els.compareLeftNextMark,
       jumpInput: els.compareLeftJumpInput,
       wrap: els.compareLeftWrap,
-      table: els.compareLeftTable
+      table: els.compareLeftTable,
+      body: els.compareLeftBody,
+      title: els.compareModalLeftTitle,
+      titleMenu: els.compareLeftTitleMenu
     } : {
       filter: els.compareRightFilter,
       regex: els.compareRightRegex,
@@ -5806,7 +5871,10 @@
       nextMark: els.compareRightNextMark,
       jumpInput: els.compareRightJumpInput,
       wrap: els.compareRightWrap,
-      table: els.compareRightTable
+      table: els.compareRightTable,
+      body: els.compareRightBody,
+      title: els.compareModalRightTitle,
+      titleMenu: els.compareRightTitleMenu
     };
   }
   function resetCompareControls(side) {
@@ -5843,16 +5911,31 @@
     }
     updateLogTableWidthForTables(compareState.visibleRows, [sideEls.table]);
     sideEls.wrap.scrollTop = 0;
+    if (state.compareLineMode) {
+      rebuildCompareAlignment();
+    }
+    syncCompareScrollFrom(side);
     renderCompareRows(side);
+    renderCompareRows(otherCompareSide(side));
     updateCompareMarkedButtons(side);
   }
   function renderCompareRows(side) {
     const tab = getCompareTab(side);
     const compareState = getCompareSideState(side);
-    if (!tab || !compareState) return;
     const wrap = side === "left" ? els.compareLeftWrap : els.compareRightWrap;
     const body = side === "left" ? els.compareLeftBody : els.compareRightBody;
-    const rows = compareState.visibleRows;
+    if (!tab || !compareState) {
+      body.textContent = "";
+      if (side === "left") {
+        state.compareLeftVirtualStart = 0;
+        state.compareLeftVirtualEnd = 0;
+      } else {
+        state.compareRightVirtualStart = 0;
+        state.compareRightVirtualEnd = 0;
+      }
+      return;
+    }
+    const rows = state.compareLineMode ? state.compareAlignedRows : compareState.visibleRows;
     const viewportHeight = wrap.clientHeight || 1;
     const scrollTop = wrap.scrollTop;
     const start = Math.max(0, Math.floor(scrollTop / LOG_ROW_HEIGHT) - LOG_OVERSCAN_ROWS);
@@ -5871,7 +5954,13 @@
     }
     const filterRules = getCompareFilterRules(side);
     for (let index = start; index < end; index += 1) {
-      fragment.appendChild(createCompareLogRow(rows[index], side, getCompareRowHighlight(rows[index], side, filterRules)));
+      const row = rows[index];
+      fragment.appendChild(state.compareLineMode ? createCompareAlignedLogRow(row, side, filterRules) : createCompareLogRow(
+        row,
+        side,
+        getCompareRowHighlight(row, side, filterRules),
+        isCompareDiffRow(side, index)
+      ));
     }
     const bottomRows = rows.length - end;
     if (bottomRows > 0) {
@@ -5888,10 +5977,11 @@
     });
     return matchedRule ? { query: matchedRule, regex: compareState.filterRegex, caseSensitive: compareState.filterCase } : "";
   }
-  function createCompareLogRow(row, side, activeSearch) {
+  function createCompareLogRow(row, side, activeSearch, diffRow = false) {
     const compareState = getCompareSideState(side);
     const tr = document.createElement("tr");
     tr.title = "\u53CC\u51FB\u590D\u5236\u5F53\u524D\u884C";
+    tr.classList.toggle("compare-diff-row", diffRow);
     if (compareState?.markedLines.has(row.sourceLine)) {
       tr.classList.add("marked-row");
     }
@@ -5913,6 +6003,39 @@
     );
     tr.addEventListener("dblclick", () => copyLine(row.raw));
     return tr;
+  }
+  function createCompareAlignedLogRow(entry, side, filterRules) {
+    const row = side === "left" ? entry.left : entry.right;
+    const type = getCompareSideDiffType(entry.type, side);
+    if (!row) {
+      return createComparePlaceholderRow(type);
+    }
+    return createCompareLogRow(
+      row,
+      side,
+      getCompareRowHighlight(row, side, filterRules),
+      type !== "same"
+    );
+  }
+  function createComparePlaceholderRow(type) {
+    const tr = document.createElement("tr");
+    tr.classList.add("compare-placeholder-row");
+    if (type !== "same") tr.classList.add("compare-diff-row", `compare-${type}-row`);
+    tr.append(
+      cell("", "line-col"),
+      cell("", "time-col"),
+      cell("", "level-col level-none"),
+      cell("", "tag-col"),
+      cell("", "message-col")
+    );
+    return tr;
+  }
+  function getCompareSideDiffType(type, side) {
+    if (type === "same") return "same";
+    if (type === "change") return "change";
+    if (type === "delete") return side === "left" ? "delete" : "missing";
+    if (type === "insert") return side === "right" ? "insert" : "missing";
+    return "change";
   }
   function toggleCompareMarkedLine(side, sourceLine) {
     const compareState = getCompareSideState(side);
@@ -5942,7 +6065,7 @@
     const currentIndex = compareState.activeMarkedLine == null ? -1 : markedRows.findIndex((row) => row.sourceLine === compareState.activeMarkedLine);
     const nextIndex = currentIndex < 0 ? direction > 0 ? 0 : markedRows.length - 1 : (currentIndex + direction + markedRows.length) % markedRows.length;
     const targetRow = markedRows[nextIndex];
-    const visibleIndex = compareState.visibleRows.indexOf(targetRow);
+    const visibleIndex = getCompareRowRenderIndex(side, targetRow.sourceLine);
     if (visibleIndex < 0) return;
     compareState.activeMarkedLine = targetRow.sourceLine;
     scrollCompareRowIndexIntoView(side, visibleIndex);
@@ -5958,7 +6081,7 @@
       showToast(state.language === "en" ? "Enter a valid line number." : "\u8BF7\u8F93\u5165\u6709\u6548\u884C\u53F7\u3002");
       return;
     }
-    const visibleIndex = compareState.visibleRows.findIndex((row) => row.sourceLine === sourceLine);
+    const visibleIndex = getCompareRowRenderIndex(side, sourceLine);
     if (visibleIndex < 0) {
       showToast(state.language === "en" ? "That line is not visible in the current filter." : "\u5F53\u524D\u8FC7\u6EE4\u7ED3\u679C\u4E2D\u6CA1\u6709\u8BE5\u884C\u3002");
       return;
@@ -5968,10 +6091,22 @@
     renderCompareRows(side);
     updateCompareMarkedButtons(side);
   }
+  function getCompareRowRenderIndex(side, sourceLine) {
+    const compareState = getCompareSideState(side);
+    if (!compareState) return -1;
+    if (!state.compareLineMode) {
+      return compareState.visibleRows.findIndex((row) => row.sourceLine === sourceLine);
+    }
+    return state.compareAlignedRows.findIndex((entry) => {
+      const row = side === "left" ? entry.left : entry.right;
+      return row?.sourceLine === sourceLine;
+    });
+  }
   function scrollCompareRowIndexIntoView(side, index) {
     const wrap = side === "left" ? els.compareLeftWrap : els.compareRightWrap;
     const viewportHeight = wrap.clientHeight || 0;
     wrap.scrollTop = Math.max(0, index * LOG_ROW_HEIGHT - Math.max(0, viewportHeight - LOG_ROW_HEIGHT) / 2);
+    syncCompareScrollFrom(side);
   }
   function updateCompareMarkedButtons(side) {
     const hasMarkedRows = getVisibleCompareMarkedRows(side).length > 0;
@@ -5994,6 +6129,242 @@
     compareRightVirtualScrollFrame = window.requestAnimationFrame(() => {
       compareRightVirtualScrollFrame = 0;
       renderCompareRows("right");
+    });
+  }
+  function otherCompareSide(side) {
+    return side === "left" ? "right" : "left";
+  }
+  function isCompareDiffRow(side, index) {
+    if (!state.compareLineMode) return false;
+    const leftRow = state.compareSides.left?.visibleRows[index];
+    const rightRow = state.compareSides.right?.visibleRows[index];
+    const currentRow = getCompareSideState(side)?.visibleRows[index];
+    if (!currentRow) return false;
+    if (!leftRow || !rightRow) return true;
+    return normalizeCompareLine(leftRow.raw) !== normalizeCompareLine(rightRow.raw);
+  }
+  function normalizeCompareLine(value) {
+    return String(value || "").trim();
+  }
+  function rebuildCompareAlignment() {
+    const leftRows = state.compareSides.left?.visibleRows || [];
+    const rightRows = state.compareSides.right?.visibleRows || [];
+    state.compareAlignedRows = buildCompareAlignment(leftRows, rightRows);
+  }
+  function buildCompareAlignment(leftRows, rightRows) {
+    const output = [];
+    alignCompareRange(leftRows, rightRows, 0, leftRows.length, 0, rightRows.length, output);
+    return output;
+  }
+  function alignCompareRange(leftRows, rightRows, leftStart, leftEnd, rightStart, rightEnd, output) {
+    while (leftStart < leftEnd && rightStart < rightEnd && normalizeCompareLine(leftRows[leftStart].raw) === normalizeCompareLine(rightRows[rightStart].raw)) {
+      output.push({ type: "same", left: leftRows[leftStart], right: rightRows[rightStart] });
+      leftStart += 1;
+      rightStart += 1;
+    }
+    const suffix = [];
+    while (leftStart < leftEnd && rightStart < rightEnd && normalizeCompareLine(leftRows[leftEnd - 1].raw) === normalizeCompareLine(rightRows[rightEnd - 1].raw)) {
+      suffix.push({ type: "same", left: leftRows[leftEnd - 1], right: rightRows[rightEnd - 1] });
+      leftEnd -= 1;
+      rightEnd -= 1;
+    }
+    if (leftStart === leftEnd || rightStart === rightEnd) {
+      emitCompareRemainder(leftRows, rightRows, leftStart, leftEnd, rightStart, rightEnd, output);
+      for (let index = suffix.length - 1; index >= 0; index -= 1) output.push(suffix[index]);
+      return;
+    }
+    const anchors = findPatienceAnchors(leftRows, rightRows, leftStart, leftEnd, rightStart, rightEnd);
+    if (anchors.length) {
+      let currentLeft = leftStart;
+      let currentRight = rightStart;
+      for (const anchor of anchors) {
+        alignCompareRange(leftRows, rightRows, currentLeft, anchor.left, currentRight, anchor.right, output);
+        output.push({ type: "same", left: leftRows[anchor.left], right: rightRows[anchor.right] });
+        currentLeft = anchor.left + 1;
+        currentRight = anchor.right + 1;
+      }
+      alignCompareRange(leftRows, rightRows, currentLeft, leftEnd, currentRight, rightEnd, output);
+      for (let index = suffix.length - 1; index >= 0; index -= 1) output.push(suffix[index]);
+      return;
+    }
+    alignCompareChangedBlock(leftRows, rightRows, leftStart, leftEnd, rightStart, rightEnd, output);
+    for (let index = suffix.length - 1; index >= 0; index -= 1) output.push(suffix[index]);
+  }
+  function findPatienceAnchors(leftRows, rightRows, leftStart, leftEnd, rightStart, rightEnd) {
+    const leftCounts = /* @__PURE__ */ new Map();
+    const rightCounts = /* @__PURE__ */ new Map();
+    const leftIndex = /* @__PURE__ */ new Map();
+    const rightIndex = /* @__PURE__ */ new Map();
+    for (let index = leftStart; index < leftEnd; index += 1) {
+      const key = normalizeCompareLine(leftRows[index].raw);
+      leftCounts.set(key, (leftCounts.get(key) || 0) + 1);
+      leftIndex.set(key, index);
+    }
+    for (let index = rightStart; index < rightEnd; index += 1) {
+      const key = normalizeCompareLine(rightRows[index].raw);
+      rightCounts.set(key, (rightCounts.get(key) || 0) + 1);
+      rightIndex.set(key, index);
+    }
+    const candidates = [];
+    for (const [key, count] of leftCounts) {
+      if (count === 1 && rightCounts.get(key) === 1) {
+        candidates.push({ left: leftIndex.get(key), right: rightIndex.get(key) });
+      }
+    }
+    candidates.sort((a, b) => a.left - b.left);
+    return longestIncreasingCompareAnchors(candidates);
+  }
+  function longestIncreasingCompareAnchors(candidates) {
+    if (!candidates.length) return [];
+    const piles = [];
+    const predecessors = new Array(candidates.length).fill(-1);
+    const pileTops = [];
+    for (let index = 0; index < candidates.length; index += 1) {
+      const right = candidates[index].right;
+      let low = 0;
+      let high = piles.length;
+      while (low < high) {
+        const mid = low + high >> 1;
+        if (candidates[piles[mid]].right < right) low = mid + 1;
+        else high = mid;
+      }
+      if (low > 0) predecessors[index] = piles[low - 1];
+      piles[low] = index;
+      pileTops[low] = index;
+    }
+    const result = [];
+    let current = pileTops[piles.length - 1];
+    while (current >= 0) {
+      result.push(candidates[current]);
+      current = predecessors[current];
+    }
+    return result.reverse();
+  }
+  function alignCompareChangedBlock(leftRows, rightRows, leftStart, leftEnd, rightStart, rightEnd, output) {
+    const leftCount = leftEnd - leftStart;
+    const rightCount = rightEnd - rightStart;
+    if (leftCount * rightCount <= 2e5 && Math.max(leftCount, rightCount) <= 1e3) {
+      alignCompareSmallBlock(leftRows, rightRows, leftStart, leftEnd, rightStart, rightEnd, output);
+      return;
+    }
+    emitCompareRemainder(leftRows, rightRows, leftStart, leftEnd, rightStart, rightEnd, output);
+  }
+  function alignCompareSmallBlock(leftRows, rightRows, leftStart, leftEnd, rightStart, rightEnd, output) {
+    const leftCount = leftEnd - leftStart;
+    const rightCount = rightEnd - rightStart;
+    const leftKeys = Array.from({ length: leftCount }, (_, index) => normalizeCompareLine(leftRows[leftStart + index].raw));
+    const rightKeys = Array.from({ length: rightCount }, (_, index) => normalizeCompareLine(rightRows[rightStart + index].raw));
+    const dp = Array.from({ length: leftCount + 1 }, () => new Uint16Array(rightCount + 1));
+    for (let left2 = leftCount - 1; left2 >= 0; left2 -= 1) {
+      for (let right2 = rightCount - 1; right2 >= 0; right2 -= 1) {
+        if (leftKeys[left2] === rightKeys[right2]) {
+          dp[left2][right2] = dp[left2 + 1][right2 + 1] + 1;
+        } else {
+          dp[left2][right2] = Math.max(dp[left2 + 1][right2], dp[left2][right2 + 1]);
+        }
+      }
+    }
+    let left = 0;
+    let right = 0;
+    const pending = [];
+    const flushPending = () => {
+      if (!pending.length) return;
+      emitPendingCompareChanges(pending, output);
+      pending.length = 0;
+    };
+    while (left < leftCount && right < rightCount) {
+      const leftRow = leftRows[leftStart + left];
+      const rightRow = rightRows[rightStart + right];
+      if (leftKeys[left] === rightKeys[right]) {
+        flushPending();
+        output.push({ type: "same", left: leftRow, right: rightRow });
+        left += 1;
+        right += 1;
+      } else if (dp[left + 1][right] >= dp[left][right + 1]) {
+        pending.push({ side: "left", row: leftRow });
+        left += 1;
+      } else {
+        pending.push({ side: "right", row: rightRow });
+        right += 1;
+      }
+    }
+    while (left < leftCount) {
+      pending.push({ side: "left", row: leftRows[leftStart + left] });
+      left += 1;
+    }
+    while (right < rightCount) {
+      pending.push({ side: "right", row: rightRows[rightStart + right] });
+      right += 1;
+    }
+    flushPending();
+  }
+  function emitPendingCompareChanges(pending, output) {
+    const deleted = pending.filter((item) => item.side === "left").map((item) => item.row);
+    const inserted = pending.filter((item) => item.side === "right").map((item) => item.row);
+    const pairedCount = Math.min(deleted.length, inserted.length);
+    for (let index = 0; index < pairedCount; index += 1) {
+      output.push({ type: "change", left: deleted[index], right: inserted[index] });
+    }
+    for (let index = pairedCount; index < deleted.length; index += 1) {
+      output.push({ type: "delete", left: deleted[index], right: null });
+    }
+    for (let index = pairedCount; index < inserted.length; index += 1) {
+      output.push({ type: "insert", left: null, right: inserted[index] });
+    }
+  }
+  function emitCompareRemainder(leftRows, rightRows, leftStart, leftEnd, rightStart, rightEnd, output) {
+    let left = leftStart;
+    let right = rightStart;
+    while (left < leftEnd && right < rightEnd) {
+      output.push({ type: "change", left: leftRows[left], right: rightRows[right] });
+      left += 1;
+      right += 1;
+    }
+    while (left < leftEnd) {
+      output.push({ type: "delete", left: leftRows[left], right: null });
+      left += 1;
+    }
+    while (right < rightEnd) {
+      output.push({ type: "insert", left: null, right: rightRows[right] });
+      right += 1;
+    }
+  }
+  function toggleCompareLineMode() {
+    state.compareLineMode = !state.compareLineMode;
+    updateCompareLineModeButton();
+    if (state.compareLineMode) {
+      rebuildCompareAlignment();
+      syncCompareScrollFrom("left");
+    } else {
+      state.compareAlignedRows = [];
+    }
+    renderCompareRows("left");
+    renderCompareRows("right");
+    showToast(state.compareLineMode ? t("compareLineModeOn") : t("compareLineModeOff"));
+  }
+  function updateCompareLineModeButton() {
+    els.toggleCompareLineMode.classList.toggle("active", state.compareLineMode);
+    els.toggleCompareLineMode.setAttribute("aria-pressed", state.compareLineMode ? "true" : "false");
+  }
+  function handleCompareScroll(side) {
+    if (state.syncingCompareScroll) {
+      scheduleCompareRowsRender(side);
+      return;
+    }
+    if (state.compareLineMode) {
+      syncCompareScrollFrom(side);
+    }
+    scheduleCompareRowsRender(side);
+  }
+  function syncCompareScrollFrom(side) {
+    if (!state.compareLineMode || state.syncingCompareScroll) return;
+    const source = side === "left" ? els.compareLeftWrap : els.compareRightWrap;
+    const target = side === "left" ? els.compareRightWrap : els.compareLeftWrap;
+    state.syncingCompareScroll = true;
+    target.scrollTop = source.scrollTop;
+    scheduleCompareRowsRender(otherCompareSide(side));
+    window.requestAnimationFrame(() => {
+      state.syncingCompareScroll = false;
     });
   }
   function openImportModal() {
@@ -7063,7 +7434,7 @@
     els.fileInput.click();
   });
   els.openFolderButton.addEventListener("click", openFolder);
-  els.analysisMenuCompareAction.addEventListener("click", openComparePicker);
+  els.analysisMenuCompareAction.addEventListener("click", openFlexibleCompareModal);
   els.directoryInput.addEventListener("change", (event) => {
     const files = Array.from(event.target.files || []);
     void openFiles(files, { onlyText: true });
@@ -7204,6 +7575,12 @@
     if (event.target === els.compareModal) requestCloseCompareModal();
   });
   els.closeCompareModal.addEventListener("click", requestCloseCompareModal);
+  els.compareModalLeftTitle.addEventListener("click", (event) => toggleCompareTitleMenu("left", event));
+  els.compareModalRightTitle.addEventListener("click", (event) => toggleCompareTitleMenu("right", event));
+  els.compareLeftTitleMenu.addEventListener("click", (event) => event.stopPropagation());
+  els.compareRightTitleMenu.addEventListener("click", (event) => event.stopPropagation());
+  document.addEventListener("click", closeCompareTitleMenu);
+  els.toggleCompareLineMode.addEventListener("click", toggleCompareLineMode);
   els.saveAnalysisModal.addEventListener("click", saveAnalysisModal);
   els.analysisModalSearchInput.addEventListener("input", runAnalysisModalSearch);
   els.analysisModalPrevMatch.addEventListener("click", () => goAnalysisModalMatch(-1));
@@ -7225,8 +7602,8 @@
   els.tableWrap.addEventListener("scroll", closeJumpLinePopover);
   els.searchTableWrap.addEventListener("scroll", scheduleSearchModalRowsRender);
   els.contextTableWrap.addEventListener("scroll", scheduleContextRowsRender);
-  els.compareLeftWrap.addEventListener("scroll", () => scheduleCompareRowsRender("left"));
-  els.compareRightWrap.addEventListener("scroll", () => scheduleCompareRowsRender("right"));
+  els.compareLeftWrap.addEventListener("scroll", () => handleCompareScroll("left"));
+  els.compareRightWrap.addEventListener("scroll", () => handleCompareScroll("right"));
   els.compareLeftFilter.addEventListener("input", () => applyCompareFilter("left"));
   els.compareRightFilter.addEventListener("input", () => applyCompareFilter("right"));
   els.compareLeftRegex.addEventListener("change", () => applyCompareFilter("left"));
