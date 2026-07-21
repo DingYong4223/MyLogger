@@ -6,7 +6,7 @@ MyLogger 是一个面向开发者的日志抓取、浏览和分析工具集。�
 
 - 抓取 Android `logcat`，支持指定设备、包名、输出文件和按时间命名。
 - 分析本地日志文件，输出行数、级别统计、Top Tag、问题摘要、JSON 或 Markdown 报告。
-- 通过 TUI 交互式执行 `/capture`、`/analyze` 等常用工作流。
+- 通过 TUI 交互式执行 `/clear & logcat` 等常用工作流。
 - 在 Chrome 扩展中打开、过滤、搜索和导出日志，并把日志路径与断点数据发送给本地分析服务。
 - 通过 Android Studio 插件导出当前工程真实断点信息，供后续分析使用。
 
@@ -35,8 +35,6 @@ skills/                 本项目的本地 agent skills
 按功能可选：
 
 - Android 日志抓取：`adb`，并确保在 `PATH` 中。
-- TUI 文件选择：`yazi`，用于 `/analyze` 交互式选文件。
-- TUI 打开分析报告：`nvim`，用于 `/analyze --open`。
 - Chrome 扩展构建：Node.js 和 npm。
 - Android Studio 插件构建：Gradle / Android Studio 插件开发环境。
 
@@ -143,7 +141,7 @@ cargo run -p mylogger -- capture --output app.log
 cargo run -p mylogger -- capture --device emulator-5554 --package com.example.app --output app.log
 ```
 
-抓取流程会先检测 `adb devices`。没有可用设备时会提示连接设备；单设备时直接抓取；多设备场景在 TUI 中会显示设备选择列表。
+抓取流程会先检测 `adb devices`。没有可用设备时会提示连接设备；单设备时先执行 `adb logcat -c` 清空历史日志，再开始抓取；多设备场景在 TUI 中会显示设备选择列表。
 
 ### 启动本地分析服务
 
@@ -178,11 +176,9 @@ cargo run -p mylogger
 
 ```text
 /                 打开命令菜单
-/capture          抓取日志，默认写入 ./123.txt，Ctrl+C 结束
-/capture -t       抓取日志，写入 mylogger-YYYYMMDD-HHMMSS.log
-/analyze          打开 yazi 选择日志文件并分析
-/analyze <file>   直接分析指定日志文件
-/analyze --open   分析日志，生成 mylogger-analysis.md，并用 Neovim 打开
+/clear & logcat          清空并抓取日志，默认写入 ./123.txt，Ctrl+C 结束
+/clear & logcat -t       清空并抓取日志，写入 mylogger-YYYYMMDD-HHMMSS.log
+/logcat                  直接抓取日志，不清空历史日志
 /help             查看 TUI 命令
 ```
 

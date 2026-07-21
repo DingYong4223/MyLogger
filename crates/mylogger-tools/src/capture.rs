@@ -20,6 +20,7 @@ pub struct CaptureOptions {
     pub package: Option<String>,
     pub output: Option<PathBuf>,
     pub time_named: bool,
+    pub clear_before_capture: bool,
 }
 
 pub fn resolve_capture_output_path(options: &CaptureOptions) -> Result<PathBuf> {
@@ -41,6 +42,24 @@ pub fn capture_logcat(options: &CaptureOptions) -> Result<PathBuf> {
 
     let device = select_device(options.device.as_deref())?;
     let output_path = resolve_capture_output_path(options)?;
+
+    if options.clear_before_capture {
+        let clear_output = Command::new("adb")
+            .arg("-s")
+            .arg(&device.serial)
+            .arg("logcat")
+            .arg("-c")
+            .output()
+            .with_context(|| format!("failed to clear adb logcat for {}", device.serial))?;
+        if !clear_output.status.success() {
+            let stderr = String::from_utf8_lossy(&clear_output.stderr);
+            bail!(
+                "failed to clear adb logcat for {}: {}",
+                device.serial,
+                stderr.trim()
+            );
+        }
+    }
 
     if output_path.exists() && options.output.is_none() && !options.time_named {
         eprintln!(
@@ -72,11 +91,19 @@ pub fn capture_logcat(options: &CaptureOptions) -> Result<PathBuf> {
         .take()
         .context("failed to capture adb logcat stderr")?;
 
-    println!(
-        "开始抓取设备 {} 的日志，写入 {}",
-        device.serial,
-        output_path.display()
-    );
+    if options.clear_before_capture {
+        println!(
+            "已清空设备 {} 的 logcat，开始抓取新日志，写入 {}",
+            device.serial,
+            output_path.display()
+        );
+    } else {
+        println!(
+            "开始抓取设备 {} 的 logcat，写入 {}",
+            device.serial,
+            output_path.display()
+        );
+    }
     println!("按 Ctrl+C 结束抓取。");
 
     let stderr_handle = std::thread::spawn(move || {

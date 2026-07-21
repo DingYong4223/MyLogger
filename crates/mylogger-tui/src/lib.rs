@@ -47,6 +47,7 @@ struct DevicePicker {
     devices: Vec<AdbDevice>,
     selected: usize,
     time_named: bool,
+    clear_before_capture: bool,
 }
 
 pub fn run_repl() -> Result<()> {
@@ -93,10 +94,12 @@ pub fn run_repl() -> Result<()> {
                 };
                 if let Some(device) = picker.devices.get(picker.selected) {
                     let time_named = picker.time_named;
-                    let command_label = capture_command_label(time_named);
+                    let clear_before_capture = picker.clear_before_capture;
+                    let command_label = capture_command_label(time_named, clear_before_capture);
                     let output = execute_capture_with_terminal_restore(
                         &mut terminal,
                         time_named,
+                        clear_before_capture,
                         device.serial.clone(),
                         &mut session,
                     )?;
@@ -316,20 +319,16 @@ const MENU_ITEMS: &[MenuItem] = &[
         description: "查看帮助",
     },
     MenuItem {
-        command: "/capture",
-        description: "抓取 Android 日志，默认写入 ./123.txt",
+        command: "/clear & logcat",
+        description: "清空并抓取 Android 日志，默认写入 ./123.txt",
     },
     MenuItem {
-        command: "/capture -t",
-        description: "抓取 Android 日志，写入时间命名文件",
+        command: "/clear & logcat -t",
+        description: "清空并抓取 Android 日志，写入时间命名文件",
     },
     MenuItem {
-        command: "/analyze",
-        description: "打开 yazi 选择日志文件并分析",
-    },
-    MenuItem {
-        command: "/analyze --open",
-        description: "分析日志并用 Neovim 打开结果",
+        command: "/logcat",
+        description: "直接抓取 Android 日志，不清空历史日志",
     },
     MenuItem {
         command: "/StartService",
@@ -359,15 +358,7 @@ fn render(frame: &mut ratatui::Frame<'_>, ui: &UiState) {
     let menu_items = ui.visible_menu_items();
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(8),
-            Constraint::Length(if ui.menu_visible {
-                (menu_items.len() as u16 + 2).clamp(3, 12)
-            } else {
-                0
-            }),
-            Constraint::Length(3),
-        ])
+        .constraints([Constraint::Min(1), Constraint::Length(3)])
         .split(frame.area());
 
     let messages: Vec<Line<'_>> = ui
@@ -380,17 +371,20 @@ fn render(frame: &mut ratatui::Frame<'_>, ui: &UiState) {
         .wrap(Wrap { trim: false });
     frame.render_widget(transcript, chunks[0]);
 
-    if ui.menu_visible {
-        render_menu(frame, chunks[1], ui, &menu_items);
-    }
-
     let input = Paragraph::new(Line::from(vec![
         Span::styled("> ", Style::default().fg(Color::Cyan)),
         Span::raw(ui.input.as_str()),
     ]))
     .block(Block::default().borders(Borders::ALL).title("Input"));
-    frame.render_widget(input, chunks[2]);
-    set_input_cursor(frame, chunks[2], ui);
+    frame.render_widget(input, chunks[1]);
+
+    if ui.menu_visible {
+        let preferred_height = (menu_items.len() as u16 + 2).clamp(3, 12);
+        let area = menu_popup_area(frame.area(), chunks[1], preferred_height);
+        render_menu(frame, area, ui, &menu_items);
+    }
+
+    set_input_cursor(frame, chunks[1], ui);
 
     if let Some(picker) = ui.device_picker.as_ref() {
         let area = centered_rect(frame.area(), 72, picker_height(picker));
@@ -482,7 +476,28 @@ fn render_menu(
             .borders(Borders::ALL)
             .title("Commands  ↑/↓ 选择  Enter 填入命令  Esc 关闭"),
     );
+    frame.render_widget(Clear, area);
     frame.render_widget(menu, area);
+}
+
+fn menu_popup_area(frame_area: Rect, input_area: Rect, preferred_height: u16) -> Rect {
+    let space_below = frame_area.bottom().saturating_sub(input_area.bottom());
+    let space_above = input_area.y.saturating_sub(frame_area.y);
+    let open_below = space_below >= preferred_height || space_below >= space_above;
+    let available = if open_below { space_below } else { space_above };
+    let height = preferred_height.min(available);
+    let y = if open_below {
+        input_area.bottom()
+    } else {
+        input_area.y.saturating_sub(height)
+    };
+
+    Rect {
+        x: input_area.x,
+        y,
+        width: input_area.width,
+        height,
+    }
 }
 
 fn set_input_cursor(frame: &mut ratatui::Frame<'_>, area: Rect, ui: &UiState) {
@@ -563,8 +578,11 @@ fn execute_tui_command(
     ui: &mut UiState,
 ) -> Result<String> {
     match route_intent(normalize_command(command)) {
-        Intent::Capture { time_named } => {
-            return prepare_tui_capture(terminal, time_named, session, ui);
+        Intent::Capture {
+            time_named,
+            clear_before_capture,
+        } => {
+            return prepare_tui_capture(terminal, time_named, clear_before_capture, session, ui);
         }
         Intent::Analyze { path, open } => {
             if open {
@@ -616,6 +634,7 @@ fn execute_tui_analyze_open(
 fn prepare_tui_capture(
     terminal: &mut TerminalSession,
     time_named: bool,
+    clear_before_capture: bool,
     session: &mut SessionState,
     ui: &mut UiState,
 ) -> Result<String> {
@@ -630,6 +649,7 @@ fn prepare_tui_capture(
         1 => execute_capture_with_terminal_restore(
             terminal,
             time_named,
+            clear_before_capture,
             available[0].serial.clone(),
             session,
         ),
@@ -638,6 +658,7 @@ fn prepare_tui_capture(
                 devices: available,
                 selected: 0,
                 time_named,
+                clear_before_capture,
             });
             Ok("检测到多个 Android 设备，请使用上下键选择设备后开始抓取。".to_string())
         }
@@ -647,17 +668,20 @@ fn prepare_tui_capture(
 fn execute_capture_with_terminal_restore(
     terminal: &mut TerminalSession,
     time_named: bool,
+    clear_before_capture: bool,
     device: String,
     session: &mut SessionState,
 ) -> Result<String> {
     terminal.suspend()?;
-    println!("MyLogger capture 已切换到终端模式。");
+    let command_label = capture_command_label(time_named, clear_before_capture);
+    println!("MyLogger {command_label} 已切换到终端模式。");
     println!("抓取过程中按 Ctrl+C 结束，结束后会自动返回 TUI。");
     println!();
 
     let result = capture_logcat(&CaptureOptions {
         device: Some(device),
         time_named,
+        clear_before_capture,
         ..Default::default()
     });
 
@@ -691,7 +715,10 @@ fn execute_tui_command_inner(command: &str, session: &mut SessionState) -> Resul
     let normalized = normalize_command(command);
 
     match route_intent(normalized) {
-        Intent::Capture { time_named: _ } => {
+        Intent::Capture {
+            time_named: _,
+            clear_before_capture: _,
+        } => {
             unreachable!("capture is handled before inner command execution")
         }
         Intent::Analyze { path, open: _ } => {
@@ -704,9 +731,7 @@ fn execute_tui_command_inner(command: &str, session: &mut SessionState) -> Resul
         Intent::CommandPalette => Ok(command_palette_text()),
         Intent::Help => Ok(help_text()),
         Intent::Quit => Ok("bye".to_string()),
-        Intent::Unknown => {
-            Ok("暂未识别该请求。可尝试：抓取日志、/analyze <file>、/help。".to_string())
-        }
+        Intent::Unknown => Ok("暂未识别该请求。可尝试：抓取日志、分析日志、/help。".to_string()),
     }
 }
 
@@ -780,11 +805,9 @@ fn help_text() -> String {
     [
         "可用输入：",
         "  /                 打开命令菜单",
-        "  /capture          抓取日志，默认写入 ./123.txt，Ctrl+C 结束",
-        "  /capture -t       抓取日志，写入 mylogger-YYYYMMDD-HHMMSS.log",
-        "  /analyze          打开 yazi 选择日志文件并分析",
-        "  /analyze --open   分析日志并用 Neovim 打开结果",
-        "  /analyze <file>   直接分析指定日志文件",
+        "  /clear & logcat          清空并抓取日志，默认写入 ./123.txt，Ctrl+C 结束",
+        "  /clear & logcat -t       清空并抓取日志，写入 mylogger-YYYYMMDD-HHMMSS.log",
+        "  /logcat                  直接抓取日志，不清空历史日志",
         "  /StartService     启动本地日志后台服务",
         "  /quit             退出",
     ]
@@ -794,16 +817,19 @@ fn help_text() -> String {
 fn command_palette_text() -> String {
     let mut out = String::from("支持的命令：\n");
     for item in MENU_ITEMS {
-        out.push_str(&format!("  {:<16} {}\n", item.command, item.description));
+        out.push_str(&format!("  {:<22} {}\n", item.command, item.description));
     }
     out.trim_end().to_string()
 }
 
-fn capture_command_label(time_named: bool) -> &'static str {
+fn capture_command_label(time_named: bool, clear_before_capture: bool) -> &'static str {
+    if !clear_before_capture {
+        return "/logcat";
+    }
     if time_named {
-        "/capture -t"
+        "/clear & logcat -t"
     } else {
-        "/capture"
+        "/clear & logcat"
     }
 }
 
@@ -841,10 +867,14 @@ fn handle_input(input: &str, session: &mut SessionState) -> Result<()> {
     };
 
     match route_intent(normalized) {
-        Intent::Capture { time_named } => {
+        Intent::Capture {
+            time_named,
+            clear_before_capture,
+        } => {
             let output = capture_logcat(&CaptureOptions {
                 device: session.selected_device.clone(),
                 time_named,
+                clear_before_capture,
                 ..Default::default()
             })?;
             session.last_capture_file = Some(output.clone());
@@ -992,11 +1022,9 @@ fn print_summary(path: &PathBuf, summary: &mylogger_core::AnalysisSummary) {
 fn print_help() {
     println!("可用输入：");
     println!("  /                 打开命令菜单");
-    println!("  /capture          抓取日志，默认写入 ./123.txt，Ctrl+C 结束");
-    println!("  /capture -t       抓取日志，写入 mylogger-YYYYMMDD-HHMMSS.log");
-    println!("  /analyze          打开 yazi 选择日志文件并分析");
-    println!("  /analyze --open   分析日志并用 Neovim 打开结果");
-    println!("  /analyze <file>   直接分析指定日志文件");
+    println!("  /clear & logcat          清空并抓取日志，默认写入 ./123.txt，Ctrl+C 结束");
+    println!("  /clear & logcat -t       清空并抓取日志，写入 mylogger-YYYYMMDD-HHMMSS.log");
+    println!("  /logcat                  直接抓取日志，不清空历史日志");
     println!("  /StartService     启动本地日志后台服务");
     println!("  /quit             退出");
 }
@@ -1005,5 +1033,31 @@ fn print_command_palette() {
     println!("支持的命令：");
     for item in MENU_ITEMS {
         println!("  {:<16} {}", item.command, item.description);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn menu_opens_below_when_there_is_enough_space() {
+        let area = menu_popup_area(Rect::new(0, 0, 80, 30), Rect::new(0, 5, 80, 3), 8);
+
+        assert_eq!(area, Rect::new(0, 8, 80, 8));
+    }
+
+    #[test]
+    fn menu_opens_above_when_bottom_space_is_insufficient() {
+        let area = menu_popup_area(Rect::new(0, 0, 80, 30), Rect::new(0, 27, 80, 3), 8);
+
+        assert_eq!(area, Rect::new(0, 19, 80, 8));
+    }
+
+    #[test]
+    fn menu_uses_available_space_when_terminal_is_short() {
+        let area = menu_popup_area(Rect::new(0, 0, 80, 7), Rect::new(0, 4, 80, 3), 8);
+
+        assert_eq!(area, Rect::new(0, 0, 80, 4));
     }
 }

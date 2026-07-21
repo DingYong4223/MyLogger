@@ -9,8 +9,8 @@ pub fn builtin_workflows() -> Vec<Workflow> {
     vec![
         Workflow {
             id: "capture",
-            title: "抓取 Android 日志",
-            aliases: &["capture", "抓取", "抓日志", "logcat"],
+            title: "清空并抓取 Android 日志",
+            aliases: &["clear & logcat", "capture", "抓取", "抓日志", "logcat"],
         },
         Workflow {
             id: "start-service",

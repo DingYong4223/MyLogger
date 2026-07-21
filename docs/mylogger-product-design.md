@@ -129,7 +129,7 @@ MyLogger 是一款面向开发者的日志分析工具，优先解决本地日�
 用户执行 mylogger capture
   └── 运行 adb devices
       ├── 0 个可用设备：提示连接设备后退出
-      ├── 1 个可用设备：直接 adb -s <serial> logcat -v threadtime
+      ├── 1 个可用设备：先 adb -s <serial> logcat -c，再 adb -s <serial> logcat -v threadtime
       └── 多个可用设备：展示设备列表，等待用户选择后抓取
           └── 日志写入目标文件，直到用户按 Ctrl+C 终止
               └── 输出最终日志文件路径

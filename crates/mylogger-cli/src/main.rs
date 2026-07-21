@@ -99,6 +99,7 @@ fn main() -> Result<()> {
                 package,
                 output,
                 time_named,
+                clear_before_capture: true,
             })?;
             println!("{}", path.display());
         }

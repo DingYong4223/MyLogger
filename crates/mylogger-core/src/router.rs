@@ -1,7 +1,13 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Intent {
-    Capture { time_named: bool },
-    Analyze { path: Option<String>, open: bool },
+    Capture {
+        time_named: bool,
+        clear_before_capture: bool,
+    },
+    Analyze {
+        path: Option<String>,
+        open: bool,
+    },
     StartService,
     CommandPalette,
     Help,
@@ -32,18 +38,32 @@ pub fn route_intent(input: &str) -> Intent {
     {
         return Intent::StartService;
     }
-    if lower.starts_with("capture -t")
+    if lower.starts_with("/clear & logcat -t")
+        || lower.starts_with("capture -t")
         || lower.starts_with("/capture -t")
         || text.contains("时间命名")
     {
-        return Intent::Capture { time_named: true };
+        return Intent::Capture {
+            time_named: true,
+            clear_before_capture: true,
+        };
     }
-    if lower.starts_with("/capture")
+    if lower.starts_with("/clear & logcat")
+        || lower.starts_with("/capture")
         || lower == "capture"
         || text.contains("抓取")
         || text.contains("抓日志")
     {
-        return Intent::Capture { time_named: false };
+        return Intent::Capture {
+            time_named: false,
+            clear_before_capture: true,
+        };
+    }
+    if lower == "/logcat" || lower == "logcat" {
+        return Intent::Capture {
+            time_named: false,
+            clear_before_capture: false,
+        };
     }
     if lower.starts_with("/analyze") {
         let mut open = false;
@@ -74,15 +94,38 @@ mod tests {
     fn routes_capture_aliases() {
         assert_eq!(
             route_intent("抓取日志"),
-            Intent::Capture { time_named: false }
+            Intent::Capture {
+                time_named: false,
+                clear_before_capture: true
+            }
         );
         assert_eq!(
             route_intent("capture -t"),
-            Intent::Capture { time_named: true }
+            Intent::Capture {
+                time_named: true,
+                clear_before_capture: true
+            }
         );
         assert_eq!(
-            route_intent("/capture -t"),
-            Intent::Capture { time_named: true }
+            route_intent("/clear & logcat"),
+            Intent::Capture {
+                time_named: false,
+                clear_before_capture: true
+            }
+        );
+        assert_eq!(
+            route_intent("/clear & logcat -t"),
+            Intent::Capture {
+                time_named: true,
+                clear_before_capture: true
+            }
+        );
+        assert_eq!(
+            route_intent("/logcat"),
+            Intent::Capture {
+                time_named: false,
+                clear_before_capture: false
+            }
         );
     }
 
