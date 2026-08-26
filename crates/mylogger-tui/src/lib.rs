@@ -118,24 +118,13 @@ pub fn run_repl() -> Result<()> {
                 ui.menu_selected = next_index(ui.menu_selected, ui.visible_menu_items().len());
             }
             KeyCode::Enter if ui.menu_visible => {
-                if let Some(item) = ui.selected_menu_item() {
-                    if ui.input.trim() == item.command {
-                        let command = item.command.to_string();
-                        ui.clear_input();
-                        ui.menu_visible = false;
-                        if matches!(route_intent(&command), Intent::Quit) {
-                            break;
-                        }
-                        let output =
-                            execute_tui_command(&mut terminal, &command, &mut session, &mut ui)?;
-                        ui.messages.push(format!("> {command}\n{output}"));
-                    } else {
-                        ui.input = item.command.to_string();
-                        ui.cursor = ui.input.chars().count();
-                        ui.menu_visible = false;
+                if let Some(command) = ui.take_selected_menu_command() {
+                    if matches!(route_intent(&command), Intent::Quit) {
+                        break;
                     }
-                } else {
-                    ui.menu_visible = false;
+                    let output =
+                        execute_tui_command(&mut terminal, &command, &mut session, &mut ui)?;
+                    ui.messages.push(format!("> {command}\n{output}"));
                 }
             }
             KeyCode::Enter => {
@@ -242,6 +231,15 @@ impl UiState {
     fn selected_menu_item(&self) -> Option<&'static MenuItem> {
         self.visible_menu_items().get(self.menu_selected).copied()
     }
+
+    fn take_selected_menu_command(&mut self) -> Option<String> {
+        let command = self
+            .selected_menu_item()
+            .map(|item| item.command.to_string());
+        self.clear_input();
+        self.menu_visible = false;
+        command
+    }
 }
 
 struct TerminalSession {
@@ -315,10 +313,6 @@ struct MenuItem {
 
 const MENU_ITEMS: &[MenuItem] = &[
     MenuItem {
-        command: "/help",
-        description: "查看帮助",
-    },
-    MenuItem {
         command: "/clear & logcat",
         description: "清空并抓取 Android 日志，默认写入 ./123.txt",
     },
@@ -337,6 +331,10 @@ const MENU_ITEMS: &[MenuItem] = &[
     MenuItem {
         command: "/quit",
         description: "退出",
+    },
+    MenuItem {
+        command: "/help",
+        description: "查看帮助",
     },
 ];
 
@@ -474,7 +472,7 @@ fn render_menu(
     let menu = List::new(items).block(
         Block::default()
             .borders(Borders::ALL)
-            .title("Commands  ↑/↓ 选择  Enter 填入命令  Esc 关闭"),
+            .title("Commands  ↑/↓ 选择  Enter 执行命令  Esc 关闭"),
     );
     frame.render_widget(Clear, area);
     frame.render_widget(menu, area);
@@ -1059,5 +1057,24 @@ mod tests {
         let area = menu_popup_area(Rect::new(0, 0, 80, 7), Rect::new(0, 4, 80, 3), 8);
 
         assert_eq!(area, Rect::new(0, 0, 80, 4));
+    }
+
+    #[test]
+    fn help_is_last_in_slash_menu() {
+        assert_eq!(slash_menu_items("/").last().unwrap().command, "/help");
+    }
+
+    #[test]
+    fn taking_selected_menu_command_clears_input_and_closes_menu() {
+        let mut ui = UiState::default();
+        ui.insert_char('/');
+        ui.menu_selected = 2;
+
+        let command = ui.take_selected_menu_command();
+
+        assert_eq!(command.as_deref(), Some("/logcat"));
+        assert!(ui.input.is_empty());
+        assert_eq!(ui.cursor, 0);
+        assert!(!ui.menu_visible);
     }
 }
