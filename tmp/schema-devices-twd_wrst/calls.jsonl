@@ -1,0 +1,5 @@
+{"device": "second", "schema": "demo://line"}
+{"device": "first", "schema": "demo://single"}
+{"device": "second", "schema": "demo://second?text=\u4e2d\u6587&foo=bar"}
+{"device": "first", "schema": "demo://first"}
+{"device": "first", "schema": "demo://only"}

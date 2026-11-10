@@ -1,0 +1,1 @@
+PASS: workbench header, multi-device-before-schema, long Unicode URI, Home/End/history, app selection, explicit package/favorites fill-before-execute, picker cancel, current-directory 123.txt overwrite and concurrent-writer protection, background logs, pause writes, stop/exit cleanup, device/task isolation, screenshots, no-device/error, narrow resize. Fake adb only.

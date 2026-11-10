@@ -1,12 +1,15 @@
 # MyLogger
 
-MyLogger 是一个面向开发者的日志抓取、浏览和分析工具集。当前项目包含 Rust CLI/TUI、Chrome 本地日志查看器、Android Studio 断点导出插件，以及一个用于联调的本地分析服务。
+MyLogger 是一个面向开发者的 ADB 工作台，集成设备与应用管理、页面联调、日志取证和本地日志分析。当前项目包含 Rust CLI/TUI、Chrome 本地日志查看器、Android Studio 断点导出插件，以及一个用于联调的本地分析服务。
 
 ## 能做什么
 
 - 抓取 Android `logcat`，支持指定设备、包名、输出文件和按时间命名。
 - 分析本地日志文件，输出行数、级别统计、Top Tag、问题摘要、JSON 或 Markdown 报告。
-- 通过 TUI 交互式执行 `/clear & logcat` 等常用工作流。
+- 在终端工作台选择设备和应用，查看设备摘要、应用版本和当前 Activity，安装 APK、启动、停止或重启应用。
+- 执行 schema 跳转，支持指定应用、长输入滚动、会话历史与显式持久化收藏。
+- 保存 PNG 截图、按明确路径 Push/Pull 文件、管理当前设备的 TCP Reverse/Forward 映射。
+- 查看后台任务、执行结果和产物；日志采集中仍可操作工作台。
 - 在 Chrome 扩展中打开、过滤、搜索和导出日志，并把日志路径与断点数据发送给本地分析服务。
 - 通过 Android Studio 插件导出当前工程真实断点信息，供后续分析使用。
 
@@ -141,7 +144,9 @@ cargo run -p mylogger -- capture --output app.log
 cargo run -p mylogger -- capture --device emulator-5554 --package com.example.app --output app.log
 ```
 
-抓取流程会先检测 `adb devices`。没有可用设备时会提示连接设备；单设备时先执行 `adb logcat -c` 清空历史日志，再开始抓取；多设备场景在 TUI 中会显示设备选择列表。
+抓取前检测 `adb devices`；单设备自动选择，多设备时 CLI 必须提供 `--device SERIAL`，TUI 则先展示选择列表。离线和未授权设备不可选。`capture` 默认先清空日志，增加 `--no-clear` 可保留历史缓冲。普通采集（含 `/log`、`/logcat`）固定写入当前工作目录的 `123.txt`，每次重新采集会清空并覆盖旧内容；显式 `-t` 才使用当前目录中的时间命名文件，显式 `--output` 已存在时拒绝覆盖。
+
+应用日志优先按 UID 筛选；设备不支持时按解析后的 PID 筛选主进程及 `包名:子进程`，每秒刷新。UID 筛选会包含共享 UID 的进程；isolated process 不在覆盖范围，PID 回退在重启瞬间可能缺失日志。暂停显示和界面筛选都不改变落盘内容。
 
 ### 启动本地分析服务
 
@@ -164,25 +169,80 @@ cargo run -p mylogger -- start-service
 cargo run -p mylogger -- service
 ```
 
-## TUI 用法
+## ADB 工具箱 CLI
 
-启动：
+以下示例使用构建后的程序；多设备时为目标命令增加 `--device SERIAL`。短操作可加 `--json` 获取状态、设备、命令、输出、耗时、退出码和产物路径。
+
+```bash
+./target/debug/MyLogger devices
+./target/debug/MyLogger device-info --device emulator-5554
+./target/debug/MyLogger apps
+./target/debug/MyLogger app-info com.example.app
+./target/debug/MyLogger install "/path/to/app.apk" --launch com.example.app
+./target/debug/MyLogger start com.example.app
+./target/debug/MyLogger stop com.example.app
+./target/debug/MyLogger restart com.example.app
+./target/debug/MyLogger current
+./target/debug/MyLogger schema 'demo://detail?id=123&source=dev' --package com.example.app
+./target/debug/MyLogger screenshot --output "./captures/screen.png"
+./target/debug/MyLogger push "./local file.json" /sdcard/Download/debug.json
+./target/debug/MyLogger pull /sdcard/Download/debug.json "./downloaded.json"
+./target/debug/MyLogger reverse --device emulator-5554 list
+./target/debug/MyLogger reverse --device emulator-5554 add 8081 8081
+./target/debug/MyLogger forward --device emulator-5554 add 8700 8701
+./target/debug/MyLogger reverse --device emulator-5554 remove 8081
+./target/debug/MyLogger favorites save 开发首页 'demo://home' --package com.example.app
+./target/debug/MyLogger favorites list
+```
+
+Push/Pull 只支持文件，远端必须是绝对文件路径；已存在目标须显式增加 `--overwrite`。先传输到暂存文件再提交，失败时保留 `.partial` 并显示其路径。截图默认保存至 `captures/`，指定目标已存在时拒绝覆盖；按 PNG 签名、块结构及 CRC 校验后才生成正式文件。端口新增使用 `--no-rebind`，冲突不替换，删除只针对指定设备的一条 TCP 映射。
+
+收藏保存到 `$XDG_CONFIG_HOME/mylogger/favorites.json`，未配置时使用 `~/.config/mylogger/favorites.json`。同名收藏显式更新；损坏文件会报错并保留。schema 作为单个安全参数交给设备 shell，保留查询顺序和编码。
+
+## TUI 用法
 
 ```bash
 cargo run -p mylogger
 ```
 
-常用命令：
+界面包含顶部设备/应用上下文、中间全宽任务与结果、底部命令栏，终端和视觉稿均移除左侧功能导航。输入 `/` 搜索中文名称、英文命令或分类；Tab 在输入与结果之间切换，方向键和 Enter 操作列表。
 
-```text
-/                 打开命令菜单
-/clear & logcat          清空并抓取日志，默认写入 ./123.txt，Ctrl+C 结束
-/clear & logcat -t       清空并抓取日志，写入 mylogger-YYYYMMDD-HHMMSS.log
-/logcat                  直接抓取日志，不清空历史日志
-/help             查看 TUI 命令
-```
+| 命令 | 功能 |
+| --- | --- |
+| `/device`、`/device-info` | 选择设备、设备摘要 |
+| `/apps`、`/app-info` | 搜索选择应用、应用信息 |
+| `/install` | 输入 APK 路径覆盖升级，保留应用数据 |
+| `/start`、`/stop`、`/restart`、`/current` | 应用生命周期、当前 Activity |
+| `/schema`、`/打开schema` | 先选设备，再输入 URI；Enter 直接执行 |
+| `/favorites` | 选择收藏、确认设备、填入输入框，再回车执行 |
+| `/log` | 当前应用日志，默认不清空设备日志，覆盖写入当前目录 `123.txt` |
+| `/clear & logcat`、`/clear & logcat -t` | 清空并抓取全部设备日志，默认文件或时间命名 |
+| `/logcat` | 全部设备日志，不清空 |
+| `/screenshot` | 保存 PNG 至 `captures/` |
+| `/push`、`/pull` | 明确路径的文件传输；覆盖时输入 `YES` |
+| `/reverse`、`/forward` | 查看 TCP 映射；表单填写 list / add / remove 和端口 |
+| `/tasks`、`/history` | 查看本次会话任务、结果与产物 |
+| `/analyze`、`/StartService` | 保留本地日志分析、yazi / Neovim 与服务入口 |
+| `/help`、`/quit` | 帮助、退出 |
 
-命令菜单中可用上下键移动，按 Enter 将选中的命令填入输入框，再按 Enter 执行。日志抓取和外部编辑器会临时切回普通终端环境，完成后自动回到 TUI。
+| 按键 | 行为 |
+| --- | --- |
+| Tab / Shift+Tab | 切换焦点；表单中切换字段 |
+| ↑ / ↓ | 输入区恢复会话历史和草稿；列表区切换选项或任务 |
+| Enter / Esc | 执行或下一项 / 取消未提交输入与选择 |
+| Home / End / ← / → | 编辑长 URI 和文件路径，视口跟随光标 |
+| PageUp / PageDown | 滚动结果或实时日志 |
+| Ctrl+G | schema 表单中显式指定或取消当前已选应用 |
+| Ctrl+S | 收藏正在编辑或最近执行的 schema，保存后保留原输入 |
+| Ctrl+P / Ctrl+F / Ctrl+L | 暂停日志显示 / 关键词 / 循环最低级别 |
+| Ctrl+X | 停止当前选中的其它后台任务 |
+| Ctrl+C | 有日志任务时停止采集并留在工作台；没有日志任务时退出 |
+
+每台设备最多一个日志任务；同一工作台中，正在写入 `123.txt` 时须先停止该任务再开始普通采集，避免不同设备同时写同一文件。切换设备会清除应用上下文，运行中任务继续固定使用原设备。日志 UI 保留最近 2000 行，拥塞时可丢弃显示更新，完整选中日志持续落盘。日志抓取结束后，“会话任务”中的日志条目保留完整绝对路径，长路径自动换行。停止日志使用 Ctrl+C；切到其它操作后仍可停止后台采集。退出工作台也可使用 `/quit`，并清理本工具管理的采集进程。yazi 和 Neovim 会临时切换终端，结束后返回工作台。
+
+历史仅保存在当前会话，恢复 schema 后可编辑、回车并使用当前设备执行。schema 新动作始终先刷新设备，多设备仍需确认后才出现输入框。收藏回填不会自动跳转。
+
+实现与验证记录见 [ADB工具箱首批实现与验证](docs/ADB工具箱首批实现与验证.md)。完整规划中的录屏、无线配对、清数据、性能分析等仍在后续批次，实际终端只展示已实现入口。
 
 ## Chrome 扩展
 

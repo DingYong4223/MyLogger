@@ -1,14 +1,15 @@
+mod toolbox;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use mylogger_core::{AnalysisOptions, LogLevel, analyze_file, generate_markdown_report};
 use mylogger_tools::{CaptureOptions, StartServiceOptions, capture_logcat, start_backend_service};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Parser)]
 #[command(
     name = "MyLogger",
     version,
-    about = "Developer-focused log analysis assistant"
+    about = "ADB developer workbench and log analysis assistant"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -17,6 +18,8 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    #[command(flatten)]
+    Toolbox(toolbox::Commands),
     /// Analyze a local log file.
     Analyze {
         file: PathBuf,
@@ -43,6 +46,9 @@ enum Command {
         package: Option<String>,
         #[arg(short, long)]
         output: Option<PathBuf>,
+        /// Keep existing device log buffers.
+        #[arg(long)]
+        no_clear: bool,
     },
     /// Start the local backend analysis service.
     #[command(name = "StartService", alias = "start-service", alias = "service")]
@@ -59,6 +65,7 @@ enum Command {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
+        Some(Command::Toolbox(command)) => toolbox::run(command)?,
         Some(Command::Analyze {
             file,
             keyword,
@@ -93,13 +100,16 @@ fn main() -> Result<()> {
             device,
             package,
             output,
+            no_clear,
         }) => {
+            let cancel = mylogger_tools::capture::interrupt_flag()?;
+            let device = Some(toolbox::resolve_device(device.as_deref(), &cancel)?);
             let path = capture_logcat(&CaptureOptions {
                 device,
                 package,
                 output,
                 time_named,
-                clear_before_capture: true,
+                clear_before_capture: !no_clear,
             })?;
             println!("{}", path.display());
         }
@@ -141,7 +151,7 @@ fn parse_level(value: &str) -> Result<LogLevel, String> {
     }
 }
 
-fn print_cli_summary(path: &PathBuf, summary: &mylogger_core::AnalysisSummary) {
+fn print_cli_summary(path: &Path, summary: &mylogger_core::AnalysisSummary) {
     println!("分析文件：{}", path.display());
     println!("总行数：{}", summary.total_lines);
     println!("命中行数：{}", summary.matched_lines);

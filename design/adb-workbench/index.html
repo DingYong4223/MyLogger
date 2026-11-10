@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MyLogger · ADB 开发工作台</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="preview-bar"><span>MYLOGGER / DESIGN PREVIEW</span><span>可交互视觉稿 · 示例数据，不连接设备</span></div>
+  <div class="workspace">
+    <div class="workspace-body">
+      <header class="context-bar">
+        <button class="context-button" id="device-context"><span class="context-icon">▯</span><span><small>当前设备</small><strong id="device-label">Pixel 8</strong></span><span class="connection" id="connection-label">USB</span><span class="chevron">⌄</span></button>
+        <span class="context-divider"></span>
+        <button class="context-button app-context" id="app-context"><span class="app-mark">D</span><span><small>当前应用</small><strong id="app-label">Demo App <span class="muted">/ debug</span></strong></span><span class="chevron">⌄</span></button>
+        <span class="context-spacer"></span><span class="user-label">user <b>0</b></span><button class="task-shortcut" data-nav="tasks"><span class="dot amber"></span>任务 <span id="task-count">1</span></button>
+      </header>
+      <main id="main" tabindex="-1"></main>
+      <section class="command-dock" aria-label="命令输入">
+        <div class="command-context"><span id="command-context-label">PIXEL 8</span><span id="command-mode">COMMAND</span><button class="search-launch" id="search-launch" aria-label="搜索操作">搜索操作 <kbd>/</kbd></button></div>
+        <div class="command-line"><label for="command-input">❯</label><input id="command-input" placeholder="输入 / 查找操作，或输入命令" autocomplete="off" spellcheck="false"><button id="command-submit" aria-label="执行输入">↵</button></div>
+        <div class="command-hints"><span><kbd>/</kbd> 命令菜单　<kbd>↑</kbd><kbd>↓</kbd> 历史　<kbd>Esc</kbd> 取消</span><span id="command-target">DEMO123 · com.example.app</span></div>
+      </section>
+      <footer class="status-bar"><span><span class="dot"></span> <span id="available-count">2</span> 台设备可用 <span class="status-separator">/</span> 所有操作保留执行结果</span><span>LOCAL SESSION <span class="status-separator">/</span> <span id="status-clock">14:32:08</span></span></footer>
+    </div>
+  </div>
+  <dialog id="modal"><div class="dialog-heading"><div><div class="eyebrow" id="modal-eyebrow">SELECT DEVICE</div><h2 id="modal-title">选择设备</h2></div><button class="icon-button" id="modal-close" aria-label="关闭弹窗">×</button></div><div id="modal-content"></div></dialog>
+  <dialog id="palette"><div class="palette-search"><span>❯</span><input id="palette-input" placeholder="搜索操作、命令或功能…" aria-label="搜索命令" autocomplete="off"><kbd>ESC</kbd></div><div id="palette-results" role="listbox" aria-label="搜索结果"></div><div class="palette-footer">↑ ↓ 选择　↵ 打开 <span>按中文名称、英文命令搜索</span></div></dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>

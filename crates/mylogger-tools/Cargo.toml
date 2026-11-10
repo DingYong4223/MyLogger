@@ -10,5 +10,6 @@ chrono.workspace = true
 ctrlc.workspace = true
 mylogger-core = { path = "../mylogger-core" }
 serde.workspace = true
+serde_json.workspace = true
 tokio.workspace = true
 

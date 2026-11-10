@@ -1,0 +1,1 @@
+PASS: PTY history recall immediately after schema execution, edit/reexecute, up/down traversal, schema draft restore, ordinary draft restore and help command replay, long Chinese input, device-picker arrows unchanged. Fake adb only.

@@ -1,3 +1,4 @@
+pub mod actions;
 pub mod analyze;
 pub mod model;
 pub mod parser;

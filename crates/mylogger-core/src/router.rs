@@ -9,6 +9,7 @@ pub enum Intent {
         open: bool,
     },
     StartService,
+    OpenSchema,
     CommandPalette,
     Help,
     Quit,
@@ -23,6 +24,9 @@ pub fn route_intent(input: &str) -> Intent {
     }
     if text == "/" {
         return Intent::CommandPalette;
+    }
+    if text == "/打开schema" || lower == "/schema" {
+        return Intent::OpenSchema;
     }
     if matches!(lower.as_str(), "quit" | "exit" | "/quit" | "/exit") {
         return Intent::Quit;
@@ -132,6 +136,11 @@ mod tests {
     #[test]
     fn routes_command_palette() {
         assert_eq!(route_intent("/"), Intent::CommandPalette);
+    }
+
+    #[test]
+    fn routes_open_schema() {
+        assert_eq!(route_intent("/打开schema"), Intent::OpenSchema);
     }
 
     #[test]

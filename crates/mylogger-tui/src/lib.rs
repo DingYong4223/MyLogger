@@ -8,19 +8,19 @@ use mylogger_core::{
     AnalysisOptions, AnalysisSummary, Intent, analyze_file, generate_markdown_report, route_intent,
 };
 use mylogger_tools::{
-    AdbDevice, CaptureOptions, StartServiceOptions, capture_logcat, list_adb_devices,
+    CaptureOptions, StartServiceOptions, capture_logcat, open_schema, select_device,
     start_backend_service,
 };
 use ratatui::{
     Terminal,
     backend::CrosstermBackend,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::{Line, Span},
+    text::Line,
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
 };
 use std::io::{self, IsTerminal, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use unicode_width::UnicodeWidthStr;
@@ -36,145 +36,108 @@ pub struct SessionState {
 struct UiState {
     input: String,
     cursor: usize,
-    messages: Vec<String>,
-    menu_visible: bool,
-    menu_selected: usize,
-    device_picker: Option<DevicePicker>,
+    input_scroll: usize,
+    awaiting_schema: bool,
+    input_history: Vec<InputHistoryEntry>,
+    history_index: Option<usize>,
+    history_draft: InputHistoryEntry,
 }
 
-#[derive(Debug, Clone)]
-struct DevicePicker {
-    devices: Vec<AdbDevice>,
-    selected: usize,
-    time_named: bool,
-    clear_before_capture: bool,
+#[derive(Debug, Clone, Default)]
+struct InputHistoryEntry {
+    input: String,
+    is_schema: bool,
 }
+
+mod workbench;
 
 pub fn run_repl() -> Result<()> {
     if !io::stdin().is_terminal() {
         return run_line_repl();
     }
-
-    let mut terminal = TerminalSession::enter()?;
-    let mut session = SessionState::default();
-    let mut ui = UiState {
-        messages: welcome_messages(),
-        ..Default::default()
-    };
-
-    loop {
-        terminal.draw(|frame| render(frame, &ui))?;
-
-        let Event::Key(key) = event::read().context("failed to read terminal event")? else {
-            continue;
-        };
-        if key.kind != KeyEventKind::Press {
-            continue;
-        }
-
-        match key.code {
-            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => break,
-            KeyCode::Esc if ui.device_picker.is_some() => {
-                ui.device_picker = None;
-                ui.messages.push("已取消设备选择。".to_string());
-            }
-            KeyCode::Up if ui.device_picker.is_some() => {
-                if let Some(picker) = ui.device_picker.as_mut() {
-                    picker.selected = previous_index(picker.selected, picker.devices.len());
-                }
-            }
-            KeyCode::Down if ui.device_picker.is_some() => {
-                if let Some(picker) = ui.device_picker.as_mut() {
-                    picker.selected = next_index(picker.selected, picker.devices.len());
-                }
-            }
-            KeyCode::Enter if ui.device_picker.is_some() => {
-                let Some(picker) = ui.device_picker.take() else {
-                    continue;
-                };
-                if let Some(device) = picker.devices.get(picker.selected) {
-                    let time_named = picker.time_named;
-                    let clear_before_capture = picker.clear_before_capture;
-                    let command_label = capture_command_label(time_named, clear_before_capture);
-                    let output = execute_capture_with_terminal_restore(
-                        &mut terminal,
-                        time_named,
-                        clear_before_capture,
-                        device.serial.clone(),
-                        &mut session,
-                    )?;
-                    ui.messages.push(format!("> {command_label}\n{output}"));
-                }
-            }
-            _ if ui.device_picker.is_some() => {}
-            KeyCode::Esc if ui.menu_visible => {
-                ui.menu_visible = false;
-            }
-            KeyCode::Esc if !ui.input.is_empty() => ui.clear_input(),
-            KeyCode::Up if ui.menu_visible => {
-                ui.menu_selected = previous_index(ui.menu_selected, ui.visible_menu_items().len());
-            }
-            KeyCode::Down if ui.menu_visible => {
-                ui.menu_selected = next_index(ui.menu_selected, ui.visible_menu_items().len());
-            }
-            KeyCode::Enter if ui.menu_visible => {
-                if let Some(command) = ui.take_selected_menu_command() {
-                    if matches!(route_intent(&command), Intent::Quit) {
-                        break;
-                    }
-                    let output =
-                        execute_tui_command(&mut terminal, &command, &mut session, &mut ui)?;
-                    ui.messages.push(format!("> {command}\n{output}"));
-                }
-            }
-            KeyCode::Enter => {
-                let command = ui.input.trim().to_string();
-                ui.clear_input();
-                ui.menu_visible = false;
-                if command.is_empty() {
-                    continue;
-                }
-                if matches!(route_intent(&command), Intent::Quit) {
-                    break;
-                }
-                let output = execute_tui_command(&mut terminal, &command, &mut session, &mut ui)?;
-                ui.messages.push(format!("> {command}\n{output}"));
-            }
-            KeyCode::Backspace => {
-                ui.backspace();
-            }
-            KeyCode::Delete => ui.delete(),
-            KeyCode::Left => ui.move_left(),
-            KeyCode::Right => ui.move_right(),
-            KeyCode::Home => ui.move_home(),
-            KeyCode::End => ui.move_end(),
-            KeyCode::Char(ch) => {
-                if !key
-                    .modifiers
-                    .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
-                {
-                    ui.insert_char(ch);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    terminal.leave()
+    workbench::run()
 }
 
 impl UiState {
     fn clear_input(&mut self) {
         self.input.clear();
         self.cursor = 0;
-        self.refresh_menu();
+        self.input_scroll = 0;
+        self.history_index = None;
+        self.history_draft = InputHistoryEntry::default();
+    }
+
+    fn remember_input(&mut self, input: String, is_schema: bool) {
+        if !is_schema && matches!(route_intent(normalize_command(&input)), Intent::OpenSchema) {
+            return;
+        }
+        self.input_history
+            .push(InputHistoryEntry { input, is_schema });
+    }
+
+    fn navigate_history(&mut self, older: bool) {
+        if self.input_history.is_empty() {
+            return;
+        }
+        let next = if older {
+            match self.history_index {
+                None => {
+                    self.history_draft = InputHistoryEntry {
+                        input: self.input.clone(),
+                        is_schema: self.awaiting_schema,
+                    };
+                    Some(self.input_history.len() - 1)
+                }
+                Some(index) => Some(index.saturating_sub(1)),
+            }
+        } else {
+            match self.history_index {
+                Some(index) if index + 1 < self.input_history.len() => Some(index + 1),
+                Some(_) => None,
+                None => return,
+            }
+        };
+        let entry = match next {
+            Some(index) => &self.input_history[index],
+            None => &self.history_draft,
+        };
+        self.input = entry.input.clone();
+        self.awaiting_schema = entry.is_schema;
+        self.cursor = self.input.chars().count();
+        self.input_scroll = 0;
+        self.history_index = next;
+    }
+
+    fn input_view(&mut self, width: u16) -> (&str, u16) {
+        if width == 0 {
+            return ("", 0);
+        }
+        let cursor = byte_index_at_char(&self.input, self.cursor);
+        self.input_scroll = if UnicodeWidthStr::width(&self.input[..cursor]) < usize::from(width) {
+            0
+        } else {
+            self.input_scroll.min(cursor)
+        };
+        while !self.input.is_char_boundary(self.input_scroll) {
+            self.input_scroll -= 1;
+        }
+        if UnicodeWidthStr::width(&self.input[self.input_scroll..cursor]) >= usize::from(width) {
+            self.input_scroll = cursor;
+            for (start, _) in self.input[..cursor].char_indices().rev() {
+                if UnicodeWidthStr::width(&self.input[start..cursor]) >= usize::from(width) {
+                    break;
+                }
+                self.input_scroll = start;
+            }
+        }
+        let cursor_column = UnicodeWidthStr::width(&self.input[self.input_scroll..cursor]) as u16;
+        (&self.input[self.input_scroll..], cursor_column)
     }
 
     fn insert_char(&mut self, ch: char) {
         let byte_index = byte_index_at_char(&self.input, self.cursor);
         self.input.insert(byte_index, ch);
         self.cursor += 1;
-        self.refresh_menu();
     }
 
     fn backspace(&mut self) {
@@ -185,7 +148,6 @@ impl UiState {
         let end = byte_index_at_char(&self.input, self.cursor);
         self.input.replace_range(start..end, "");
         self.cursor -= 1;
-        self.refresh_menu();
     }
 
     fn delete(&mut self) {
@@ -195,7 +157,6 @@ impl UiState {
         let start = byte_index_at_char(&self.input, self.cursor);
         let end = byte_index_at_char(&self.input, self.cursor + 1);
         self.input.replace_range(start..end, "");
-        self.refresh_menu();
     }
 
     fn move_left(&mut self) {
@@ -212,33 +173,6 @@ impl UiState {
 
     fn move_end(&mut self) {
         self.cursor = self.input.chars().count();
-    }
-
-    fn refresh_menu(&mut self) {
-        self.menu_visible = looks_like_slash_input(&self.input);
-        let len = self.visible_menu_items().len();
-        if len == 0 {
-            self.menu_selected = 0;
-        } else {
-            self.menu_selected = self.menu_selected.min(len - 1);
-        }
-    }
-
-    fn visible_menu_items(&self) -> Vec<&'static MenuItem> {
-        slash_menu_items(&self.input)
-    }
-
-    fn selected_menu_item(&self) -> Option<&'static MenuItem> {
-        self.visible_menu_items().get(self.menu_selected).copied()
-    }
-
-    fn take_selected_menu_command(&mut self) -> Option<String> {
-        let command = self
-            .selected_menu_item()
-            .map(|item| item.command.to_string());
-        self.clear_input();
-        self.menu_visible = false;
-        command
     }
 }
 
@@ -305,39 +239,6 @@ impl Drop for TerminalSession {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-struct MenuItem {
-    command: &'static str,
-    description: &'static str,
-}
-
-const MENU_ITEMS: &[MenuItem] = &[
-    MenuItem {
-        command: "/clear & logcat",
-        description: "清空并抓取 Android 日志，默认写入 ./123.txt",
-    },
-    MenuItem {
-        command: "/clear & logcat -t",
-        description: "清空并抓取 Android 日志，写入时间命名文件",
-    },
-    MenuItem {
-        command: "/logcat",
-        description: "直接抓取 Android 日志，不清空历史日志",
-    },
-    MenuItem {
-        command: "/StartService",
-        description: "启动本地日志后台服务",
-    },
-    MenuItem {
-        command: "/quit",
-        description: "退出",
-    },
-    MenuItem {
-        command: "/help",
-        description: "查看帮助",
-    },
-];
-
 fn previous_index(index: usize, len: usize) -> usize {
     if len == 0 {
         0
@@ -350,78 +251,6 @@ fn previous_index(index: usize, len: usize) -> usize {
 
 fn next_index(index: usize, len: usize) -> usize {
     if len == 0 { 0 } else { (index + 1) % len }
-}
-
-fn render(frame: &mut ratatui::Frame<'_>, ui: &UiState) {
-    let menu_items = ui.visible_menu_items();
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(3)])
-        .split(frame.area());
-
-    let messages: Vec<Line<'_>> = ui
-        .messages
-        .iter()
-        .flat_map(|message| message.lines().map(Line::from).collect::<Vec<_>>())
-        .collect();
-    let transcript = Paragraph::new(messages)
-        .block(Block::default().title("MyLogger").borders(Borders::ALL))
-        .wrap(Wrap { trim: false });
-    frame.render_widget(transcript, chunks[0]);
-
-    let input = Paragraph::new(Line::from(vec![
-        Span::styled("> ", Style::default().fg(Color::Cyan)),
-        Span::raw(ui.input.as_str()),
-    ]))
-    .block(Block::default().borders(Borders::ALL).title("Input"));
-    frame.render_widget(input, chunks[1]);
-
-    if ui.menu_visible {
-        let preferred_height = (menu_items.len() as u16 + 2).clamp(3, 12);
-        let area = menu_popup_area(frame.area(), chunks[1], preferred_height);
-        render_menu(frame, area, ui, &menu_items);
-    }
-
-    set_input_cursor(frame, chunks[1], ui);
-
-    if let Some(picker) = ui.device_picker.as_ref() {
-        let area = centered_rect(frame.area(), 72, picker_height(picker));
-        render_device_picker(frame, area, picker);
-    }
-}
-
-fn render_device_picker(frame: &mut ratatui::Frame<'_>, area: Rect, picker: &DevicePicker) {
-    let items = picker
-        .devices
-        .iter()
-        .enumerate()
-        .map(|(index, device)| {
-            let style = if index == picker.selected {
-                Style::default()
-                    .fg(Color::Black)
-                    .bg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default()
-            };
-            ListItem::new(Line::from(vec![
-                Span::styled(format!("{:>2}.  {:<24}", index + 1, device.serial), style),
-                Span::styled(device.state.to_string(), style),
-            ]))
-            .style(style)
-        })
-        .collect::<Vec<_>>();
-    let list = List::new(items).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .title("Devices  ↑/↓ 选择  Enter 开始抓取  Esc 取消"),
-    );
-    frame.render_widget(Clear, area);
-    frame.render_widget(list, area);
-}
-
-fn picker_height(picker: &DevicePicker) -> u16 {
-    (picker.devices.len() as u16 + 2).clamp(4, 12)
 }
 
 fn centered_rect(area: Rect, percent_x: u16, height: u16) -> Rect {
@@ -444,40 +273,6 @@ fn centered_rect(area: Rect, percent_x: u16, height: u16) -> Rect {
     }
 }
 
-fn render_menu(
-    frame: &mut ratatui::Frame<'_>,
-    area: Rect,
-    ui: &UiState,
-    menu_items: &[&'static MenuItem],
-) {
-    let items = menu_items
-        .iter()
-        .enumerate()
-        .map(|(index, item)| {
-            let style = if index == ui.menu_selected {
-                Style::default()
-                    .fg(Color::Black)
-                    .bg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default()
-            };
-            ListItem::new(Line::from(vec![
-                Span::styled(format!("{:<14}", item.command), style),
-                Span::styled(item.description, style),
-            ]))
-            .style(style)
-        })
-        .collect::<Vec<_>>();
-    let menu = List::new(items).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .title("Commands  ↑/↓ 选择  Enter 执行命令  Esc 关闭"),
-    );
-    frame.render_widget(Clear, area);
-    frame.render_widget(menu, area);
-}
-
 fn menu_popup_area(frame_area: Rect, input_area: Rect, preferred_height: u16) -> Rect {
     let space_below = frame_area.bottom().saturating_sub(input_area.bottom());
     let space_above = input_area.y.saturating_sub(frame_area.y);
@@ -498,35 +293,17 @@ fn menu_popup_area(frame_area: Rect, input_area: Rect, preferred_height: u16) ->
     }
 }
 
-fn set_input_cursor(frame: &mut ratatui::Frame<'_>, area: Rect, ui: &UiState) {
-    let prompt = "> ";
-    let cursor_prefix = chars_prefix(&ui.input, ui.cursor);
-    let x_offset = UnicodeWidthStr::width(prompt) + UnicodeWidthStr::width(cursor_prefix.as_str());
+fn set_input_cursor(frame: &mut ratatui::Frame<'_>, area: Rect, cursor_column: u16) {
+    if area.width < 5 || area.height < 3 {
+        return;
+    }
     let x = area
         .x
-        .saturating_add(1)
-        .saturating_add(x_offset as u16)
+        .saturating_add(3)
+        .saturating_add(cursor_column)
         .min(area.x.saturating_add(area.width.saturating_sub(2)));
     let y = area.y.saturating_add(1);
     frame.set_cursor_position((x, y));
-}
-
-fn looks_like_slash_input(input: &str) -> bool {
-    input.starts_with('/') && !input.contains(char::is_whitespace)
-}
-
-fn slash_menu_items(input: &str) -> Vec<&'static MenuItem> {
-    if !looks_like_slash_input(input) {
-        return Vec::new();
-    }
-    let prefix = input.trim_start_matches('/').to_ascii_lowercase();
-    MENU_ITEMS
-        .iter()
-        .filter(|item| {
-            let command = item.command.trim_start_matches('/').to_ascii_lowercase();
-            command.starts_with(&prefix)
-        })
-        .collect()
 }
 
 fn byte_index_at_char(text: &str, char_index: usize) -> usize {
@@ -537,10 +314,6 @@ fn byte_index_at_char(text: &str, char_index: usize) -> usize {
         .nth(char_index)
         .map(|(index, _)| index)
         .unwrap_or(text.len())
-}
-
-fn chars_prefix(text: &str, char_count: usize) -> String {
-    text.chars().take(char_count).collect()
 }
 
 fn run_line_repl() -> Result<()> {
@@ -569,46 +342,6 @@ fn run_line_repl() -> Result<()> {
     Ok(())
 }
 
-fn execute_tui_command(
-    terminal: &mut TerminalSession,
-    command: &str,
-    session: &mut SessionState,
-    ui: &mut UiState,
-) -> Result<String> {
-    match route_intent(normalize_command(command)) {
-        Intent::Capture {
-            time_named,
-            clear_before_capture,
-        } => {
-            return prepare_tui_capture(terminal, time_named, clear_before_capture, session, ui);
-        }
-        Intent::Analyze { path, open } => {
-            if open {
-                return execute_tui_analyze_open(terminal, path, session);
-            }
-            if path.is_none() {
-                return execute_tui_analyze_with_yazi(terminal, session);
-            }
-        }
-        _ => {}
-    }
-
-    Ok(match execute_tui_command_inner(command, session) {
-        Ok(output) => output,
-        Err(err) => format!("执行失败：{err:#}"),
-    })
-}
-
-fn execute_tui_analyze_with_yazi(
-    terminal: &mut TerminalSession,
-    session: &mut SessionState,
-) -> Result<String> {
-    let path = select_log_file_with_yazi(Some(terminal))?;
-    let summary = analyze_file(&path, &AnalysisOptions::default())?;
-    session.current_log_file = Some(path.clone());
-    Ok(format_summary(&path, &summary))
-}
-
 fn execute_tui_analyze_open(
     terminal: &mut TerminalSession,
     path: Option<String>,
@@ -629,73 +362,6 @@ fn execute_tui_analyze_open(
     ))
 }
 
-fn prepare_tui_capture(
-    terminal: &mut TerminalSession,
-    time_named: bool,
-    clear_before_capture: bool,
-    session: &mut SessionState,
-    ui: &mut UiState,
-) -> Result<String> {
-    let devices = list_adb_devices()?;
-    let available = devices
-        .into_iter()
-        .filter(|device| device.state.is_available())
-        .collect::<Vec<_>>();
-
-    match available.len() {
-        0 => Ok("未检测到可用 Android 设备，请连接设备或启动模拟器。".to_string()),
-        1 => execute_capture_with_terminal_restore(
-            terminal,
-            time_named,
-            clear_before_capture,
-            available[0].serial.clone(),
-            session,
-        ),
-        _ => {
-            ui.device_picker = Some(DevicePicker {
-                devices: available,
-                selected: 0,
-                time_named,
-                clear_before_capture,
-            });
-            Ok("检测到多个 Android 设备，请使用上下键选择设备后开始抓取。".to_string())
-        }
-    }
-}
-
-fn execute_capture_with_terminal_restore(
-    terminal: &mut TerminalSession,
-    time_named: bool,
-    clear_before_capture: bool,
-    device: String,
-    session: &mut SessionState,
-) -> Result<String> {
-    terminal.suspend()?;
-    let command_label = capture_command_label(time_named, clear_before_capture);
-    println!("MyLogger {command_label} 已切换到终端模式。");
-    println!("抓取过程中按 Ctrl+C 结束，结束后会自动返回 TUI。");
-    println!();
-
-    let result = capture_logcat(&CaptureOptions {
-        device: Some(device),
-        time_named,
-        clear_before_capture,
-        ..Default::default()
-    });
-
-    terminal.resume()?;
-    drain_pending_terminal_events(Duration::from_millis(300));
-
-    Ok(match result {
-        Ok(path) => {
-            session.last_capture_file = Some(path.clone());
-            session.current_log_file = Some(path.clone());
-            format!("日志抓取结束：{}", path.display())
-        }
-        Err(err) => format!("日志抓取失败：{err:#}"),
-    })
-}
-
 fn drain_pending_terminal_events(max_duration: Duration) {
     let started = Instant::now();
     while started.elapsed() < max_duration {
@@ -706,30 +372,6 @@ fn drain_pending_terminal_events(max_duration: Duration) {
             Ok(false) => break,
             Err(_) => break,
         }
-    }
-}
-
-fn execute_tui_command_inner(command: &str, session: &mut SessionState) -> Result<String> {
-    let normalized = normalize_command(command);
-
-    match route_intent(normalized) {
-        Intent::Capture {
-            time_named: _,
-            clear_before_capture: _,
-        } => {
-            unreachable!("capture is handled before inner command execution")
-        }
-        Intent::Analyze { path, open: _ } => {
-            let path = resolve_tui_log_path(path, session)?;
-            let summary = analyze_file(&path, &AnalysisOptions::default())?;
-            session.current_log_file = Some(path.clone());
-            Ok(format_summary(&path, &summary))
-        }
-        Intent::StartService => start_service_text(),
-        Intent::CommandPalette => Ok(command_palette_text()),
-        Intent::Help => Ok(help_text()),
-        Intent::Quit => Ok("bye".to_string()),
-        Intent::Unknown => Ok("暂未识别该请求。可尝试：抓取日志、分析日志、/help。".to_string()),
     }
 }
 
@@ -759,20 +401,7 @@ fn normalize_command(command: &str) -> &str {
     }
 }
 
-fn resolve_tui_log_path(path: Option<String>, session: &SessionState) -> Result<PathBuf> {
-    if let Some(path) = path {
-        return Ok(PathBuf::from(path));
-    }
-    if let Some(path) = session.current_log_file.as_ref() {
-        return Ok(path.clone());
-    }
-    if let Some(path) = session.last_capture_file.as_ref() {
-        return Ok(path.clone());
-    }
-    anyhow::bail!("请指定日志文件路径，例如：/analyze app.log")
-}
-
-fn format_summary(path: &PathBuf, summary: &mylogger_core::AnalysisSummary) -> String {
+fn format_summary(path: &Path, summary: &mylogger_core::AnalysisSummary) -> String {
     let mut out = String::new();
     out.push_str(&format!("分析文件：{}\n", path.display()));
     out.push_str(&format!("总行数：{}\n", summary.total_lines));
@@ -797,50 +426,6 @@ fn format_summary(path: &PathBuf, summary: &mylogger_core::AnalysisSummary) -> S
         ));
     }
     out.trim_end().to_string()
-}
-
-fn help_text() -> String {
-    [
-        "可用输入：",
-        "  /                 打开命令菜单",
-        "  /clear & logcat          清空并抓取日志，默认写入 ./123.txt，Ctrl+C 结束",
-        "  /clear & logcat -t       清空并抓取日志，写入 mylogger-YYYYMMDD-HHMMSS.log",
-        "  /logcat                  直接抓取日志，不清空历史日志",
-        "  /StartService     启动本地日志后台服务",
-        "  /quit             退出",
-    ]
-    .join("\n")
-}
-
-fn command_palette_text() -> String {
-    let mut out = String::from("支持的命令：\n");
-    for item in MENU_ITEMS {
-        out.push_str(&format!("  {:<22} {}\n", item.command, item.description));
-    }
-    out.trim_end().to_string()
-}
-
-fn capture_command_label(time_named: bool, clear_before_capture: bool) -> &'static str {
-    if !clear_before_capture {
-        return "/logcat";
-    }
-    if time_named {
-        "/clear & logcat -t"
-    } else {
-        "/clear & logcat"
-    }
-}
-
-fn welcome_messages() -> Vec<String> {
-    vec![String::from(
-        "常用操作：\n\
-         [1] 抓取 Android 日志\n\
-         [2] 分析本地日志文件\n\
-         [3] 提取崩溃\n\
-         [4] 启动本地日志后台服务\n\n\
-         输入 / 打开命令菜单，使用上下键选择，Enter 填入命令。\n\
-         Ctrl+C 退出。",
-    )]
 }
 
 fn print_welcome_for_line_mode() {
@@ -891,6 +476,34 @@ fn handle_input(input: &str, session: &mut SessionState) -> Result<()> {
         Intent::StartService => {
             println!("{}", start_service_text()?);
         }
+        Intent::OpenSchema => {
+            let device = select_device(None)?;
+            session.selected_device = Some(device.serial);
+            loop {
+                print!("请输入schema（Enter 打开，Esc 取消）：");
+                io::stdout().flush().ok();
+                let mut schema = String::new();
+                if io::stdin()
+                    .read_line(&mut schema)
+                    .context("failed to read schema")?
+                    == 0
+                    || schema.trim() == "\u{1b}"
+                {
+                    println!("已取消打开schema。");
+                    break;
+                }
+                let schema = schema.trim();
+                if schema.is_empty() {
+                    println!("schema不能为空。");
+                    continue;
+                }
+                println!(
+                    "{}",
+                    open_schema(schema, session.selected_device.as_deref())?
+                );
+                break;
+            }
+        }
         Intent::CommandPalette => print_command_palette(),
         Intent::Help => print_help(),
         Intent::Quit => {
@@ -940,7 +553,7 @@ fn select_log_file_with_yazi(mut terminal: Option<&mut TerminalSession>) -> Resu
         .arg(&chooser_file)
         .status();
 
-    if let Some(terminal) = terminal.as_deref_mut() {
+    if let Some(terminal) = terminal {
         terminal.resume()?;
         drain_pending_terminal_events(Duration::from_millis(300));
     }
@@ -962,24 +575,32 @@ fn select_log_file_with_yazi(mut terminal: Option<&mut TerminalSession>) -> Resu
     Ok(PathBuf::from(selected))
 }
 
-fn write_analysis_markdown(path: &PathBuf, summary: &AnalysisSummary) -> Result<PathBuf> {
-    let output = std::env::current_dir()?.join("mylogger-analysis.md");
+fn write_analysis_markdown(path: &Path, summary: &AnalysisSummary) -> Result<PathBuf> {
+    let directory = std::env::current_dir()?;
+    let mut output = directory.join("mylogger-analysis.md");
+    if output.exists() {
+        output = mylogger_tools::operations::unique_output(&directory, "mylogger-analysis", "md")?;
+    }
     let mut report = String::new();
     report.push_str(&format!("> 分析文件：{}\n\n", path.display()));
     report.push_str(&generate_markdown_report(summary));
-    std::fs::write(&output, report)
-        .with_context(|| format!("failed to write {}", output.display()))?;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&output)
+        .with_context(|| format!("failed to create {}", output.display()))?;
+    file.write_all(report.as_bytes())?;
     Ok(output)
 }
 
-fn open_file_with_nvim(mut terminal: Option<&mut TerminalSession>, path: &PathBuf) -> Result<()> {
+fn open_file_with_nvim(mut terminal: Option<&mut TerminalSession>, path: &Path) -> Result<()> {
     if let Some(terminal) = terminal.as_deref_mut() {
         terminal.suspend()?;
     }
 
     let status = Command::new("nvim").arg(path).status();
 
-    if let Some(terminal) = terminal.as_deref_mut() {
+    if let Some(terminal) = terminal {
         terminal.resume()?;
         drain_pending_terminal_events(Duration::from_millis(300));
     }
@@ -992,7 +613,7 @@ fn open_file_with_nvim(mut terminal: Option<&mut TerminalSession>, path: &PathBu
     Ok(())
 }
 
-fn print_summary(path: &PathBuf, summary: &mylogger_core::AnalysisSummary) {
+fn print_summary(path: &Path, summary: &mylogger_core::AnalysisSummary) {
     println!("分析文件：{}", path.display());
     println!("总行数：{}", summary.total_lines);
     println!("命中行数：{}", summary.matched_lines);
@@ -1024,57 +645,81 @@ fn print_help() {
     println!("  /clear & logcat -t       清空并抓取日志，写入 mylogger-YYYYMMDD-HHMMSS.log");
     println!("  /logcat                  直接抓取日志，不清空历史日志");
     println!("  /StartService     启动本地日志后台服务");
+    println!("  /打开schema       输入schema并通过adb打开");
     println!("  /quit             退出");
 }
 
 fn print_command_palette() {
     println!("支持的命令：");
-    for item in MENU_ITEMS {
-        println!("  {:<16} {}", item.command, item.description);
+    for item in mylogger_core::actions::ACTIONS {
+        println!("  {:<16} {}", item.command, item.title);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
-    fn menu_opens_below_when_there_is_enough_space() {
-        let area = menu_popup_area(Rect::new(0, 0, 80, 30), Rect::new(0, 5, 80, 3), 8);
-
-        assert_eq!(area, Rect::new(0, 8, 80, 8));
-    }
-
-    #[test]
-    fn menu_opens_above_when_bottom_space_is_insufficient() {
-        let area = menu_popup_area(Rect::new(0, 0, 80, 30), Rect::new(0, 27, 80, 3), 8);
-
-        assert_eq!(area, Rect::new(0, 19, 80, 8));
-    }
-
-    #[test]
-    fn menu_uses_available_space_when_terminal_is_short() {
-        let area = menu_popup_area(Rect::new(0, 0, 80, 7), Rect::new(0, 4, 80, 3), 8);
-
-        assert_eq!(area, Rect::new(0, 0, 80, 4));
-    }
-
-    #[test]
-    fn help_is_last_in_slash_menu() {
-        assert_eq!(slash_menu_items("/").last().unwrap().command, "/help");
-    }
-
-    #[test]
-    fn taking_selected_menu_command_clears_input_and_closes_menu() {
+    fn history_recalls_schema_commands_and_draft() {
         let mut ui = UiState::default();
-        ui.insert_char('/');
-        ui.menu_selected = 2;
-
-        let command = ui.take_selected_menu_command();
-
-        assert_eq!(command.as_deref(), Some("/logcat"));
-        assert!(ui.input.is_empty());
-        assert_eq!(ui.cursor, 0);
-        assert!(!ui.menu_visible);
+        ui.remember_input("/打开schema".into(), false);
+        assert!(ui.input_history.is_empty());
+        ui.remember_input("demo://中文?value=1".into(), true);
+        ui.remember_input("/help".into(), false);
+        ui.input = "草稿".into();
+        ui.navigate_history(true);
+        assert_eq!(ui.input, "/help");
+        assert!(!ui.awaiting_schema);
+        ui.navigate_history(true);
+        assert_eq!(ui.input, "demo://中文?value=1");
+        assert!(ui.awaiting_schema);
+        ui.navigate_history(true);
+        assert_eq!(ui.input, "demo://中文?value=1");
+        ui.navigate_history(false);
+        assert_eq!(ui.input, "/help");
+        ui.navigate_history(false);
+        assert_eq!(ui.input, "草稿");
+        assert!(!ui.awaiting_schema);
+    }
+    #[test]
+    fn long_input_scrolls_with_cursor_and_preserves_text() {
+        let mut ui = UiState::default();
+        for ch in "0123456789".chars() {
+            ui.insert_char(ch);
+        }
+        assert_eq!(ui.input_view(6), ("56789", 5));
+        ui.move_left();
+        assert_eq!(ui.input_view(6), ("56789", 4));
+        ui.move_home();
+        assert_eq!(ui.input_view(6), ("0123456789", 0));
+        ui.move_end();
+        assert_eq!(ui.input_view(3), ("89", 2));
+        assert_eq!(ui.input, "0123456789");
+    }
+    #[test]
+    fn unicode_editing_and_tiny_viewports() {
+        let mut ui = UiState::default();
+        for ch in "中文ab".chars() {
+            ui.insert_char(ch);
+        }
+        assert_eq!(ui.input_view(5), ("文ab", 4));
+        ui.move_home();
+        ui.delete();
+        ui.move_end();
+        ui.backspace();
+        assert_eq!(ui.input_view(5), ("文a", 3));
+        assert_eq!(ui.input_view(0), ("", 0));
+        assert_eq!(ui.input_view(1), ("", 0));
+    }
+    #[test]
+    fn popup_stays_inside_terminal() {
+        assert_eq!(
+            menu_popup_area(Rect::new(0, 0, 80, 30), Rect::new(0, 27, 80, 3), 8),
+            Rect::new(0, 19, 80, 8)
+        );
+        assert_eq!(
+            menu_popup_area(Rect::new(0, 0, 80, 7), Rect::new(0, 4, 80, 3), 8),
+            Rect::new(0, 0, 80, 4)
+        );
     }
 }

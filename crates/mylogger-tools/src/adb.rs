@@ -34,6 +34,26 @@ pub struct AdbDevice {
     pub state: DeviceState,
 }
 
+pub fn open_schema(schema: &str, device: Option<&str>) -> Result<String> {
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    let serial = match device {
+        Some(s) => s.to_string(),
+        None => select_device(None)?.serial,
+    };
+    let response = crate::operations::execute_operation(
+        crate::operations::Operation::Schema {
+            uri: schema.into(),
+            package: None,
+        },
+        Some(&serial),
+        &cancel,
+    );
+    if response.result.status != mylogger_core::actions::TaskStatus::Success {
+        bail!("{}", response.result.output);
+    }
+    Ok(response.result.output)
+}
+
 pub fn list_adb_devices() -> Result<Vec<AdbDevice>> {
     let output = Command::new("adb")
         .arg("devices")
@@ -94,7 +114,7 @@ pub fn select_device(requested: Option<&str>) -> Result<AdbDevice> {
 }
 
 fn prompt_device_selection(devices: &[AdbDevice]) -> Result<AdbDevice> {
-    println!("检测到多个 Android 设备，请选择要抓取日志的设备：\n");
+    println!("检测到多个 Android 设备，请选择要操作的设备：\n");
     for (index, device) in devices.iter().enumerate() {
         println!("  {}. {}\t{}", index + 1, device.serial, device.state);
     }
