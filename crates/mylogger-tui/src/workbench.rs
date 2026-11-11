@@ -85,7 +85,10 @@ struct Workbench {
     return_form: Option<(Form, String)>,
     tasks: Vec<Task>,
     selected_task: usize,
-    scroll: u16,
+    scroll: usize,
+    max_scroll: usize,
+    task_area: Rect,
+    detail_area: Rect,
     notice: String,
     sender: SyncSender<Message>,
     receiver: Receiver<Message>,
@@ -113,6 +116,9 @@ impl Workbench {
             tasks: vec![],
             selected_task: 0,
             scroll: 0,
+            max_scroll: 0,
+            task_area: Rect::default(),
+            detail_area: Rect::default(),
             notice: "输入 / 搜索命令；Tab 切换结果和输入。".into(),
             sender,
             receiver,
@@ -312,7 +318,7 @@ impl Workbench {
             Tasks => {
                 self.focus = Focus::Results;
                 self.notice(
-                    "↑/↓ 选择任务；PageUp/PageDown 滚动；Ctrl+C 停止日志，Ctrl+X 停止其它任务。",
+                    "任务区滚轮或 ↑/↓ 选择任务；详情区滚轮或 PageUp/PageDown 滚动；Ctrl+C 停止日志，Ctrl+X 停止其它任务。",
                 );
             }
             Analyze => self.open_form(
@@ -334,7 +340,7 @@ impl Workbench {
             }
             Help => {
                 let id = self.add_task("使用帮助", None, None, false);
-                let mut text="Tab 切换任务 / 输入；↑↓ 按焦点切换列表或输入历史\nPgUp/PgDn 滚动详情；Ctrl+C 停止日志，Ctrl+X 停止其它任务\nCtrl+P 暂停日志显示；Ctrl+F 关键词；Ctrl+L 最低级别\nCtrl+S 收藏 schema；Ctrl+G 指定/取消当前应用\nEsc 取消输入或选择；Ctrl+C 停止日志（无采集时退出）；/quit 退出\n\n可用命令（参数通过表单填写）：\n".to_string();
+                let mut text="Tab 切换任务 / 输入；↑↓ 按焦点切换列表或输入历史\n任务区滚轮选择任务；详情区滚轮/PgUp/PgDn 滚动；结果区 Home/End 跳到顶部/底部\nCtrl+C 停止日志，Ctrl+X 停止其它任务\nCtrl+P 暂停日志显示；Ctrl+F 关键词；Ctrl+L 最低级别\nCtrl+S 收藏 schema；Ctrl+G 指定/取消当前应用\nEsc 取消输入或选择；Ctrl+C 停止日志（无采集时退出）；/quit 退出\n\n可用命令（参数通过表单填写）：\n".to_string();
                 text.push_str(
                     &ACTIONS
                         .iter()
@@ -487,7 +493,7 @@ impl Workbench {
             let _ = sender.send(Message::Done(id, Box::new(response), Purpose::Normal));
         }));
         self.notice(
-            "日志后台采集中，可继续操作。Ctrl+P 暂停显示；Ctrl+C 停止；完整日志持续写入文件。",
+            "日志后台采集中，可继续操作。滚轮/PgUp 上翻，回到底部继续跟随；Ctrl+P 暂停；Ctrl+C 停止；完整日志持续写入文件。",
         );
     }
     fn messages(&mut self) {
@@ -665,6 +671,10 @@ impl Workbench {
         }
         if form.action == ActionId::Help {
             self.filter = values[0].clone();
+            if self.paused {
+                self.frozen = Some(self.log_lines());
+            }
+            self.scroll = 0;
             self.set_input(String::new());
             self.notice("日志关键词筛选已更新；原始文件保持完整。");
             return Ok(());
@@ -840,11 +850,59 @@ impl Workbench {
             self.tasks.iter().rposition(active_log)
         };
         if let Some(index) = index {
-            self.selected_task = index;
+            self.select_task(index);
             self.stop_task();
             self.notice("正在停止日志采集并刷新文件，完成后留在工作台。");
         } else {
             self.quit = true;
+        }
+    }
+    fn select_task(&mut self, index: usize) {
+        let index = index.min(self.tasks.len().saturating_sub(1));
+        if self.selected_task != index {
+            self.scroll = 0;
+            self.paused = false;
+            self.frozen = None;
+        }
+        self.selected_task = index;
+    }
+    fn scroll_results(&mut self, older: bool, rows: usize) {
+        let log = self
+            .tasks
+            .get(self.selected_task)
+            .is_some_and(|task| task.log);
+        if log && older && !self.paused && self.max_scroll > 0 {
+            self.paused = true;
+            self.frozen = Some(self.log_lines());
+        }
+        self.scroll = if older == log {
+            self.scroll.saturating_add(rows).min(self.max_scroll)
+        } else {
+            self.scroll.saturating_sub(rows)
+        };
+        if log && !older && self.scroll == 0 {
+            self.paused = false;
+            self.frozen = None;
+        }
+    }
+    fn mouse(&mut self, mouse: event::MouseEvent) {
+        if self.form.is_some() || self.picker.is_some() || self.menu {
+            return;
+        }
+        let older = match mouse.kind {
+            event::MouseEventKind::ScrollUp => true,
+            event::MouseEventKind::ScrollDown => false,
+            _ => return,
+        };
+        let position = (mouse.column, mouse.row).into();
+        if self.task_area.contains(position) {
+            self.select_task(if older {
+                self.selected_task.saturating_sub(3)
+            } else {
+                self.selected_task.saturating_add(3)
+            });
+        } else if self.detail_area.contains(position) {
+            self.scroll_results(older, 3);
         }
     }
     fn key(&mut self, key: event::KeyEvent, terminal: &mut TerminalSession) -> Result<()> {
@@ -860,6 +918,7 @@ impl Workbench {
                     self.stop_task()
                 }
                 KeyCode::Char('p') => {
+                    self.scroll = 0;
                     self.paused = !self.paused;
                     self.frozen = if self.paused {
                         Some(self.log_lines())
@@ -876,6 +935,10 @@ impl Workbench {
                         Some(Warn) => Some(Error),
                         _ => None,
                     };
+                    if self.paused {
+                        self.frozen = Some(self.log_lines());
+                    }
+                    self.scroll = 0;
                 }
                 KeyCode::Char('f') if self.form.is_none() && self.picker.is_none() => self
                     .open_form(
@@ -952,15 +1015,18 @@ impl Workbench {
             self.notice("已取消当前输入。日志采集可用 Ctrl+C 停止，其它任务用 Ctrl+X。");
             return Ok(());
         }
-        if matches!(key.code, KeyCode::PageUp | KeyCode::PageDown) {
-            self.scroll = if (key.code == KeyCode::PageUp)
-                == self.tasks.get(self.selected_task).is_some_and(|t| t.log)
-            {
-                self.scroll.saturating_add(8)
-            } else {
-                self.scroll.saturating_sub(8)
-            };
-            return Ok(());
+        if self.form.is_none() && self.picker.is_none() && !self.menu {
+            if matches!(key.code, KeyCode::PageUp | KeyCode::PageDown) {
+                self.scroll_results(
+                    key.code == KeyCode::PageUp,
+                    usize::from(self.detail_area.height.saturating_sub(2)).max(1),
+                );
+                return Ok(());
+            }
+            if self.focus == Focus::Results && matches!(key.code, KeyCode::Home | KeyCode::End) {
+                self.scroll_results(key.code == KeyCode::Home, usize::MAX);
+                return Ok(());
+            }
         }
         if self.picker.is_some() {
             let len = self.picker_items().len();
@@ -1003,15 +1069,9 @@ impl Workbench {
             return Ok(());
         }
         if self.focus == Focus::Results {
-            self.paused = false;
-            self.frozen = None;
-            self.scroll = 0;
             match key.code {
-                KeyCode::Up => self.selected_task = self.selected_task.saturating_sub(1),
-                KeyCode::Down => {
-                    self.selected_task =
-                        (self.selected_task + 1).min(self.tasks.len().saturating_sub(1))
-                }
+                KeyCode::Up => self.select_task(self.selected_task.saturating_sub(1)),
+                KeyCode::Down => self.select_task(self.selected_task.saturating_add(1)),
                 KeyCode::Enter => {
                     self.scroll = 0;
                     self.paused = false;
@@ -1197,6 +1257,7 @@ pub(super) fn run() -> Result<()> {
         }
         match event::read()? {
             Event::Key(key) if key.kind == KeyEventKind::Press => app.key(key, &mut terminal)?,
+            Event::Mouse(mouse) => app.mouse(mouse),
             Event::Paste(text) => {
                 for c in text.chars().filter(|c| !c.is_control()) {
                     app.editor.insert_char(c);
@@ -1381,7 +1442,26 @@ fn render_workbench(frame: &mut ratatui::Frame<'_>, app: &mut Workbench) {
         );
     }
 }
-fn render_results(frame: &mut ratatui::Frame<'_>, area: Rect, app: &Workbench) {
+fn wrap_display_lines(text: &str, width: u16) -> Vec<String> {
+    let width = usize::from(width).max(1);
+    let mut rows = Vec::new();
+    for text in text.split('\n') {
+        let mut row = String::new();
+        let mut columns = 0;
+        for ch in text.chars() {
+            let size = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
+            if columns + size > width && !row.is_empty() {
+                rows.push(std::mem::take(&mut row));
+                columns = 0;
+            }
+            row.push(ch);
+            columns += size;
+        }
+        rows.push(row);
+    }
+    rows
+}
+fn render_results(frame: &mut ratatui::Frame<'_>, area: Rect, app: &mut Workbench) {
     let items = app
         .tasks
         .iter()
@@ -1403,21 +1483,14 @@ fn render_results(frame: &mut ratatui::Frame<'_>, area: Rect, app: &Workbench) {
             ))];
             if t.log {
                 for path in &t.result.artifacts {
-                    let mut line = String::new();
-                    let mut columns = 0;
-                    let width = usize::from(area.width.saturating_sub(2)).max(1);
-                    for ch in format!("日志：{}", path.display()).chars() {
-                        let size = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
-                        if columns + size > width && !line.is_empty() {
-                            lines.push(Line::from(std::mem::take(&mut line)));
-                            columns = 0;
-                        }
-                        line.push(ch);
-                        columns += size;
-                    }
-                    if !line.is_empty() {
-                        lines.push(Line::from(line));
-                    }
+                    lines.extend(
+                        wrap_display_lines(
+                            &format!("日志：{}", path.display()),
+                            area.width.saturating_sub(2),
+                        )
+                        .into_iter()
+                        .map(Line::from),
+                    );
                 }
             }
             ListItem::new(lines).style(Style::default().fg(color))
@@ -1440,12 +1513,15 @@ fn render_results(frame: &mut ratatui::Frame<'_>, area: Rect, app: &Workbench) {
             items
         })
         .block(panel(
-            " 会话任务 · ↑↓ 选择 · Ctrl+C 停止日志 ",
+            " 会话任务 · 滚轮/↑↓ 选择 · Ctrl+C 停止日志 ",
             app.focus == Focus::Results,
         )),
         parts[0],
         &mut task_state,
     );
+    app.task_area = parts[0];
+    app.detail_area = parts[1];
+    app.max_scroll = 0;
     let Some(task) = app.tasks.get(app.selected_task) else {
         frame.render_widget(Paragraph::new("开发工作台\n\n选择设备 → 选择应用 → 安装 / 启动 / schema 联调\n\n日志、截图、文件传输、端口映射共享设备上下文。\n每项结果保留目标、命令、错误与产物路径。\n\n输入 / 搜索所有可用功能；Tab 切换输入和任务结果。").wrap(Wrap{trim:false}).block(panel(" 操作与结果 ",false)),parts[1]);
         return;
@@ -1492,42 +1568,181 @@ fn render_results(frame: &mut ratatui::Frame<'_>, area: Rect, app: &Workbench) {
             app.log_lines()
         });
     }
-    let available = parts[1].height.saturating_sub(2) as usize;
+    let available = usize::from(parts[1].height.saturating_sub(2));
+    let rows = wrap_display_lines(&lines.join("\n"), parts[1].width.saturating_sub(2));
+    app.max_scroll = rows.len().saturating_sub(available);
+    app.scroll = app.scroll.min(app.max_scroll);
     let offset = if task.log {
-        lines
-            .len()
-            .saturating_sub(available)
-            .saturating_sub(app.scroll as usize)
+        app.max_scroll - app.scroll
     } else {
-        app.scroll.min(lines.len().saturating_sub(1) as u16) as usize
+        app.scroll
     };
-    let text = lines
-        .into_iter()
+    let text = rows
+        .iter()
         .skip(offset)
+        .take(available)
+        .cloned()
         .collect::<Vec<_>>()
         .join("\n");
-    frame.render_widget(
-        Paragraph::new(text).wrap(Wrap { trim: false }).block(panel(
-            if task.log {
-                format!(
-                    " 日志 · {} · 级别 {} · PgUp/PgDn ",
-                    if app.paused { "暂停显示" } else { "跟随" },
-                    app.level
-                        .map(|l| l.to_string())
-                        .unwrap_or_else(|| "全部".into())
-                )
-            } else {
-                " 执行详情 · PgUp/PgDn ".into()
-            },
-            false,
-        )),
-        parts[1],
-    );
+    let title = if task.log {
+        format!(
+            " 日志 · {} · 级别 {} · {}/{} · 滚轮/PgUp/PgDn ",
+            if app.paused { "查看历史" } else { "跟随" },
+            app.level
+                .map(|l| l.to_string())
+                .unwrap_or_else(|| "全部".into()),
+            offset + 1,
+            rows.len()
+        )
+    } else {
+        " 执行详情 · 滚轮/PgUp/PgDn ".into()
+    };
+    frame.render_widget(Paragraph::new(text).block(panel(title, false)), parts[1]);
+    if app.max_scroll > 0 && available > 0 {
+        let mut state = ratatui::widgets::ScrollbarState::new(app.max_scroll + 1)
+            .position(offset)
+            .viewport_content_length(available);
+        frame.render_stateful_widget(
+            ratatui::widgets::Scrollbar::default()
+                .begin_symbol(None)
+                .end_symbol(None),
+            Rect::new(parts[1].x, parts[1].y + 1, parts[1].width, available as u16),
+            &mut state,
+        );
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn draw_details(app: &mut Workbench, width: u16) -> String {
+        let mut terminal = Terminal::new(ratatui::backend::TestBackend::new(width, 24)).unwrap();
+        terminal
+            .draw(|frame| render_results(frame, frame.area(), app))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        (app.detail_area.y + 1..app.detail_area.bottom() - 1)
+            .map(|y| {
+                (1..width - 1)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+    #[test]
+    fn following_shows_tail_of_long_wrapped_log_records() {
+        for width in [24, 60, 120] {
+            let mut app = Workbench::new();
+            let id = app.add_task("log", None, None, true);
+            app.tasks[id]
+                .lines
+                .push_back(format!("{}TAIL-MARK", "长日志 content ".repeat(500)));
+            let text = draw_details(&mut app, width).replace([' ', '\n'], "");
+            assert!(text.ends_with("TAIL-MARK"), "missing log tail at {width}");
+            assert!(app.max_scroll > 0);
+            assert_eq!(app.scroll, 0);
+        }
+    }
+    #[test]
+    fn scrolling_freezes_history_across_buffer_rollover_and_bottom_resumes() {
+        let mut app = Workbench::new();
+        let id = app.add_task("log", None, None, true);
+        for n in 0..2000 {
+            app.tasks[id].lines.push_back(format!("record-{n:04}"));
+        }
+        draw_details(&mut app, 60);
+        let mut mouse = event::MouseEvent {
+            kind: event::MouseEventKind::ScrollUp,
+            column: 10,
+            row: 1,
+            modifiers: KeyModifiers::NONE,
+        };
+        app.mouse(mouse);
+        assert!(!app.paused, "scroll outside details must be ignored");
+        mouse.row = app.detail_area.y + 2;
+        app.menu = true;
+        app.mouse(mouse);
+        assert!(!app.paused, "command overlay must block scrolling");
+        app.menu = false;
+        app.mouse(mouse);
+        assert_eq!(app.scroll, 3);
+        assert!(app.paused);
+        let before = draw_details(&mut app, 60);
+        for n in 2000..2050 {
+            app.sender
+                .send(Message::Log(id, format!("record-{n:04}")))
+                .unwrap();
+        }
+        app.messages();
+        assert_eq!(app.tasks[id].lines.len(), 2000);
+        assert_eq!(app.tasks[id].lines.front().unwrap(), "record-0050");
+        assert_eq!(before, draw_details(&mut app, 60));
+        app.scroll_results(true, usize::MAX);
+        assert_eq!(app.scroll, app.max_scroll);
+        assert!(draw_details(&mut app, 60).contains("record-0000"));
+        app.scroll_results(false, usize::MAX);
+        assert!(!app.paused);
+        assert!(app.frozen.is_none());
+        assert_eq!(app.scroll, 0);
+        assert!(draw_details(&mut app, 60).contains("record-2049"));
+    }
+    #[test]
+    fn ordinary_results_scroll_by_wrapped_rows_with_bounds() {
+        let mut app = Workbench::new();
+        let id = app.add_task("details", None, None, false);
+        app.tasks[id].result.output = format!("{}\nLAST-RESULT", "result data ".repeat(500));
+        let top = draw_details(&mut app, 60);
+        app.scroll_results(true, usize::MAX);
+        assert_eq!(app.scroll, 0);
+        app.scroll_results(false, 1);
+        assert_ne!(top, draw_details(&mut app, 60));
+        app.scroll_results(false, usize::MAX);
+        assert!(draw_details(&mut app, 60).contains("LAST-RESULT"));
+        assert_eq!(app.scroll, app.max_scroll);
+        assert!(!app.paused);
+    }
+    #[test]
+    fn mouse_wheel_browses_session_tasks_and_updates_details_with_bounds() {
+        let mut app = Workbench::new();
+        for n in 0..12 {
+            let id = app.add_task(&format!("task-{n:02}"), None, None, false);
+            app.tasks[id].result.output = format!("output-{n:02}");
+        }
+        assert!(draw_details(&mut app, 60).contains("output-11"));
+        let mut mouse = event::MouseEvent {
+            kind: event::MouseEventKind::ScrollUp,
+            column: 10,
+            row: app.task_area.y + 2,
+            modifiers: KeyModifiers::NONE,
+        };
+        app.menu = true;
+        app.mouse(mouse);
+        assert_eq!(app.selected_task, 11);
+        app.menu = false;
+        app.mouse(mouse);
+        assert_eq!(app.selected_task, 8);
+        assert!(draw_details(&mut app, 60).contains("output-08"));
+        for _ in 0..10 {
+            app.mouse(mouse);
+        }
+        assert_eq!(app.selected_task, 0);
+        assert!(draw_details(&mut app, 60).contains("output-00"));
+        app.scroll = 5;
+        app.paused = true;
+        app.frozen = Some(vec!["previous task".into()]);
+        mouse.kind = event::MouseEventKind::ScrollDown;
+        app.mouse(mouse);
+        assert_eq!(app.selected_task, 3);
+        assert_eq!(app.scroll, 0);
+        assert!(!app.paused);
+        assert!(app.frozen.is_none());
+        assert!(draw_details(&mut app, 60).contains("output-03"));
+        for _ in 0..10 {
+            app.mouse(mouse);
+        }
+        assert_eq!(app.selected_task, 11);
+    }
     #[test]
     fn ctrl_c_stops_background_log_without_quitting_then_exits_when_idle() {
         let mut app = Workbench::new();
@@ -1573,7 +1788,7 @@ mod tests {
             let mut terminal =
                 Terminal::new(ratatui::backend::TestBackend::new(width, 24)).unwrap();
             terminal
-                .draw(|frame| render_results(frame, frame.area(), &app))
+                .draw(|frame| render_results(frame, frame.area(), &mut app))
                 .unwrap();
             let buffer = terminal.backend().buffer();
             let bottom = (0..24).find(|y| buffer[(0, *y)].symbol() == "└").unwrap();

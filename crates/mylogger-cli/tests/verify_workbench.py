@@ -31,7 +31,7 @@ def wait(predicate):
         assert time.monotonic()<deadline,'timeout\n'+plain()[-2000:]
         pump(.1)
     pump(.15)
-def plain():return re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]','',transcript.decode(errors='replace'))
+def plain(start=0):return re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]','',transcript[start:].decode(errors='replace'))
 def command(text):send(text);send('\r');pump(.35)
 try:
     pump(.6)
@@ -62,6 +62,27 @@ try:
     (work/'123.txt').write_text('old capture sentinel')
     command('/log');send('\r');wait(lambda:(work/'logcat.pid').exists())
     log_pid=int((work/'logcat.pid').read_text())
+    pump(.7)
+    # The wheel routes by pane; PgUp/PgDn also work while input stays focused.
+    mark=len(transcript);send('\x1b[5~')
+    assert '查看历史' in plain(mark)
+    mark=len(transcript);send('\x1b[6~')
+    assert '跟随' in plain(mark)
+    mark=len(transcript);send('\x1b[<64;20;20M')
+    assert '查看历史' in plain(mark)
+    before=(work/'123.txt').stat().st_size;pump(.3)
+    assert (work/'123.txt').stat().st_size>before,'History scrolling must keep writing'
+    mark=len(transcript);send('\x1b[<65;20;20M')
+    assert '跟随' in plain(mark)
+    send('\t');send('\x1b[H')
+    mark=len(transcript);send('\x1b[F')
+    assert '跟随' in plain(mark)
+    send('\t')
+    # Wheel over session tasks changes the selected result, then returns to the newest task.
+    mark=len(transcript);send('\x1b[<64;20;6M')
+    assert '执行详情' in plain(mark)
+    mark=len(transcript);send('\x1b[<65;20;6M')
+    assert '跟随' in plain(mark)
     send('\x10');pump(.3)
     logs=[work/'123.txt'];assert logs[0].exists()
     assert 'old capture sentinel' not in logs[0].read_text()
@@ -108,7 +129,8 @@ try:
     except ProcessLookupError:pass
     else:raise AssertionError('Exit left logcat running')
     assert termios.tcgetattr(master)[3]&termios.ICANON,'Terminal raw mode not restored'
-    (work/'result.md').write_text('PASS: workbench header, multi-device-before-schema, long Unicode URI, Home/End/history, app selection, explicit package/favorites fill-before-execute, picker cancel, current-directory 123.txt overwrite and concurrent-writer protection, background logs, pause writes, Ctrl+C stops without quitting, /quit exit cleanup, device/task isolation, screenshots, no-device/error, narrow resize. Fake adb only.\n')
+    assert b'\x1b[?1006h' in transcript and b'\x1b[?1006l' in transcript,'Mouse capture not restored'
+    (work/'result.md').write_text('PASS: workbench header, multi-device-before-schema, long Unicode URI, Home/End/history, app selection, explicit package/favorites fill-before-execute, picker cancel, current-directory 123.txt overwrite and concurrent-writer protection, background logs, wheel/PgUp/PgDn/history/bottom-follow, session-task wheel selection, pause writes, Ctrl+C stops without quitting, /quit exit cleanup, device/task isolation, screenshots, no-device/error, narrow resize, mouse capture cleanup. Fake adb only.\n')
     print('PASS:',work.relative_to(repo))
 finally:
     (work/'terminal.log').write_bytes(transcript)

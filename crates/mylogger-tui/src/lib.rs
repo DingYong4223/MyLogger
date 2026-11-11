@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers,
+    },
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -185,7 +187,8 @@ impl TerminalSession {
     fn enter() -> Result<Self> {
         enable_raw_mode().context("failed to enable raw mode")?;
         let mut stdout = io::stdout();
-        execute!(stdout, EnterAlternateScreen).context("failed to enter alternate screen")?;
+        execute!(stdout, EnterAlternateScreen, EnableMouseCapture)
+            .context("failed to enter alternate screen")?;
         let backend = CrosstermBackend::new(stdout);
         let terminal = Terminal::new(backend).context("failed to create terminal")?;
         Ok(Self {
@@ -205,8 +208,12 @@ impl TerminalSession {
     fn suspend(&mut self) -> Result<()> {
         if self.active {
             disable_raw_mode().context("failed to disable raw mode")?;
-            execute!(self.terminal.backend_mut(), LeaveAlternateScreen)
-                .context("failed to leave alternate screen")?;
+            execute!(
+                self.terminal.backend_mut(),
+                DisableMouseCapture,
+                LeaveAlternateScreen
+            )
+            .context("failed to leave alternate screen")?;
             self.active = false;
         }
         Ok(())
@@ -215,8 +222,12 @@ impl TerminalSession {
     fn resume(&mut self) -> Result<()> {
         if !self.active {
             enable_raw_mode().context("failed to enable raw mode")?;
-            execute!(self.terminal.backend_mut(), EnterAlternateScreen)
-                .context("failed to enter alternate screen")?;
+            execute!(
+                self.terminal.backend_mut(),
+                EnterAlternateScreen,
+                EnableMouseCapture
+            )
+            .context("failed to enter alternate screen")?;
             self.terminal
                 .clear()
                 .context("failed to clear terminal after resume")?;
@@ -234,7 +245,11 @@ impl Drop for TerminalSession {
     fn drop(&mut self) {
         if self.active {
             let _ = disable_raw_mode();
-            let _ = execute!(self.terminal.backend_mut(), LeaveAlternateScreen);
+            let _ = execute!(
+                self.terminal.backend_mut(),
+                DisableMouseCapture,
+                LeaveAlternateScreen
+            );
         }
     }
 }
