@@ -82,6 +82,8 @@ elif parts[:2] == ['am','force-stop']: pass
 elif parts[:1] == ['ps']:
     counter=root/'ps-count';count=int(counter.read_text())+1 if counter.exists() else 1;counter.write_text(str(count))
     print('PID NAME\n12 com.demo.app\n13 com.demo.app:worker' if count<3 else 'PID NAME\n22 com.demo.app')
+elif parts[:2] == ['mkdir','-p']:
+    remote(parts[2]).mkdir(parents=True,exist_ok=True)
 elif parts[:1] == ['if']:
     path=remote(parts[3]);print('DIRECTORY' if path.is_dir() else 'EXISTS' if path.exists() else 'NEW')
 elif parts[:2] == ['test','-f']:

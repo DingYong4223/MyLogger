@@ -1,0 +1,7 @@
+["devices"]
+["-s", "second", "shell", "mkdir -p '/sdcard/doc '\\''quoted'\\''/'"]
+["-s", "second", "shell", "if [ -d '/sdcard/doc '\\''quoted'\\''/中文 '\\''payload'\\''.bin ' ]; then printf DIRECTORY; elif [ -e '/sdcard/doc '\\''quoted'\\''/中文 '\\''payload'\\''.bin ' ]; then printf EXISTS; else printf NEW; fi"]
+["-s", "second", "push", "/Users/delanding/ProjDYDoing/gitself/MyLogger/tmp/mylogger-adb-test-push_to_directory_creates_it_and_preserves_filename_and_overwrite_protection-19083-1794466845652571000/中文 'payload'.bin ", "/sdcard/doc 'quoted'/中文 'payload'.bin .mylogger-19089-1794466845977248000-0.partial"]
+["-s", "second", "shell", "test ! -d '/sdcard/doc '\\''quoted'\\''/中文 '\\''payload'\\''.bin ' && mv -n '/sdcard/doc '\\''quoted'\\''/中文 '\\''payload'\\''.bin .mylogger-19089-1794466845977248000-0.partial' '/sdcard/doc '\\''quoted'\\''/中文 '\\''payload'\\''.bin ' && test ! -e '/sdcard/doc '\\''quoted'\\''/中文 '\\''payload'\\''.bin .mylogger-19089-1794466845977248000-0.partial'"]
+["devices"]
+["devices"]

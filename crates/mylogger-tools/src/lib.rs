@@ -1,5 +1,6 @@
 pub mod adb;
 pub mod capture;
+pub mod command_usage;
 pub mod favorites;
 pub mod operations;
 pub mod process;

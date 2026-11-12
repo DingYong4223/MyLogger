@@ -431,10 +431,26 @@ pub fn execute_operation(
                 if !local.is_file() {
                     bail!("本地文件不存在：{}", local.display());
                 }
-                validate_remote(remote)?;
+                let destination = if remote.ends_with('/') {
+                    let name = local
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .context("无效的本地文件名")?;
+                    format!("{remote}{name}")
+                } else {
+                    remote.clone()
+                };
+                validate_remote(&destination)?;
+                if remote.ends_with('/') {
+                    client.adb(
+                        &["shell", &format!("mkdir -p {}", shell_quote(remote)?)],
+                        SHORT_TIMEOUT,
+                    )?;
+                }
+                let remote = destination;
                 let probe = format!(
                     "if [ -d {0} ]; then printf DIRECTORY; elif [ -e {0} ]; then printf EXISTS; else printf NEW; fi",
-                    shell_quote(remote)?
+                    shell_quote(&remote)?
                 );
                 let probe_result = client.adb(&["shell", &probe], SHORT_TIMEOUT)?;
                 if probe_result.trim() == "DIRECTORY" {
@@ -461,7 +477,7 @@ pub fn execute_operation(
                 // mv -n may exit successfully when it skips an existing destination; verify the staging file moved.
                 let commit = format!(
                     "test ! -d {dest} && mv {flag} {src} {dest} && test ! -e {src}",
-                    dest = shell_quote(remote)?,
+                    dest = shell_quote(&remote)?,
                     src = shell_quote(&partial)?
                 );
                 client

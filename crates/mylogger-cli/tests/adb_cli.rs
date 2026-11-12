@@ -73,6 +73,72 @@ impl Drop for Fake {
     }
 }
 #[test]
+fn push_to_directory_creates_it_and_preserves_filename_and_overwrite_protection() {
+    let fake = Fake::new();
+    let local = fake.root.join("中文 'payload'.bin ");
+    fs::write(&local, b"original").unwrap();
+    let directory = "/sdcard/doc 'quoted'/";
+    fake.ok(
+        "two",
+        &[
+            "push",
+            local.to_str().unwrap(),
+            directory,
+            "--device",
+            "second",
+        ],
+    );
+    let destination = fake
+        .root
+        .join("remote/second")
+        .join(directory.trim_start_matches('/'))
+        .join(local.file_name().unwrap());
+    assert_eq!(fs::read(&destination).unwrap(), b"original");
+    assert!(!fake.root.join("remote/first").exists());
+    fs::write(&local, b"replacement").unwrap();
+    assert!(
+        !fake
+            .run(
+                "two",
+                &[
+                    "push",
+                    local.to_str().unwrap(),
+                    directory,
+                    "--device",
+                    "second"
+                ]
+            )
+            .status
+            .success()
+    );
+    assert_eq!(fs::read(&destination).unwrap(), b"original");
+    fake.ok(
+        "two",
+        &[
+            "push",
+            local.to_str().unwrap(),
+            directory,
+            "--device",
+            "second",
+            "--overwrite",
+        ],
+    );
+    assert_eq!(fs::read(&destination).unwrap(), b"replacement");
+    let before = fake.calls().len();
+    assert!(
+        !fake
+            .run("", &["push", local.to_str().unwrap(), "relative/"])
+            .status
+            .success()
+    );
+    assert!(
+        fake.calls()[before..]
+            .iter()
+            .all(|args| args.first().is_some_and(|arg| arg == "devices"))
+    );
+}
+
+#[test]
 fn device_scope_schema_and_failures() {
     let fake = Fake::new();
     assert!(!fake.run("two", &["schema", "demo://open"]).status.success());

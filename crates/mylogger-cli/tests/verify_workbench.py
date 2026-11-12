@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""PTY regression with fake adb only. Run after cargo build --workspace."""
+"""PTY regression with fake adb and yazi. Run after cargo build --workspace."""
 from pathlib import Path
 import fcntl, json, os, pty, re, select, signal, struct, sys, tempfile, termios, time
 repo=Path(__file__).resolve().parents[3]
 work=Path(tempfile.mkdtemp(prefix='workbench-pty-',dir=repo/'tmp'))
 adb=work/'adb';adb.write_text((Path(__file__).parent/'fixtures/adb.py').read_text());adb.chmod(0o755)
+yazi=work/'yazi';yazi.write_text((Path(__file__).parent/'fixtures/yazi.py').read_text());yazi.chmod(0o755)
 mode=work/'mode';mode.write_text('two')
 env=dict(os.environ,PATH=str(work)+':'+os.environ['PATH'],MYLOGGER_FAKE_ROOT=str(work),XDG_CONFIG_HOME=str(work/'config'),TERM='xterm-256color')
 binary=repo/'target/debug/MyLogger'
@@ -36,6 +37,39 @@ def command(text):send(text);send('\r');pump(.35)
 try:
     pump(.6)
     assert 'ADB 工作台' in plain()
+    # Choose the device before yazi; chooser cancellation/failure must not upload anything.
+    upload=work/"upload 中文 'quoted'.bin ";upload.write_bytes(b'file contents')
+    selection=work/'yazi-selection'
+    def push_calls():return [c for c in calls() if len(c)>2 and c[2]=='push']
+    def choose_upload(value):
+        selection.write_text(value)
+        mark=len(transcript);command('/push')
+        assert '选择设备' in plain(mark)
+        send('\r');pump(.5)
+    command('/push')
+    assert not (work/'yazi-calls.jsonl').exists(),'yazi opened before device selection'
+    selection.write_text('');send('\r');pump(.5)
+    assert '已取消' in plain() and not push_calls()
+    for value,message in [('FAIL','yazi exited'),(str(work)+'\n','暂不支持目录上传'),(str(upload)+'\n'+str(upload)+'\n','每次请选择一个文件')]:
+        choose_upload(value)
+        assert message in plain() and not push_calls()
+    choose_upload(str(upload)+'\n')
+    assert '/sdcard/doc/' in plain()
+    assert not push_calls(),'Choosing a file must wait for a destination'
+    send('\r');send('\r');pump(.4)
+    destination=work/'remote/first/sdcard/doc'/upload.name
+    assert destination.read_bytes()==upload.read_bytes()
+    assert push_calls()[-1][1]=='first' and push_calls()[-1][3]==str(upload)
+    destination.write_bytes(b'keep existing')
+    before=len(push_calls());choose_upload(str(upload)+'\n');send('\r');send('\r');pump(.4)
+    assert len(push_calls())==before and destination.read_bytes()==b'keep existing'
+    assert '设备目标已存在' in plain()
+    choose_upload(str(upload)+'\n');send('\r');send('YES\r');pump(.4)
+    assert destination.read_bytes()==upload.read_bytes()
+    choose_upload(str(upload)+'\n')
+    send('\x1b[H');send('\x1b[3~'*len('/sdcard/doc/'));send("/sdcard/custom 'quoted'.bin\r");send('\r');pump(.4)
+    assert (work/"remote/first/sdcard/custom 'quoted'.bin").read_bytes()==upload.read_bytes()
+    assert not any(Path(json.loads(line)[1]).exists() for line in (work/'yazi-calls.jsonl').read_text().splitlines()),'Chooser files not cleaned'
     command('/schema')
     assert not schemas(),calls()
     assert '选择设备' in plain()
@@ -119,6 +153,8 @@ try:
     # All layouts must continue accepting input after resize.
     for rows,cols in [(20,60),(10,20),(5,8),(38,130)]:
         fcntl.ioctl(master,termios.TIOCSWINSZ,struct.pack('HHHH',rows,cols,0,0));os.kill(pid,signal.SIGWINCH);pump(.15)
+    # Frequent commands must outrank newer one-off commands and survive a restart.
+    for _ in range(10):send('/help\r')
     command('/quit')
     deadline=time.monotonic()+6
     while True:
@@ -130,7 +166,28 @@ try:
     else:raise AssertionError('Exit left logcat running')
     assert termios.tcgetattr(master)[3]&termios.ICANON,'Terminal raw mode not restored'
     assert b'\x1b[?1006h' in transcript and b'\x1b[?1006l' in transcript,'Mouse capture not restored'
-    (work/'result.md').write_text('PASS: workbench header, multi-device-before-schema, long Unicode URI, Home/End/history, app selection, explicit package/favorites fill-before-execute, picker cancel, current-directory 123.txt overwrite and concurrent-writer protection, background logs, wheel/PgUp/PgDn/history/bottom-follow, session-task wheel selection, pause writes, Ctrl+C stops without quitting, /quit exit cleanup, device/task isolation, screenshots, no-device/error, narrow resize, mouse capture cleanup. Fake adb only.\n')
+    usage_path=work/'config/mylogger/command-usage.json'
+    usage=json.loads(usage_path.read_text())
+    assert usage['/help']['count']==10,usage
+    assert max(usage,key=lambda c:(usage[c]['count'],usage[c]['last_used']))=='/help'
+    os.close(master)
+    pid,master=pty.fork()
+    if pid==0:
+        os.chdir(work);os.execve(binary,[str(binary)],env)
+    fcntl.ioctl(master,termios.TIOCSWINSZ,struct.pack('HHHH',38,130,0,0))
+    pump(.6)
+    mark=len(transcript);send('/')
+    assert '›帮助' in plain(mark).replace(' ',''),'Most-used command was not first after restart'
+    mark=len(transcript);send('\r')
+    assert '使用帮助' in plain(mark),'Enter did not execute the displayed first command'
+    command('/quit')
+    deadline=time.monotonic()+6
+    while True:
+        done,status=os.waitpid(pid,os.WNOHANG)
+        if done:assert os.waitstatus_to_exitcode(status)==0,status;break
+        assert time.monotonic()<deadline,'Restarted TUI did not exit';pump(.1)
+    assert json.loads(usage_path.read_text())['/help']['count']==11
+    (work/'result.md').write_text('PASS: workbench header, multi-device-before-schema, long Unicode URI, Home/End/history, app selection, explicit package/favorites fill-before-execute, picker cancel, current-directory 123.txt overwrite and concurrent-writer protection, background logs, wheel/PgUp/PgDn/history/bottom-follow, session-task wheel selection, pause writes, Ctrl+C stops without quitting, /quit exit cleanup, device/task isolation, screenshots, no-device/error, narrow resize, mouse capture cleanup, command frequency sorting across restart and matching Enter dispatch. Fake adb only.\n')
     print('PASS:',work.relative_to(repo))
 finally:
     (work/'terminal.log').write_bytes(transcript)

@@ -1,9 +1,10 @@
 use super::*;
 use mylogger_core::actions::{
-    ACTIONS, ActionId, OperationResult, TaskStatus, find_action, search_actions,
+    ACTIONS, ActionId, ActionSpec, OperationResult, TaskStatus, find_action, search_actions,
 };
 use mylogger_tools::{
     capture::capture_stream,
+    command_usage::CommandUsage,
     favorites::{SchemaFavorite, favorites_path, load_favorites, save_favorite},
     operations::{Operation, OperationResponse, ResponseData, execute_operation},
 };
@@ -80,6 +81,7 @@ struct Workbench {
     focus: Focus,
     menu: bool,
     menu_index: usize,
+    command_usage: CommandUsage,
     picker: Option<Picker>,
     form: Option<Form>,
     return_form: Option<(Form, String)>,
@@ -110,6 +112,7 @@ impl Workbench {
             focus: Focus::Input,
             menu: false,
             menu_index: 0,
+            command_usage: CommandUsage::default(),
             picker: None,
             form: None,
             return_form: None,
@@ -139,6 +142,22 @@ impl Workbench {
         self.editor.input = value;
         self.editor.move_end();
         self.menu = false;
+        self.menu_index = 0;
+    }
+    fn palette_actions(&self) -> Vec<&'static ActionSpec> {
+        let mut actions = search_actions(&self.editor.input);
+        let exact = find_action(&self.editor.input);
+        actions.sort_by_key(|action| {
+            std::cmp::Reverse((
+                Some(action.id) == exact,
+                self.command_usage.rank(action.command),
+            ))
+        });
+        actions
+    }
+    fn record_action(&mut self, action: ActionId) {
+        let command = ACTIONS.iter().find(|a| a.id == action).unwrap().command;
+        self.command_usage.record(command);
     }
     fn target(&mut self, serial: String) {
         if self.session.selected_device.as_ref() != Some(&serial) {
@@ -276,7 +295,7 @@ impl Workbench {
                 action,
                 vec![
                     ("本地文件路径", String::new()),
-                    ("设备绝对文件路径", String::new()),
+                    ("设备目标路径（目录以 / 结尾）", "/sdcard/doc/".into()),
                     ("覆盖已存在目标？输入 YES 确认，否则留空", String::new()),
                 ],
                 None,
@@ -681,7 +700,7 @@ impl Workbench {
         }
         if form.action == ActionId::Analyze {
             let path = if values[0].is_empty() {
-                match select_log_file_with_yazi(Some(terminal)) {
+                match select_file_with_yazi(Some(terminal), "日志文件") {
                     Ok(p) => p,
                     Err(e) => {
                         self.notice(format!("{e:#}"));
@@ -786,8 +805,36 @@ impl Workbench {
         }
         Ok(())
     }
+    fn select_push_file(&mut self, terminal: &mut TerminalSession) {
+        if !self
+            .form
+            .as_ref()
+            .is_some_and(|form| form.action == ActionId::Push && form.fields[0].value.is_empty())
+        {
+            return;
+        }
+        let mut form = self.form.take().unwrap();
+        self.set_input(String::new());
+        let selected = select_file_with_yazi(Some(terminal), "要上传的文件").and_then(|path| {
+            anyhow::ensure!(path.is_file(), "请选择本地文件，暂不支持目录上传");
+            Ok(path.to_str().context("无效的本地路径")?.to_owned())
+        });
+        match selected {
+            Ok(path) => {
+                form.fields[0].value = path;
+                form.index = 1;
+                self.set_input(form.fields[1].value.clone());
+                self.form = Some(form);
+                self.notice(
+                    "已选定本地文件；输入设备目标路径，目录以 / 结尾；Enter 下一项，Esc 取消。",
+                );
+            }
+            Err(error) => self.notice(format!("{error:#}")),
+        }
+    }
     fn command(&mut self, command: String, terminal: &mut TerminalSession) -> Result<()> {
         if let Some(action) = find_action(&command) {
+            self.record_action(action);
             self.request(Request::Action(action));
             return Ok(());
         }
@@ -795,12 +842,25 @@ impl Workbench {
             Intent::Capture {
                 time_named,
                 clear_before_capture,
-            } => self.request(Request::Capture {
-                time_named,
-                clear: clear_before_capture,
-            }),
-            Intent::OpenSchema => self.request(Request::Action(ActionId::Schema)),
+            } => {
+                self.record_action(if time_named {
+                    ActionId::CaptureTimed
+                } else if clear_before_capture {
+                    ActionId::CaptureClear
+                } else {
+                    ActionId::Logcat
+                });
+                self.request(Request::Capture {
+                    time_named,
+                    clear: clear_before_capture,
+                });
+            }
+            Intent::OpenSchema => {
+                self.record_action(ActionId::Schema);
+                self.request(Request::Action(ActionId::Schema));
+            }
             Intent::Analyze { path, open } => {
+                self.record_action(ActionId::Analyze);
                 self.open_form(
                     ActionId::Analyze,
                     vec![
@@ -823,9 +883,18 @@ impl Workbench {
                     self.submit_form(terminal)?;
                 }
             }
-            Intent::StartService => self.ready(Request::Action(ActionId::StartService)),
-            Intent::Help => self.ready(Request::Action(ActionId::Help)),
-            Intent::Quit => self.quit = true,
+            Intent::StartService => {
+                self.record_action(ActionId::StartService);
+                self.ready(Request::Action(ActionId::StartService));
+            }
+            Intent::Help => {
+                self.record_action(ActionId::Help);
+                self.ready(Request::Action(ActionId::Help));
+            }
+            Intent::Quit => {
+                self.record_action(ActionId::Quit);
+                self.quit = true;
+            }
             _ => self
                 .notice("未识别命令。输入 / 搜索功能。参数通过表单填写；脚本请使用 CLI --help。"),
         }
@@ -1096,6 +1165,7 @@ impl Workbench {
                     return Ok(());
                 }
                 let uri = self.editor.input.clone();
+                self.record_action(ActionId::Schema);
                 self.editor.remember_input(uri.clone(), true);
                 self.editor.awaiting_schema = false;
                 self.set_input(String::new());
@@ -1112,7 +1182,7 @@ impl Workbench {
                 return Ok(());
             }
             let command = if self.menu {
-                search_actions(&self.editor.input)
+                self.palette_actions()
                     .get(self.menu_index)
                     .map(|a| a.command.to_string())
                     .unwrap_or_else(|| self.editor.input.clone())
@@ -1129,7 +1199,7 @@ impl Workbench {
             return Ok(());
         }
         if self.menu && matches!(key.code, KeyCode::Up | KeyCode::Down) {
-            let len = search_actions(&self.editor.input).len();
+            let len = self.palette_actions().len();
             self.menu_index = if key.code == KeyCode::Up {
                 previous_index(self.menu_index, len)
             } else {
@@ -1163,9 +1233,7 @@ impl Workbench {
             && !self.editor.awaiting_schema
             && self.editor.input.starts_with('/')
             && !self.editor.input.contains(char::is_whitespace);
-        self.menu_index = self
-            .menu_index
-            .min(search_actions(&self.editor.input).len().saturating_sub(1));
+        self.menu_index = 0;
         Ok(())
     }
     fn edit_key(&mut self, key: event::KeyEvent) {
@@ -1249,8 +1317,22 @@ fn text_response(title: &str, outcome: Result<String>) -> OperationResponse {
 pub(super) fn run() -> Result<()> {
     let mut terminal = TerminalSession::enter()?;
     let mut app = Workbench::new();
+    let usage_path = match favorites_path().and_then(|path| {
+        let path = path.with_file_name("command-usage.json");
+        Ok((CommandUsage::load(&path)?, path))
+    }) {
+        Ok((usage, path)) => {
+            app.command_usage = usage;
+            Some(path)
+        }
+        Err(error) => {
+            app.notice(format!("{error:#}；本次仅使用会话内的命令排序。"));
+            None
+        }
+    };
     while !app.quit {
         app.messages();
+        app.select_push_file(&mut terminal);
         terminal.draw(|f| render_workbench(f, &mut app))?;
         if !event::poll(Duration::from_millis(50))? {
             continue;
@@ -1266,8 +1348,11 @@ pub(super) fn run() -> Result<()> {
             _ => {}
         }
     }
+    // shortcut: save ranking on clean exit; persist each command if crash recovery is needed.
+    let saved = usage_path.map_or(Ok(()), |path| app.command_usage.save(&path));
     drop(app);
-    terminal.leave()
+    terminal.leave()?;
+    saved
 }
 
 fn panel(title: impl Into<Line<'static>>, active: bool) -> Block<'static> {
@@ -1411,7 +1496,7 @@ fn render_workbench(frame: &mut ratatui::Frame<'_>, app: &mut Workbench) {
             popup,
         );
     } else if app.menu {
-        let actions = search_actions(&app.editor.input);
+        let actions = app.palette_actions();
         let height = body.height.saturating_sub(2).clamp(1, 12) as usize;
         let start = app.menu_index.saturating_sub(height.saturating_sub(1));
         let items = actions
@@ -1615,6 +1700,72 @@ fn render_results(frame: &mut ratatui::Frame<'_>, area: Rect, app: &mut Workbenc
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn palette_ranks_frequency_then_recency_and_keeps_unused_order() {
+        let mut app = Workbench::new();
+        app.set_input("/".into());
+        assert_eq!(
+            app.palette_actions()
+                .iter()
+                .map(|a| a.id)
+                .collect::<Vec<_>>(),
+            ACTIONS.iter().map(|a| a.id).collect::<Vec<_>>()
+        );
+        app.record_action(find_action("/打开schema").unwrap());
+        app.record_action(find_action("/SCHEMA").unwrap());
+        app.record_action(ActionId::Log);
+        app.record_action(ActionId::Devices);
+        let actions = app.palette_actions();
+        assert_eq!(actions[0].id, ActionId::Schema);
+        assert_eq!(actions[1].id, ActionId::Devices);
+        assert_eq!(actions[2].id, ActionId::Log);
+        assert_eq!(
+            actions[3..].iter().map(|a| a.id).collect::<Vec<_>>(),
+            ACTIONS
+                .iter()
+                .filter(|a| ![ActionId::Schema, ActionId::Devices, ActionId::Log].contains(&a.id))
+                .map(|a| a.id)
+                .collect::<Vec<_>>()
+        );
+        app.record_action(ActionId::Log);
+        assert_eq!(app.palette_actions()[0].id, ActionId::Log);
+    }
+    #[test]
+    fn palette_search_preserves_matching_and_renders_ranked_selection() {
+        let mut app = Workbench::new();
+        app.record_action(ActionId::Help);
+        app.record_action(ActionId::Help);
+        app.record_action(ActionId::Logcat);
+        app.set_input("/日志".into());
+        let actions = app.palette_actions();
+        assert_eq!(actions[0].id, ActionId::Logcat);
+        assert!(!actions.iter().any(|a| a.id == ActionId::Help));
+        assert_eq!(actions.len(), search_actions("/日志").len());
+        app.menu = true;
+        let mut terminal = Terminal::new(ratatui::backend::TestBackend::new(120, 32)).unwrap();
+        terminal
+            .draw(|frame| render_workbench(frame, &mut app))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let text = (0..32)
+            .map(|y| {
+                (0..120)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(text.replace(' ', "").contains("›采集设备日志（不清空）"));
+        app.set_input("/SCREENSHOT".into());
+        assert_eq!(app.palette_actions()[0].id, ActionId::Screenshot);
+        app.set_input("/log".into());
+        assert_eq!(app.palette_actions()[0].id, ActionId::Log);
+        app.set_input("/no-such-command".into());
+        assert!(app.palette_actions().is_empty());
+        app.menu_index = 5;
+        app.set_input("/".into());
+        assert_eq!(app.menu_index, 0);
+    }
     fn draw_details(app: &mut Workbench, width: u16) -> String {
         let mut terminal = Terminal::new(ratatui::backend::TestBackend::new(width, 24)).unwrap();
         terminal

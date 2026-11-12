@@ -364,7 +364,7 @@ fn execute_tui_analyze_open(
 ) -> Result<String> {
     let path = match path {
         Some(path) => PathBuf::from(path),
-        None => select_log_file_with_yazi(Some(terminal))?,
+        None => select_file_with_yazi(Some(terminal), "日志文件")?,
     };
     let summary = analyze_file(&path, &AnalysisOptions::default())?;
     session.current_log_file = Some(path.clone());
@@ -536,7 +536,7 @@ fn resolve_log_path(path: Option<String>, session: &SessionState) -> Result<Path
     if let Some(path) = path {
         return Ok(PathBuf::from(path));
     }
-    select_log_file_with_yazi(None).or_else(|_| {
+    select_file_with_yazi(None, "日志文件").or_else(|_| {
         if let Some(path) = session.current_log_file.as_ref() {
             return Ok(path.clone());
         }
@@ -547,7 +547,10 @@ fn resolve_log_path(path: Option<String>, session: &SessionState) -> Result<Path
     })
 }
 
-fn select_log_file_with_yazi(mut terminal: Option<&mut TerminalSession>) -> Result<PathBuf> {
+fn select_file_with_yazi(
+    mut terminal: Option<&mut TerminalSession>,
+    label: &str,
+) -> Result<PathBuf> {
     let chooser_file = std::env::temp_dir().join(format!(
         "mylogger-yazi-choice-{}-{}.txt",
         std::process::id(),
@@ -561,7 +564,7 @@ fn select_log_file_with_yazi(mut terminal: Option<&mut TerminalSession>) -> Resu
     if let Some(terminal) = terminal.as_deref_mut() {
         terminal.suspend()?;
     }
-    println!("MyLogger 已打开 yazi，请选择日志文件。");
+    println!("MyLogger 已打开 yazi，请选择{label}。");
 
     let status = Command::new("yazi")
         .arg("--chooser-file")
@@ -573,21 +576,25 @@ fn select_log_file_with_yazi(mut terminal: Option<&mut TerminalSession>) -> Resu
         drain_pending_terminal_events(Duration::from_millis(300));
     }
 
+    let selected = std::fs::read_to_string(&chooser_file);
+    let _ = std::fs::remove_file(&chooser_file);
     let status =
         status.context("failed to start yazi; please install yazi and ensure it is in PATH")?;
     if !status.success() {
         anyhow::bail!("yazi exited with status {status}");
     }
 
-    let selected = std::fs::read_to_string(&chooser_file).unwrap_or_default();
-    let _ = std::fs::remove_file(&chooser_file);
-    let selected = selected
-        .lines()
+    let selected = match selected {
+        Ok(selected) => selected,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(error).context("读取 yazi 选择结果失败"),
+    };
+    let mut paths = selected.lines().filter(|path| !path.is_empty());
+    let path = paths
         .next()
-        .map(str::trim)
-        .filter(|path| !path.is_empty())
-        .context("未选择日志文件")?;
-    Ok(PathBuf::from(selected))
+        .with_context(|| format!("未选择{label}，已取消"))?;
+    anyhow::ensure!(paths.next().is_none(), "每次请选择一个文件");
+    Ok(PathBuf::from(path))
 }
 
 fn write_analysis_markdown(path: &Path, summary: &AnalysisSummary) -> Result<PathBuf> {
