@@ -1,6 +1,0 @@
-["devices"]
-["-s", "second", "shell", "mkdir -p '/sdcard/doc/'"]
-["-s", "second", "shell", "if [ -d '/sdcard/doc/payload-upload.txt' ]; then printf DIRECTORY; elif [ -e '/sdcard/doc/payload-upload.txt' ]; then printf EXISTS; else printf NEW; fi"]
-["-s", "second", "push", "/Users/delanding/ProjDYDoing/gitself/MyLogger/tmp/push-real-yazi-uqon8ndm/payload-upload.txt", "/sdcard/doc/payload-upload.txt.mylogger-24042-1794467045966744000-0.partial"]
-["-s", "second", "shell", "test ! -d '/sdcard/doc/payload-upload.txt' && mv -n '/sdcard/doc/payload-upload.txt.mylogger-24042-1794467045966744000-0.partial' '/sdcard/doc/payload-upload.txt' && test ! -e '/sdcard/doc/payload-upload.txt.mylogger-24042-1794467045966744000-0.partial'"]
-["devices"]

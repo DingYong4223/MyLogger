@@ -1,1 +1,0 @@
-PASS: line and PTY device selection before schema input; -s selected device; repick with previous selection; cancel; one/zero devices; offline/unauthorized excluded; list error recovery; capture picker cancel. Fake adb only.
